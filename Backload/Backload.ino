@@ -27,7 +27,7 @@
 #include <time.h>
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
-const char* FIRMWARE_VERSION = "1.11.0";
+const char* FIRMWARE_VERSION = "1.11.1";
 
 // Beim ersten Start ohne gespeicherte Betriebsart läuft die echte Steuerung.
 // Der Testmodus wird über das Webinterface nach Bestätigung ein-/ausgeschaltet.
@@ -627,10 +627,16 @@ async function request(url,options={}){
 const updateForm=document.getElementById('update-form');
 const githubForm=document.getElementById('github-update-form'),releaseMessage=document.getElementById('release-message');
 let githubReleases=[],currentFirmwareVersion='';
+function compareVersions(a,b){
+  const parse=s=>/^v?(\d+)\.(\d+)\.(\d+)$/.exec(s||'');
+  const x=parse(a),y=parse(b);if(!x||!y)return null;
+  for(let i=1;i<=3;i++){const d=Number(x[i])-Number(y[i]);if(d)return Math.sign(d);}return 0;
+}
 document.getElementById('release-check').addEventListener('click',async event=>{
   const button=event.currentTarget,select=githubForm.elements.release;
   button.disabled=true;select.disabled=true;githubForm.querySelector('button').disabled=true;releaseMessage.className='message';releaseMessage.textContent='GitHub-Releases werden gesucht …';
   try{
+    const device=await request('/api/status');currentFirmwareVersion=device.version||'';
     const response=await fetch('https://api.github.com/repos/NemoN/Solarsystemsteuerung_ESP32/releases?per_page=100',{cache:'no-store',headers:{Accept:'application/vnd.github+json'}});
     if(!response.ok)throw new Error('GitHub meldet HTTP '+response.status);
     const releases=await response.json();if(!Array.isArray(releases))throw new Error('Ungültige GitHub-Antwort');
@@ -638,10 +644,16 @@ document.getElementById('release-check').addEventListener('click',async event=>{
     select.replaceChildren(new Option(githubReleases.length?'Version auswählen …':'Keine passenden Releases',''));
     githubReleases.forEach((r,i)=>select.add(new Option(r.name+(r.prerelease?' · Vorabversion':'')+(r.tag.replace(/^v/,'')===currentFirmwareVersion?' · installiert':''),String(i))));
     select.disabled=!githubReleases.length;githubForm.querySelector('button').disabled=!githubReleases.length;
-    releaseMessage.textContent=githubReleases.length?'Neueste veröffentlichte Version: '+githubReleases[0].tag+' · Installiert: '+(currentFirmwareVersion||'unbekannt')+'. Ältere Versionen sind ebenfalls auswählbar.':'Keine Releases mit passender Firmware und SHA-256-Prüfsumme gefunden.';
+    if(!githubReleases.length)releaseMessage.textContent='Keine Releases mit passender Firmware und SHA-256-Prüfsumme gefunden.';
+    else{
+      const latest=githubReleases.find(r=>!r.prerelease)||githubReleases[0],comparison=compareVersions(latest.tag,currentFirmwareVersion);
+      const availability=comparison===null?'':comparison>0?'Neue Version verfügbar. ':comparison===0?'Firmware ist aktuell. ':'Installierte Version ist neuer. ';
+      releaseMessage.textContent=availability+'Neueste Version: '+latest.tag+' · Installiert: '+(currentFirmwareVersion||'unbekannt')+'.'+(githubReleases.length>1?' Ältere Versionen sind ebenfalls auswählbar.':'');
+    }
   }catch(error){githubReleases=[];select.replaceChildren(new Option('Suche fehlgeschlagen',''));releaseMessage.className='message error';releaseMessage.textContent='GitHub nicht erreichbar: '+error.message+'. Internetverbindung dieses Geräts prüfen.';}
   finally{button.disabled=false;}
 });
+if(document.body.classList.contains('update-page'))document.getElementById('release-check').click();
 githubForm.addEventListener('submit',async event=>{
   event.preventDefault();const selected=githubForm.elements.release.value;
   const release=selected===''?null:githubReleases[Number(selected)];if(!release)return;

@@ -110,12 +110,16 @@ der Arduino IDE aufspielen. Kein vollständiges Löschen des Flashs auswählen:
 die WLAN- und Regelungseinstellungen liegen im NVS. Die erste USB-Installation
 enthält noch keine ältere OTA-Version für einen Rückfall.
 
-Die Update-Seite unter /update zeigt veröffentlichte GitHub-Releases und kann
-die gewünschte Version über das Internet installieren. Sowohl das Gerät, auf
+Die Update-Seite unter /update prüft beim Öffnen veröffentlichte GitHub-Releases
+und kann die neueste oder eine ältere Version über das Internet installieren.
+Sowohl das Gerät, auf
 dem die Webseite geöffnet ist, als auch der ESP benötigen Internetzugang. Der
 ESP prüft die HTTPS-Zertifikate und die SHA-256-Prüfsumme der Release-Datei.
 Nur Releases mit der Datei Backload.ino.bin und GitHub-SHA-256 sind auswählbar.
 Alternativ kann eine kompilierte Backload.ino.bin manuell hochgeladen werden.
+Neue Versionen als GitHub-Release mit dem Namen der Versionsnummer (z. B.
+v1.11.1) veröffentlichen und die kompilierte Backload.ino.bin als Release-Datei
+hinzufügen. GitHub berechnet die SHA-256-Prüfsumme für diese Datei.
 In der Arduino IDE die Binärdatei über „Sketch → Kompilierte Binärdatei
 exportieren“ erstellen. Die normale .ino.bin verwenden, keine .merged.bin.
 Der Zugriff auf das lokale Webinterface ist nicht durch ein Update-Passwort
