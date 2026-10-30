@@ -1,0 +1,21 @@
+name: backload-history
+services:
+  history:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${HISTORY_PORT:-8088}:8080"
+    environment:
+      ESP32_STATUS_URL: "${ESP32_STATUS_URL:-http://192.168.177.83/api/status}"
+      DATABASE_PATH: /data/temperatures.sqlite3
+    volumes:
+      - history-data:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    stop_grace_period: 15s
+volumes:
+  history-data:

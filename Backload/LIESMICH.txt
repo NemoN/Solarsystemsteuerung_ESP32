@@ -1,0 +1,169 @@
+Backload 1.9.8 – automatische und manuelle Pumpensteuerung
+
+Sensoren und Relais
+Fünf MAX31865-Sensoren mit gemeinsamer Software-SPI-Verbindung:
+  CS GPIO 4: Kombispeicher oben      (API-ID 0)
+  CS GPIO 5: Kombispeicher Mitte     (API-ID 1)
+  CS GPIO 6: Pufferspeicher oben    (API-ID 2)
+  CS GPIO 7: Kombispeicher unten     (API-ID 3, nur Anzeige)
+  CS GPIO 15: Solarpanel            (API-ID 4, nur Anzeige)
+  SPI: CLK GPIO 38, MOSI GPIO 11, MISO GPIO 13.
+Die ursprünglichen drei Sensor-IDs bleiben gleich; das vorhandene
+Temperaturarchiv erfasst weiterhin diese drei Sensoren.
+
+  Relais 1: GPIO 3 – Pumpe EIN/AUS, Active Low.
+  Relais 2: GPIO 8 – Pumprichtung über externe Umpolschaltung, Active Low.
+  Relais 3 (Solarpumpe): noch nicht zugeordnet und nicht angesteuert.
+
+Vorläufig angenommene Zuordnung: Richtungsrelais AUS = Kombi → Puffer.
+Diese Zuordnung muss an der realen Umpolschaltung geprüft werden! Falls sie
+umgekehrt ist, DIRECTION_RELAY_OFF_DIRECTION im Sketch auf
+PumpDirection::BufferToCombi ändern und die Firmware erneut hochladen.
+GPIO 3 ist ein ESP32-S3-Strapping-Pin. Das Verhalten des Relais beim
+Einschalten und Reset am realen Aufbau prüfen; die Software übernimmt die
+Steuerung erst nach Beginn von setup().
+
+Automatik
+Sommer verwendet Kombispeicher oben; Winter verwendet Kombispeicher Mitte.
+Der jeweilige Sensor-Sollwert wird im Webinterface eingestellt. Vorhandene
+gespeicherte Sollwerte bleiben erhalten und werden sofort verwendet: 55 °C
+in der Besprechung war ein Rechenbeispiel, keine Überschreibung dieser Werte.
+
+Die folgenden Abstände sind im Webinterface einstellbar (anfangs 2 / 5 / 2 K):
+- Sollwert-Startabstand: Einlagerung beginnt ab Soll + Abstand; Rückladung
+  beginnt ab Soll − Abstand.
+- Speicherabstand Start: Die jeweilige Wärmequelle muss mindestens diesen
+  Betrag wärmer als das Ziel sein, damit die Pumpe startet.
+- Speicherabstand Stopp: Bei höchstens diesem Temperaturunterschied stoppt
+  die Pumpe. Dieser Wert muss kleiner als der Startabstand sein.
+
+Kombi → Puffer: Nur bei freigegebener Einlagerung; Start bei Kombi >= Soll
++ Startabstand und Kombi − Puffer >= Speicherabstand Start. Stopp bei
+Kombi <= Soll, Kombi − Puffer <= Speicherabstand Stopp oder wenn die
+Einlagerung gesperrt wird.
+Puffer → Kombi: Start bei Kombi <= Soll − Startabstand und Puffer − Combi
+>= Speicherabstand Start. Stopp bei Kombi >= Soll oder Puffer − Combi
+<= Speicherabstand Stopp.
+Zwischen Start- und Stoppschwelle läuft die aktuelle Richtung weiter.
+Bei einem Fehler des ausgewählten Kombifühlers oder des Pufferfühlers
+schaltet die Automatik die Pumpe aus. Die drei anderen Sensoren beeinflussen
+von sich aus die Automatik nicht. Ungültige Automatikdaten oder nicht verfügbarer
+Gerätespeicher sperren die Automatik ebenfalls.
+
+Die Einlagerung ist bei der ersten Einrichtung ausgeschaltet. Bei reinem
+Ölbetrieb ausgeschaltet lassen: die Regelung erkennt die Wärmequelle nicht.
+Die Rückladung aus dem Puffer bleibt davon unabhängig. Betriebsart,
+Einlagerungsfreigabe und Schaltabstände werden gemeinsam gespeichert.
+Nach einem Neustart ist der Handbetrieb aus; die Automatik kann nach einer
+ersten gültigen Messung selbstständig starten. Einstellungen und Richtung der
+realen Pumpe vor dem Betrieb an der Anlage prüfen.
+
+Handbetrieb
+Manuelle Steuerung einschalten; die Pumpe bleibt zunächst AUS. Danach können
+Pumpe und Richtung über die Schalter bedient werden. Handbetrieb übergeht die
+Temperaturregelung einschließlich Sensorfehlern. Beim Verlassen des
+Handbetriebs wird anhand einer neuen Messung wieder automatisch geregelt.
+Für beide Betriebsarten gilt beim Richtungswechsel: Pumpe AUS, mindestens
+2 Sekunden warten, Richtung schalten, 100 ms Relais-Schaltzeit abwarten und
+nur bei weiter bestehendem EIN-Auftrag wieder einschalten. Der animierte Pfeil
+zeigt die angenommene Förderrichtung bei laufender Pumpe.
+Die SVG-Speicherübersicht zeigt die vier Speicherfühler direkt am jeweiligen
+Speicher. Bei Sensorfehler oder Verbindungsabbruch werden keine alten Werte
+als aktuelle Messungen angezeigt; der Solarpanelwert steht separat darunter.
+Jede Temperaturkarte zeigt den aktuellen Istwert und darunter eine kleine
+Kurve der letzten sechs Stunden. Die Kurven verwenden den Minutenverlauf im
+PSRAM und zeigen Sensorfehler als Lücken. Die Min-/Max-Werte beziehen sich
+auf den dargestellten Zeitraum; die Skala passt sich an die Werte an.
+
+Arduino IDE
+Den vollständigen Ordner Backload verwenden und darin Backload.ino öffnen.
+Der Unterordner src enthält RisalDash und AsyncWebConsole und muss mitkopiert werden.
+ESP32S3 Dev Module, ESP32-Core 2.0.13, 16 MB Flash, OPI PSRAM,
+Partition Scheme: 16M Flash (3MB APP/9.9MB FATFS).
+ESP Async WebServer 3.6.0, Async TCP 3.3.2; RisalDash 0.13.0 und
+AsyncWebConsole 0.3.2 sind mit ihren Lizenztexten im Sketch enthalten.
+Webinterface: http://<ESP32-IP>/
+WLAN-Einstellungen: http://<ESP32-IP>/wlan
+Live-Monitor: http://<ESP32-IP>:81/ (oder Link in der Oberfläche).
+Die Oberfläche und Steuerungs-API verwenden Port 80, der Monitor Port 81.
+Das helle oder dunkle Design kann in der Navigation umgeschaltet werden; die
+Auswahl bleibt im jeweiligen Browser gespeichert.
+
+Temperaturverlauf im PSRAM
+Unter /verlauf zeigt die Oberfläche alle fünf Sensoren als Temperaturkurven.
+Ein Messwert pro Sensor und UTC-Minute wird auf 0,1 °C gerundet abgelegt.
+Nach erfolgreicher Zeitsynchronisierung beginnt die Aufzeichnung. Sensorfehler
+und fehlende Minuten bleiben Lücken. 525.600 Minuten (365 Tage) benötigen
+5.256.000 Bytes im PSRAM; danach überschreiben neue Werte die ältesten.
+Für die Diagrammanzeige werden größere Zeiträume auf höchstens 400 Punkte
+zusammengefasst; eine Lücke innerhalb eines Zeitabschnitts bleibt als Lücke
+sichtbar. Bei einem Rücksprung der Uhr werden keine doppelten Minuten abgelegt.
+
+Der Verlauf ist flüchtig und nach einem Neustart oder Stromausfall gelöscht.
+Fehlt der PSRAM oder ist er zu klein, meldet die Verlaufsseite das; die
+Temperaturregelung läuft weiter. In der Arduino IDE OPI PSRAM aktivieren.
+Das getrennte Docker-Temperaturarchiv bleibt für dauerhafte Daten zuständig.
+
+Firmware über die Webseite aktualisieren
+Vor dem ersten OTA-Update die neue Partitionsaufteilung einmal per USB mit
+der Arduino IDE aufspielen. Kein vollständiges Löschen des Flashs auswählen:
+die WLAN- und Regelungseinstellungen liegen im NVS. Die erste USB-Installation
+enthält noch keine ältere OTA-Version für einen Rückfall.
+
+Die Update-Seite unter /update zeigt veröffentlichte GitHub-Releases und kann
+die gewünschte Version über das Internet installieren. Sowohl das Gerät, auf
+dem die Webseite geöffnet ist, als auch der ESP benötigen Internetzugang. Der
+ESP prüft die HTTPS-Zertifikate und die SHA-256-Prüfsumme der Release-Datei.
+Nur Releases mit der Datei Backload.ino.bin und GitHub-SHA-256 sind auswählbar.
+Alternativ kann eine kompilierte Backload.ino.bin manuell hochgeladen werden.
+In der Arduino IDE die Binärdatei über „Sketch → Kompilierte Binärdatei
+exportieren“ erstellen. Die normale .ino.bin verwenden, keine .merged.bin.
+Der Zugriff auf das lokale Webinterface ist nicht durch ein Update-Passwort
+geschützt: ausschließlich in einem vertrauenswürdigen Netz verwenden und nicht
+im Internet freigeben.
+Während der Übertragung ist die Pumpe gesperrt und ausgeschaltet. Bei Abbruch
+läuft die Automatik nach der nächsten Messung wieder; Handbetrieb bleibt aus.
+Nach Erfolg startet der ESP neu, wodurch der flüchtige PSRAM-Verlauf verloren
+geht. Ein OTA-Image wird nach erfolgreichem Start und verfügbarer Konfiguration
+bestätigt; vor dieser Bestätigung führt ein Neustart zum Rückfall auf das vorige
+Image. Dies prüft den Start, nicht die korrekte Funktion der gesamten Anlage.
+
+Testmodus (Simulation)
+Unter http://<ESP32-IP>/?test=on oder über „Testmodus starten“ einschalten.
+Nach der Bestätigung schaltet die Pumpe aus, der ESP wartet mindestens zwei
+Sekunden und startet neu. Im Testmodus bleiben die realen Relais AUS und die
+MAX31865 werden nicht initialisiert. Die echte Regelungslogik verarbeitet
+stattdessen die Testwerte; der Betriebszustand ist sichtbar gekennzeichnet.
+„Testmodus beenden“ (oder /?test=off) startet nach Bestätigung wieder die
+Anlagensteuerung. Dabei kann die Automatik die echte Pumpe einschalten.
+Die zuletzt gewählte Betriebsart bleibt über Neustarts erhalten.
+Wird bei aktivem Testmodus die Hauptseite ohne ?test=on geöffnet, fragt sie,
+ob wieder in den Anlagenbetrieb gewechselt werden soll. Wird abgebrochen,
+bleibt der Testmodus aktiv und die Adresse erhält wieder ?test=on.
+
+Der Test-ESP32 öffnet das WLAN ESP32-Backload-Test (Passwort Solar2026).
+Mit diesem verbinden und http://192.168.4.1 öffnen; alternativ im Webinterface
+mit dem eigenen Heimnetz verbinden. Unter „WLAN einrichten“ sucht „WLANs suchen“
+nach sichtbaren 2,4-GHz-Netzen. Netz auswählen, Passwort eingeben und speichern;
+versteckte WLAN-Namen können weiterhin von Hand eingetragen werden. Während der
+Suche kann die Verbindung zum ESP32 kurz aussetzen.
+Über „Testwerte bearbeiten“ die eigene Seite /testwerte?test=on öffnen und fünf
+Temperaturen einstellen oder Sensorfehler simulieren und übernehmen. Die
+Testwerte gelten bis zum nächsten Neustart. Standardmäßig schwanken die
+Temperaturen automatisch um die eingestellten Werte; die Option lässt sich
+auf der Testwerteseite für feste Werte ausschalten. Nach der Zeitsynchronisierung
+wird einmalig ein künstlicher Verlauf für die vorherigen sechs Stunden erzeugt,
+damit die Diagramme sofort etwas zeigen. Dieser Verlauf ist frei erfunden und
+nicht für die Anlage gemessen. Die Bereiche zur manuellen und
+zur automatischen Regelung funktionieren auch im Testbetrieb. Testwerte und
+Pumpenbewegung sind auf der Webseite und im Log ausdrücklich markiert.
+
+Testmodus und Anlagenbetrieb verwenden getrennte NVS-Einstellungsbereiche.
+Falls im Zielmodus noch kein WLAN gespeichert ist, wird der aktuelle WLAN-Zugang
+einmalig dorthin übernommen. Ein bereits gespeichertes WLAN bleibt erhalten;
+die Verbindung kann sich deshalb beim Wechsel ändern. Der serielle Monitor verwendet
+115200 Baud; für gleichzeitige Diagnose via USB muss jeweils nur ein Programm
+auf den seriellen Port zugreifen. Alternativ ist der Live-Monitor per Browser
+über http://<ESP32-IP>:81/ oder den Link in der Oberfläche erreichbar.
+
+

@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#17636b">
+  <title>Temperaturarchiv · Backload</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/static/styles.css">
+  <script defer src="/static/vendor/chart.umd.min.js"></script>
+  <script defer src="/static/app.js"></script>
+</head>
+<body>
+  <main>
+    <header class="page-header">
+      <div>
+        <h1>Temperaturarchiv</h1>
+        <p>Kombispeicher und Pufferspeicher im Verlauf.</p>
+      </div>
+      <span class="product-name">Backload</span>
+    </header>
+
+    <section class="collector" aria-label="Erfassung">
+      <dl>
+        <div><dt>Letzte Erfassung</dt><dd id="last-capture">Wird geladen …</dd></div>
+        <div><dt>Letztes Abfrageergebnis</dt><dd id="last-result">Wird geladen …</dd></div>
+        <div><dt>Nächste Erfassung</dt><dd id="next-capture">Wird geladen …</dd></div>
+      </dl>
+      <p id="status-error" class="notice error" role="status" hidden></p>
+    </section>
+
+    <section class="history" aria-labelledby="history-heading">
+      <div class="section-header">
+        <h2 id="history-heading">Temperaturverlauf</h2>
+        <a id="csv-link" class="button secondary" href="/api/export.csv">CSV herunterladen</a>
+      </div>
+      <div class="periods" role="group" aria-label="Zeitraum auswählen">
+        <button type="button" data-days="1" aria-pressed="false">24 Stunden</button>
+        <button type="button" data-days="7" aria-pressed="true">7 Tage</button>
+        <button type="button" data-days="30" aria-pressed="false">30 Tage</button>
+        <button type="button" data-days="365" aria-pressed="false">365 Tage</button>
+        <button type="button" id="custom-toggle" aria-pressed="false" aria-expanded="false" aria-controls="custom-range">Eigener Zeitraum</button>
+      </div>
+      <form id="custom-range" class="custom-range" hidden>
+        <label>Von<input id="date-from" type="date" required></label>
+        <label>Bis einschließlich<input id="date-to" type="date" required></label>
+        <button type="submit" class="button primary">Anzeigen</button>
+      </form>
+      <p class="range-caption" id="range-caption">Letzte 7 Tage · Europe/Berlin (MEZ/MESZ)</p>
+      <fieldset class="legend">
+        <legend class="sr-only">Temperaturkurven einblenden</legend>
+        <label><input type="checkbox" data-sensor="0" checked><span class="line combi-top"></span>Kombispeicher oben</label>
+        <label><input type="checkbox" data-sensor="1" checked><span class="line combi-middle"></span>Kombispeicher Mitte</label>
+        <label><input type="checkbox" data-sensor="2" checked><span class="line buffer"></span>Pufferspeicher oben</label>
+      </fieldset>
+      <div id="chart-area" class="chart-area" aria-busy="true">
+        <canvas id="history-chart" role="img" aria-label="Temperaturverlauf der drei Sensoren in Grad Celsius. Einzelwerte stehen im CSV-Download."></canvas>
+        <div id="chart-message" class="chart-message" role="status"><p id="chart-message-text">Messungen werden geladen …</p><button type="button" id="retry" class="button secondary" hidden>Erneut laden</button></div>
+      </div>
+      <div class="chart-footer">
+        <p id="sample-summary" aria-live="polite">Viertelstunden-Momentaufnahmen</p>
+        <button type="button" id="refresh" class="text-button">Aktualisieren</button>
+      </div>
+      <p class="hint">Sensorfehler und Ausfälle bleiben als Lücken sichtbar. Der CSV-Download enthält alle gespeicherten Werte des gewählten Zeitraums.</p>
+    </section>
+
+    <footer>
+      <p>Eine Momentaufnahme alle 15 Minuten. Daten werden dauerhaft auf dem Server gespeichert.</p>
+      <p>Alle Anzeigen in Europe/Berlin · Speicherung in UTC</p>
+    </footer>
+    <noscript><p class="notice error">Für das Diagramm bitte JavaScript aktivieren. Der <a href="/api/export.csv">CSV-Download der letzten sieben Tage</a> ist auch ohne JavaScript verfügbar.</p></noscript>
+  </main>
+</body>
+</html>
