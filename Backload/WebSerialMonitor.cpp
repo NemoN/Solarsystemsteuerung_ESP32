@@ -214,11 +214,13 @@ void beginWebSerialMonitor() {
   dashboard.server().on("/testwerte", HTTP_GET, [](AsyncWebServerRequest* req) { dashboard.servePage(req); });
   dashboard.server().on("/verlauf", HTTP_GET, [](AsyncWebServerRequest* req) { dashboard.servePage(req); });
   dashboard.server().on("/update", HTTP_GET, [](AsyncWebServerRequest* req) { dashboard.servePage(req); });
+  dashboard.server().on("/info", HTTP_GET, [](AsyncWebServerRequest* req) { dashboard.servePage(req); });
   dashboard.server().on("/webserial", HTTP_GET, [](AsyncWebServerRequest* req) {
     req->redirect(String("http://") + req->client()->localIP().toString() + ":81/");
   });
   dashboard.server().on("/api/status", HTTP_GET, proxyRequest);
   dashboard.server().on("/api/history", HTTP_GET, proxyRequest);
+  dashboard.server().on("/api/device-info", HTTP_GET, proxyRequest);
   dashboard.server().on("/api/settings", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/pump", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/automatic", HTTP_POST, proxyRequest);

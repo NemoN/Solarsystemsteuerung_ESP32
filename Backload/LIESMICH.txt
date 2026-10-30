@@ -84,10 +84,14 @@ ESP Async WebServer 3.6.0, Async TCP 3.3.2; RisalDash 0.13.0 und
 AsyncWebConsole 0.3.2 sind mit ihren Lizenztexten im Sketch enthalten.
 Webinterface: http://<ESP32-IP>/
 WLAN-Einstellungen: http://<ESP32-IP>/wlan
+ESP-Informationen: http://<ESP32-IP>/info
 Live-Monitor: http://<ESP32-IP>:81/ (oder Link in der Oberfläche).
 Die Oberfläche und Steuerungs-API verwenden Port 80, der Monitor Port 81.
 Das helle oder dunkle Design kann in der Navigation umgeschaltet werden; die
 Auswahl bleibt im jeweiligen Browser gespeichert.
+Die Infoseite zeigt Chipmodell, Revision, CPU, Firmware, Slots und nutzbaren
+sowie freien RAM und PSRAM. Die angezeigte PSRAM-Gesamtgröße ist der für die
+Software nutzbare Speicher und kann unter der physisch verbauten Größe liegen.
 
 Temperaturverlauf im PSRAM
 Unter /verlauf zeigt die Oberfläche alle fünf Sensoren als Temperaturkurven.

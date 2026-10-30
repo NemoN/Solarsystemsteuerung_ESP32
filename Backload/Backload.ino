@@ -15,6 +15,9 @@
 #include "TemperatureHistory.h"
 #include <esp_heap_caps.h>
 #include <esp_ota_ops.h>
+#include <esp_timer.h>
+#include <esp_arduino_version.h>
+#include <esp_chip_info.h>
 #include <Update.h>
 #include <mbedtls/base64.h>
 #include <mbedtls/sha256.h>
@@ -27,7 +30,7 @@
 #include <time.h>
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
-const char* FIRMWARE_VERSION = "1.11.1";
+const char* FIRMWARE_VERSION = "1.11.2";
 
 // Beim ersten Start ohne gespeicherte Betriebsart läuft die echte Steuerung.
 // Der Testmodus wird über das Webinterface nach Bestätigung ein-/ausgeschaltet.
@@ -217,8 +220,8 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 </style>
 </head>
 <body><main>
-<script>document.body.classList.toggle('wifi-page',location.pathname==='/wlan');document.body.classList.toggle('test-page',location.pathname==='/testwerte');document.body.classList.toggle('history-page',location.pathname==='/verlauf');document.body.classList.toggle('update-page',location.pathname==='/update');</script>
-<nav class="page-nav" aria-label="Navigation"><a class="dashboard-link" href="/">← Zur Steuerung</a><a class="wifi-link" href="/wlan">WLAN einrichten</a><a class="history-link" href="/verlauf">Temperaturverlauf</a><a class="update-link" href="/update">Firmware aktualisieren</a><a class="test-values-link" href="/testwerte?test=on" hidden>Testwerte bearbeiten</a><a id="console-link" href="/webserial" target="_blank" rel="noopener">Live-Monitor öffnen</a><a id="test-link" href="/?test=on" hidden>Testmodus starten</a><div class="nav-settings"><span id="firmware-version">Firmware-Version …</span><button id="theme-toggle" class="theme-toggle" type="button">Helles Design</button></div></nav>
+<script>document.body.classList.toggle('wifi-page',location.pathname==='/wlan');document.body.classList.toggle('test-page',location.pathname==='/testwerte');document.body.classList.toggle('history-page',location.pathname==='/verlauf');document.body.classList.toggle('update-page',location.pathname==='/update');document.body.classList.toggle('info-page',location.pathname==='/info');</script>
+<nav class="page-nav" aria-label="Navigation"><a class="dashboard-link" href="/">← Zur Steuerung</a><a class="wifi-link" href="/wlan">WLAN einrichten</a><a class="history-link" href="/verlauf">Temperaturverlauf</a><a class="update-link" href="/update">Firmware aktualisieren</a><a class="info-link" href="/info">ESP-Info</a><a class="test-values-link" href="/testwerte?test=on" hidden>Testwerte bearbeiten</a><a id="console-link" href="/webserial" target="_blank" rel="noopener">Live-Monitor öffnen</a><a id="test-link" href="/?test=on" hidden>Testmodus starten</a><div class="nav-settings"><span id="firmware-version">Firmware-Version …</span><button id="theme-toggle" class="theme-toggle" type="button">Helles Design</button></div></nav>
 <header class="dashboard-header"><h1>Solarsystemsteuerung</h1><div class="header-status"><p id="connection" role="status">Verbindung wird aufgebaut …</p><p id="device-clock" class="muted">ESP32-Zeit wird geladen …</p></div></header>
 <div id="sim-banner" role="status" hidden><strong>Testmodus:</strong> Alle Temperaturen und Pumpenzustände sind simuliert. Der anfängliche Sechs-Stunden-Verlauf ist erzeugt. Die echten Pumpenrelais bleiben ausgeschaltet. <button id="test-stop" type="button">Testmodus beenden</button></div>
 <p id="test-message" class="message" role="status"></p>
@@ -269,6 +272,14 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <p id="auto-message" class="message" role="status"></p>
 </section>
 <p id="test-page-status" role="status">Verbindung wird aufgebaut …</p>
+<section id="info-section" aria-labelledby="info-heading">
+<h2 id="info-heading">ESP-Informationen</h2><p class="muted">Daten des angeschlossenen ESP32. Speicherwerte werden alle 5 Sekunden aktualisiert.</p>
+<p id="info-status" class="muted" role="status">Gerätedaten werden geladen …</p>
+<div class="info-grid">
+<div><h3>Chip</h3><dl><div><dt>Modell</dt><dd id="info-chip">—</dd></div><div><dt>Revision</dt><dd id="info-revision">—</dd></div><div><dt>CPU-Kerne</dt><dd id="info-cores">—</dd></div><div><dt>CPU-Takt</dt><dd id="info-cpu">—</dd></div><div><dt>Laufzeit</dt><dd id="info-uptime">—</dd></div></dl></div>
+<div><h3>Firmware</h3><dl><div><dt>Version</dt><dd id="info-version">—</dd></div><div><dt>ESP32-Core</dt><dd id="info-core">—</dd></div><div><dt>ESP-IDF</dt><dd id="info-idf">—</dd></div><div><dt>Aktiver Firmware-Slot</dt><dd id="info-slot">—</dd></div><div><dt>Update-Slot</dt><dd id="info-update-slot">—</dd></div></dl></div>
+<div><h3>Speicher</h3><dl><div><dt>Flash</dt><dd id="info-flash">—</dd></div><div><dt>Interner RAM nutzbar</dt><dd id="info-heap">—</dd></div><div><dt>Interner RAM frei</dt><dd id="info-heap-free">—</dd></div><div><dt>PSRAM nutzbar</dt><dd id="info-psram">—</dd></div><div><dt>PSRAM frei</dt><dd id="info-psram-free">—</dd></div></dl><p class="muted">Der Temperaturverlauf reserviert PSRAM; die nutzbare Größe kann unter der verbauten Größe liegen.</p></div>
+</div></section>
 <section id="update-section" aria-labelledby="update-heading">
 <h2 id="update-heading">Firmware aktualisieren</h2>
 <p class="muted">Während des Updates bleibt die Pumpe ausgeschaltet. Nach erfolgreichem Upload startet der ESP neu; der flüchtige Temperaturverlauf geht dabei verloren.</p>
@@ -456,6 +467,7 @@ function updateSimulation(data){
   document.querySelector('.wifi-link').href=simulationEnabled?'/wlan?test=on':'/wlan';
   document.querySelector('.history-link').href=simulationEnabled?'/verlauf?test=on':'/verlauf';
   document.querySelector('.update-link').href=simulationEnabled?'/update?test=on':'/update';
+  document.querySelector('.info-link').href=simulationEnabled?'/info?test=on':'/info';
   if(!testParameterHandled){
     testParameterHandled=true;
     const url=new URL(location.href),wanted=url.searchParams.get('test');
@@ -919,11 +931,34 @@ async function loadHistory(){
     drawHistory();
   }catch(error){if(revision!==historyRequest)return;historyData=null;status.className='error';status.textContent='Verlauf nicht erreichbar. Verbindung prüfen und erneut versuchen.';document.getElementById('history-latest').textContent='Keine aktuellen Daten.';drawHistory();}
 }
+let infoBusy=false;
+async function loadDeviceInfo(){
+  if(infoBusy)return;infoBusy=true;
+  const status=document.getElementById('info-status');
+  const set=(id,value)=>document.getElementById('info-'+id).textContent=value;
+  const size=value=>typeof value==='number'&&Number.isFinite(value)?new Intl.NumberFormat('de-DE',{maximumFractionDigits:2}).format(value>=1048576?value/1048576:value/1024)+(value>=1048576?' MiB':' KiB'):'—';
+  try{
+    const d=await request('/api/device-info');
+    set('chip',d.chip);set('revision',d.revision);set('cores',String(d.cores));set('cpu',d.cpuMHz+' MHz');
+    const seconds=d.uptimeSeconds,days=Math.floor(seconds/86400),hours=Math.floor(seconds%86400/3600),minutes=Math.floor(seconds%3600/60);
+    set('uptime',(days?days+' Tage · ':'')+hours+' Std. '+minutes+' Min.');
+    set('version',d.firmware);set('core',d.arduinoCore);set('idf',d.idf);
+    set('slot',d.runningSlot?d.runningSlot.label+' · '+size(d.runningSlot.size):'Nicht verfügbar');
+    set('update-slot',d.updateSlot?d.updateSlot.label+' · '+size(d.updateSlot.size):'Nicht verfügbar');
+    set('flash',size(d.flashBytes));set('heap',size(d.heapBytes));set('heap-free',size(d.heapFreeBytes));
+    set('psram',d.psramBytes?size(d.psramBytes):'Nicht verfügbar');set('psram-free',d.psramBytes?size(d.psramFreeBytes):'Nicht verfügbar');
+    status.className='muted';status.textContent='Verbunden · Aktualisierung alle 5 Sekunden';
+  }catch(error){
+    document.querySelectorAll('#info-section dd').forEach(e=>e.textContent='—');
+    status.className='error';status.textContent='Gerätedaten nicht erreichbar. Neuer Versuch erfolgt automatisch.';
+  }finally{infoBusy=false;}
+}
 if(document.body.classList.contains('history-page')){
   historyNames.forEach((name,i)=>{const label=document.createElement('label'),input=document.createElement('input'),line=document.createElement('i');input.type='checkbox';input.checked=true;input.addEventListener('change',drawHistory);line.setAttribute('aria-hidden','true');label.append(input,line,document.createTextNode(name));historyLegend.appendChild(label);});
   historyRange.addEventListener('change',loadHistory);window.addEventListener('resize',drawHistory);loadHistory();setInterval(loadHistory,60000);
 }
-if(!document.body.classList.contains('history-page')&&!document.body.classList.contains('wifi-page')&&!document.body.classList.contains('test-page')&&!document.body.classList.contains('update-page')){loadSparklines();setInterval(loadSparklines,60000);}
+if(document.body.classList.contains('info-page')){loadDeviceInfo();setInterval(loadDeviceInfo,5000);}
+if(!document.body.classList.contains('history-page')&&!document.body.classList.contains('wifi-page')&&!document.body.classList.contains('test-page')&&!document.body.classList.contains('update-page')&&!document.body.classList.contains('info-page')){loadSparklines();setInterval(loadSparklines,60000);}
 refresh();
 </script></main></body></html>)HTML";
 
@@ -1460,6 +1495,29 @@ void sendTemperatureHistory() {
     }
   }
   json += "]}";
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "application/json; charset=utf-8", json);
+}
+
+void sendDeviceInfo() {
+  esp_chip_info_t chip;
+  esp_chip_info(&chip);
+  const esp_partition_t* running = esp_ota_get_running_partition();
+  const esp_partition_t* next = esp_ota_get_next_update_partition(nullptr);
+  const String core = String(ESP_ARDUINO_VERSION_MAJOR) + "." + ESP_ARDUINO_VERSION_MINOR + "." + ESP_ARDUINO_VERSION_PATCH;
+  const String revision = String(chip.full_revision / 100) + "." + String(chip.full_revision % 100);
+  const auto slotJson = [](const esp_partition_t* p) -> String {
+    return p ? "{\"label\":" + jsonString(p->label) + ",\"size\":" + String(unsigned(p->size)) + "}" : "null";
+  };
+  String json;
+  json.reserve(700);
+  json = "{\"firmware\":" + jsonString(FIRMWARE_VERSION) + ",\"chip\":" + jsonString(ESP.getChipModel()) +
+    ",\"revision\":" + jsonString(revision) + ",\"cores\":" + String(chip.cores) +
+    ",\"cpuMHz\":" + String(ESP.getCpuFreqMHz()) + ",\"arduinoCore\":" + jsonString(core) +
+    ",\"idf\":" + jsonString(ESP.getSdkVersion()) + ",\"uptimeSeconds\":" + String((unsigned long)(esp_timer_get_time() / 1000000ULL)) +
+    ",\"flashBytes\":" + String(ESP.getFlashChipSize()) + ",\"heapBytes\":" + String(ESP.getHeapSize()) +
+    ",\"heapFreeBytes\":" + String(ESP.getFreeHeap()) + ",\"psramBytes\":" + String(ESP.getPsramSize()) +
+    ",\"psramFreeBytes\":" + String(ESP.getFreePsram()) + ",\"runningSlot\":" + slotJson(running) + ",\"updateSlot\":" + slotJson(next) + "}";
   server.sendHeader("Cache-Control", "no-store");
   server.send(200, "application/json; charset=utf-8", json);
 }
@@ -2015,6 +2073,7 @@ void setup() {
   });
   server.on("/api/status", HTTP_GET, sendStatus);
   server.on("/api/history", HTTP_GET, sendTemperatureHistory);
+  server.on("/api/device-info", HTTP_GET, sendDeviceInfo);
   server.on("/api/settings", HTTP_POST, saveSettings);
   server.on("/api/pump", HTTP_POST, savePumpControl);
   server.on("/api/automatic", HTTP_POST, saveAutomaticSettings);
