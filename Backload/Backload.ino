@@ -31,7 +31,7 @@
 #include <time.h>
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
-const char* FIRMWARE_VERSION = "1.11.5";
+const char* FIRMWARE_VERSION = "1.11.6";
 
 // Beim ersten Start ohne gespeicherte Betriebsart läuft die echte Steuerung.
 // Der Testmodus wird über das Webinterface nach Bestätigung ein-/ausgeschaltet.
@@ -48,10 +48,15 @@ String otaToken;
 enum GithubUpdateState { GH_IDLE, GH_DOWNLOADING, GH_DOWNLOADED, GH_FAILED, GH_FINISHED };
 std::atomic<int> githubUpdateState(GH_IDLE);
 std::atomic<uint32_t> githubUpdateBytes(0);
+constexpr unsigned GITHUB_DOWNLOAD_ATTEMPTS = 3;
+std::atomic<unsigned> githubUpdateAttempt(0);
 std::atomic<bool> githubUpdateCancel(false);
 bool githubUpdateActive = false;
 String githubUpdateUrl, githubExpectedHash, githubUpdateToken;
 char githubUpdateError[256] = {};
+// Jeder Eintrag wird vom Download-Task genau einmal vor dem Veröffentlichen
+// der nächsten Versuchsnummer geschrieben und dann nur noch gelesen.
+char githubRetryErrors[GITHUB_DOWNLOAD_ATTEMPTS - 1][256] = {};
 
 // Messprotokoll für USB und Live-Monitor; nach Änderungen neu kompilieren/hochladen.
 // 0 = nur Sensorfehler, Erholung nach Fehlern und Relaisänderungen (Standard).
@@ -286,7 +291,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <h2 id="update-heading">Firmware aktualisieren</h2>
 <p class="muted">Während des Updates bleibt die Pumpe ausgeschaltet. Nach erfolgreichem Upload startet der ESP neu; der flüchtige Temperaturverlauf geht dabei verloren.</p>
 <button id="release-check" type="button">GitHub-Releases suchen</button><p id="release-message" class="message" role="status">Noch nicht nach Updates gesucht.</p>
-<form id="github-update-form"><label>Firmware-Version<select name="release" required disabled><option value="">Bitte zuerst Releases suchen</option></select></label><button type="submit" disabled>Ausgewählte Version installieren</button></form>
+<form id="github-update-form"><label>Firmware-Version<select name="release" required disabled><option value="">Bitte zuerst Releases suchen</option></select></label><button type="submit" disabled>Ausgewählte Version installieren</button><p id="release-download" hidden><a id="release-download-link" target="_blank" rel="noopener noreferrer">Ausgewählte Firmware herunterladen (.bin)</a></p></form>
 <progress id="update-progress" max="100" value="0" hidden></progress><p id="update-message" class="message" role="status"></p>
 <details><summary>Firmware-Datei manuell hochladen</summary><p>Eine für dieses ESP32-S3-Board kompilierte Datei (.bin) auswählen.</p><form id="update-form"><label>Firmware-Datei<input name="firmware" type="file" accept=".bin,application/octet-stream" required></label><button type="submit">Datei hochladen</button></form></details>
 </section>
@@ -640,7 +645,16 @@ async function request(url,options={}){
 }
 const updateForm=document.getElementById('update-form');
 const githubForm=document.getElementById('github-update-form'),releaseMessage=document.getElementById('release-message');
+const releaseDownload=document.getElementById('release-download'),releaseDownloadLink=document.getElementById('release-download-link');
 let githubReleases=[],currentFirmwareVersion='';
+function updateReleaseDownload(){
+  const selected=githubForm.elements.release.value;
+  const release=selected===''?null:githubReleases[Number(selected)];
+  releaseDownload.hidden=!release;
+  if(release)releaseDownloadLink.href='https://github.com/NemoN/Solarsystemsteuerung_ESP32/releases/download/'+encodeURIComponent(release.tag)+'/Backload.ino.bin';
+  else releaseDownloadLink.removeAttribute('href');
+}
+githubForm.elements.release.addEventListener('change',updateReleaseDownload);
 function compareVersions(a,b){
   const parse=s=>/^v?(\d+)\.(\d+)\.(\d+)$/.exec(s||'');
   const x=parse(a),y=parse(b);if(!x||!y)return null;
@@ -648,7 +662,7 @@ function compareVersions(a,b){
 }
 document.getElementById('release-check').addEventListener('click',async event=>{
   const button=event.currentTarget,select=githubForm.elements.release;
-  button.disabled=true;select.disabled=true;githubForm.querySelector('button').disabled=true;releaseMessage.className='message';releaseMessage.textContent='GitHub-Releases werden gesucht …';
+  button.disabled=true;select.disabled=true;githubForm.querySelector('button').disabled=true;githubReleases=[];updateReleaseDownload();releaseMessage.className='message';releaseMessage.textContent='GitHub-Releases werden gesucht …';
   try{
     const device=await request('/api/status');currentFirmwareVersion=device.version||'';
     const response=await fetch('https://api.github.com/repos/NemoN/Solarsystemsteuerung_ESP32/releases?per_page=100',{cache:'no-store',headers:{Accept:'application/vnd.github+json'}});
@@ -657,6 +671,7 @@ document.getElementById('release-check').addEventListener('click',async event=>{
     githubReleases=releases.filter(r=>!r.draft&&Array.isArray(r.assets)).map(r=>({tag:r.tag_name,name:r.name||r.tag_name,date:r.published_at||'',prerelease:r.prerelease,asset:r.assets.find(a=>a.name==='Backload.ino.bin'&&typeof a.digest==='string'&&/^sha256:[0-9a-f]{64}$/.test(a.digest)&&a.size>=1024&&a.size<=3145728)})).filter(r=>r.asset&&/^[A-Za-z0-9._-]+$/.test(r.tag)).sort((a,b)=>b.date.localeCompare(a.date));
     select.replaceChildren(new Option(githubReleases.length?'Version auswählen …':'Keine passenden Releases',''));
     githubReleases.forEach((r,i)=>select.add(new Option(r.name+(r.prerelease?' · Vorabversion':'')+(r.tag.replace(/^v/,'')===currentFirmwareVersion?' · installiert':''),String(i))));
+    updateReleaseDownload();
     select.disabled=!githubReleases.length;githubForm.querySelector('button').disabled=!githubReleases.length;
     if(!githubReleases.length)releaseMessage.textContent='Keine Releases mit passender Firmware und SHA-256-Prüfsumme gefunden.';
     else{
@@ -668,6 +683,37 @@ document.getElementById('release-check').addEventListener('click',async event=>{
   finally{button.disabled=false;}
 });
 if(document.body.classList.contains('update-page'))document.getElementById('release-check').click();
+// Ein Netzwerkfehler bei der Statusabfrage beendet den Download auf dem ESP
+// nicht. Nur Statusabfragen wiederholen, niemals den Update-Start erneut senden.
+async function pollGithubUpdate(post,token,progress,message){
+  let unreachableSince=null;
+  for(;;){
+    await new Promise(resolve=>setTimeout(resolve,1000));
+    let state;
+    try{
+      state=await post('github-status',{token});
+      unreachableSince=null;
+    }catch(error){
+      if(error.status===404){
+        const unknown=new Error('Der Update-Status ist nicht mehr verfügbar. Bitte die installierte Firmware-Version nach dem Neustart prüfen.');
+        unknown.updateUncertain=true;throw unknown;
+      }
+      if(error.status&&error.status<500)throw error;
+      if(unreachableSince===null)unreachableSince=Date.now();
+      if(Date.now()-unreachableSince>=45000){
+        const unknown=new Error('Der ESP antwortet weiterhin nicht. Der Download kann noch laufen; bitte nach kurzer Zeit die installierte Firmware-Version prüfen.');
+        unknown.updateUncertain=true;throw unknown;
+      }
+      message.className='message';message.textContent='Verbindung zum ESP unterbrochen. Update-Status wird erneut abgefragt …';
+      continue;
+    }
+    progress.value=Math.round(state.received*100/state.size);
+    if(state.state==='failed')throw new Error(state.error||'Download fehlgeschlagen');
+    if(state.state==='finished')return;
+    const attempt=state.attempt>1?' · Verbindungsversuch '+state.attempt+'/'+state.maxAttempts:'';
+    message.textContent='Firmware wird von GitHub geladen: '+progress.value+' %'+attempt;
+  }
+}
 githubForm.addEventListener('submit',async event=>{
   event.preventDefault();const selected=githubForm.elements.release.value;
   const release=selected===''?null:githubReleases[Number(selected)];if(!release)return;
@@ -675,17 +721,18 @@ githubForm.addEventListener('submit',async event=>{
   const button=githubForm.querySelector('button'),progress=document.getElementById('update-progress'),message=document.getElementById('update-message');
   button.disabled=true;progress.hidden=false;progress.value=0;message.className='message';message.textContent='GitHub-Download wird gestartet …';
   const post=(path,values)=>request('/api/update/'+path,{method:'POST',headers:{'X-Requested-With':'HeatingUI','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(values)});
+  let startConfirmed=false;
   try{
     const start=await post('github',{url:release.asset.browser_download_url,size:String(release.asset.size),sha256:release.asset.digest.slice(7)});
-    for(;;){
-      await new Promise(resolve=>setTimeout(resolve,1000));
-      const state=await post('github-status',{token:start.token});
-      progress.value=Math.round(state.received*100/state.size);
-      if(state.state==='failed')throw new Error(state.error||'Download fehlgeschlagen');
-      if(state.state==='finished'){message.textContent='Update erfolgreich. Der ESP startet neu; bitte die Seite anschließend neu laden.';break;}
-      message.textContent='Firmware wird von GitHub geladen: '+progress.value+' %';
-    }
-  }catch(error){message.className='message error';message.textContent='Update nicht abgeschlossen: '+(error.message||'Verbindung unterbrochen')+' Bitte Status prüfen und erneut versuchen.';}
+    startConfirmed=true;
+    await pollGithubUpdate(post,start.token,progress,message);
+    message.textContent='Update erfolgreich. Der ESP startet neu; bitte die Seite anschließend neu laden.';
+  }catch(error){
+    message.className='message error';
+    if(error.updateUncertain)message.textContent='Update-Status unklar: '+error.message;
+    else if(!startConfirmed&&(!error.status||error.status>=500))message.textContent='Update-Start nicht bestätigt. Der ESP könnte bereits laden; bitte nach kurzer Zeit den Status und die installierte Firmware-Version prüfen.';
+    else message.textContent='Update nicht abgeschlossen: '+(error.message||'Verbindung unterbrochen')+' Bitte Status prüfen und erneut versuchen.';
+  }
   finally{button.disabled=false;}
 });
 updateForm.addEventListener('submit',async event=>{
@@ -1906,11 +1953,14 @@ void abortOta() {
   cancelOta(); server.send(200, "application/json", "{\"aborted\":true}");
 }
 
-// Läuft auf einem eigenen Task: ein langsames HTTPS oder DNS darf die
-// Hauptschleife und die Pumpen-Sicherheitslogik nicht blockieren.
-void githubDownloadTask(void*) {
+enum GithubDownloadResult { GITHUB_OK, GITHUB_RETRY, GITHUB_ERROR };
+GithubDownloadResult githubDownloadAttempt(char* resultError, size_t resultErrorSize);
+
+// Ein Versuch startet mit leerem Update-Puffer und einem neuen SHA-256-Kontext.
+GithubDownloadResult githubDownloadAttempt(char* resultError, size_t resultErrorSize) {
   const char* error = nullptr;
-  char requestError[sizeof(githubUpdateError)] = {};
+  bool retryable = false;
+  char requestError[256] = {};
   WiFiClientSecure client;
   client.setCACert(GITHUB_ROOT_CERTS);
   client.setHandshakeTimeout(12);
@@ -1924,6 +1974,7 @@ void githubDownloadTask(void*) {
   if (!http.begin(client, githubUpdateUrl)) error = "HTTPS-Verbindung konnte nicht vorbereitet werden.";
   int code = error ? 0 : http.GET();
   if (!error && code != HTTP_CODE_OK) {
+    retryable = code <= 0 || code == 408 || code == 429 || code >= 500;
     if (code > 0) {
       snprintf(requestError, sizeof(requestError), "Download-Server antwortet mit HTTP %d.", code);
     } else {
@@ -1948,15 +1999,20 @@ void githubDownloadTask(void*) {
   WiFiClient* stream = error ? nullptr : http.getStreamPtr();
   while (!error && total < otaExpectedSize) {
     if (githubUpdateCancel.load()) { error = "Update wurde abgebrochen."; break; }
-    size_t available = stream->available();
-    if (!available) {
-      if (!http.connected() || millis() - lastData > 15000) { error = "Verbindung während des Downloads unterbrochen."; break; }
+    const int available = stream->available();
+    if (available <= 0) {
+      if (available < 0 || !http.connected()) { error = "Verbindung während des Downloads unterbrochen."; retryable = true; break; }
+      if (millis() - lastData > 15000) { error = "Zeitlimit: keine Daten während des Downloads."; retryable = true; break; }
       delay(10); continue;
     }
-    size_t length = available < sizeof(buffer) ? available : sizeof(buffer);
+    size_t length = size_t(available) < sizeof(buffer) ? size_t(available) : sizeof(buffer);
     if (length > otaExpectedSize - total) length = otaExpectedSize - total;
     int read = stream->read(buffer, length);
-    if (read <= 0) { delay(10); continue; }
+    if (read <= 0) {
+      if (!http.connected()) { error = "Verbindung beim Lesen des Downloads unterbrochen."; retryable = true; break; }
+      if (millis() - lastData > 15000) { error = "Zeitlimit beim Lesen des Downloads."; retryable = true; break; }
+      delay(10); continue;
+    }
     if (Update.write(buffer, size_t(read)) != size_t(read) || mbedtls_sha256_update_ret(&hash, buffer, size_t(read)) != 0) {
       error = "Firmware konnte nicht geschrieben oder geprüft werden."; break;
     }
@@ -1971,8 +2027,37 @@ void githubDownloadTask(void*) {
     if (githubExpectedHash != actual) error = "SHA-256-Prüfsumme stimmt nicht mit GitHub überein.";
   }
   mbedtls_sha256_free(&hash); http.end();
-  if (error) { snprintf(githubUpdateError, sizeof(githubUpdateError), "%s", error); githubUpdateState.store(GH_FAILED); }
-  else githubUpdateState.store(GH_DOWNLOADED);
+  if (!error) return GITHUB_OK;
+  snprintf(resultError, resultErrorSize, "%s", error);
+  return retryable ? GITHUB_RETRY : GITHUB_ERROR;
+}
+
+// Download und begrenzte Wiederholungen laufen auf einem eigenen Task. Bei
+// jedem Neuversuch wird die unvollständige Firmware verworfen und vollständig
+// neu geladen; erst ein erfolgreiches Image mit passender Prüfsumme wird aktiv.
+void githubDownloadTask(void*) {
+  char error[sizeof(githubUpdateError)] = {};
+  GithubDownloadResult result = GITHUB_ERROR;
+  for (unsigned attempt = 1; attempt <= GITHUB_DOWNLOAD_ATTEMPTS; ++attempt) {
+    if (githubUpdateCancel.load()) { snprintf(error, sizeof(error), "Update wurde abgebrochen."); break; }
+    if (attempt > 1) {
+      Update.abort();
+      delay(1000);
+      if (githubUpdateCancel.load()) { snprintf(error, sizeof(error), "Update wurde abgebrochen."); break; }
+      if (!Update.begin(otaExpectedSize, U_FLASH)) {
+        snprintf(error, sizeof(error), "Neuversuch konnte nicht gestartet werden: %s.", Update.errorString());
+        break;
+      }
+    }
+    githubUpdateBytes.store(0);
+    githubUpdateAttempt.store(attempt);
+    result = githubDownloadAttempt(error, sizeof(error));
+    if (result != GITHUB_RETRY) break;
+    if (attempt < GITHUB_DOWNLOAD_ATTEMPTS)
+      snprintf(githubRetryErrors[attempt - 1], sizeof(githubRetryErrors[0]), "%s", error);
+  }
+  if (result == GITHUB_OK) githubUpdateState.store(GH_DOWNLOADED);
+  else { snprintf(githubUpdateError, sizeof(githubUpdateError), "%s", error); githubUpdateState.store(GH_FAILED); }
   vTaskDelete(nullptr);
 }
 
@@ -2008,7 +2093,7 @@ void startGithubOta() {
   otaExpectedSize = size; otaReceived = 0;
   char token[17]; snprintf(token, sizeof(token), "%08lx%08lx", (unsigned long)esp_random(), (unsigned long)esp_random());
   otaToken = token; githubUpdateToken = token; githubUpdateUrl = url; githubExpectedHash = digest;
-  githubUpdateBytes.store(0); githubUpdateCancel.store(false); githubUpdateError[0] = '\0'; otaLoggedPercent = 0;
+  githubUpdateBytes.store(0); githubUpdateAttempt.store(0); githubUpdateCancel.store(false); githubUpdateError[0] = '\0'; otaLoggedPercent = 0;
   githubUpdateActive = true; githubUpdateState.store(GH_DOWNLOADING);
   if (xTaskCreate(githubDownloadTask, "github-update", 16384, nullptr, 1, nullptr) != pdPASS) {
     githubUpdateActive = false; githubUpdateState.store(GH_FAILED); snprintf(githubUpdateError, sizeof(githubUpdateError), "Download-Task konnte nicht gestartet werden.");
@@ -2024,7 +2109,8 @@ void githubOtaStatus() {
   const int state = githubUpdateState.load();
   const char* label = state == GH_FINISHED ? "finished" : state == GH_FAILED ? "failed" : "downloading";
   server.send(200, "application/json", "{\"state\":\"" + String(label) + "\",\"received\":" + String(githubUpdateBytes.load()) +
-    ",\"size\":" + String(unsigned(otaExpectedSize)) + ",\"error\":" + jsonString(state == GH_FAILED ? githubUpdateError : "") + "}");
+    ",\"size\":" + String(unsigned(otaExpectedSize)) + ",\"attempt\":" + String(githubUpdateAttempt.load()) +
+    ",\"maxAttempts\":" + String(GITHUB_DOWNLOAD_ATTEMPTS) + ",\"error\":" + jsonString(state == GH_FAILED ? githubUpdateError : "") + "}");
 }
 
 void setup() {
@@ -2171,7 +2257,18 @@ void loop() {
     FirmwareLog.println("OTA-Diagnose: Seit 30 Sekunden kein Datenblock; Zeitlimit erreicht.");
     cancelOta();
   }
-  if (githubUpdateActive) logOtaProgress(githubUpdateBytes.load(), otaExpectedSize);
+  static unsigned loggedGithubAttempt = 0;
+  if (githubUpdateActive) {
+    const unsigned attempt = githubUpdateAttempt.load();
+    if (attempt && attempt != loggedGithubAttempt) {
+      loggedGithubAttempt = attempt; otaLoggedPercent = 0;
+      if (attempt > 1)
+        FirmwareLog.printf("OTA-Diagnose: GitHub-Download Versuch %u/%u erneut ab Anfang; vorher: %s\n",
+          attempt, GITHUB_DOWNLOAD_ATTEMPTS, githubRetryErrors[attempt - 2]);
+      else FirmwareLog.printf("OTA-Diagnose: GitHub-Download Versuch %u/%u.\n", attempt, GITHUB_DOWNLOAD_ATTEMPTS);
+    }
+    logOtaProgress(githubUpdateBytes.load(), otaExpectedSize);
+  } else loggedGithubAttempt = 0;
   if (githubUpdateActive && (githubUpdateState.load() == GH_DOWNLOADED || githubUpdateState.load() == GH_FAILED)) {
     const bool downloaded = githubUpdateState.load() == GH_DOWNLOADED;
     githubUpdateActive = false;

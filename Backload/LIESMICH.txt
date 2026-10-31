@@ -120,6 +120,20 @@ Sowohl das Gerät, auf
 dem die Webseite geöffnet ist, als auch der ESP benötigen Internetzugang. Der
 ESP prüft die HTTPS-Zertifikate und die SHA-256-Prüfsumme der Release-Datei.
 Nur Releases mit der Datei Backload.ino.bin und GitHub-SHA-256 sind auswählbar.
+Nach Auswahl einer Version kann die zugehörige .bin-Datei auch über den
+Downloadlink direkt von GitHub auf den PC oder das Tablet gespeichert werden.
+Der Download startet kein Update auf dem ESP. Das Endgerät benötigt Internet.
+Bei unterbrochener Verbindung oder vorübergehendem Serverfehler versucht der
+ESP den GitHub-Download höchstens dreimal. Jeder Neuversuch verwirft die
+unvollständigen Daten und beginnt erneut bei null; HTTPS-Zertifikat, Dateigröße
+und SHA-256 werden weiterhin geprüft. Die Pumpe bleibt bis zum Abschluss oder
+endgültigen Abbruch ausgeschaltet. Fehler beim Schreiben oder Prüfen der Datei
+werden nicht automatisch wiederholt.
+Bei einer kurzzeitig unterbrochenen Statusabfrage versucht die Update-Seite
+erneut, den Fortschritt abzurufen; sie startet den Download nicht erneut.
+Bleibt die Verbindung unterbrochen oder ist der Status nach einem Neustart
+nicht mehr verfügbar, meldet die Seite einen unklaren Status. Dann nach kurzer
+Zeit die installierte Firmware-Version prüfen, bevor ein weiterer Versuch läuft.
 Alternativ kann eine kompilierte Backload.ino.bin manuell hochgeladen werden.
 Bei einem fehlgeschlagenen GitHub-Download zeigt die Update-Seite den HTTP-Status
 oder den HTTPClient-Fehlercode und, falls verfügbar, den Verbindungscode an.
