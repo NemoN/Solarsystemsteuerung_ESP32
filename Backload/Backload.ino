@@ -18,6 +18,7 @@
 #include <esp_timer.h>
 #include <esp_arduino_version.h>
 #include <esp_chip_info.h>
+#include <esp_system.h>
 #include <Update.h>
 #include <mbedtls/base64.h>
 #include <mbedtls/sha256.h>
@@ -30,7 +31,7 @@
 #include <time.h>
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
-const char* FIRMWARE_VERSION = "1.11.2";
+const char* FIRMWARE_VERSION = "1.11.4";
 
 // Beim ersten Start ohne gespeicherte Betriebsart läuft die echte Steuerung.
 // Der Testmodus wird über das Webinterface nach Bestätigung ein-/ausgeschaltet.
@@ -41,6 +42,7 @@ bool otaActive = false, otaFinished = false, otaVerificationPending = false;
 unsigned long otaLastActivity = 0, otaStoppedAt = 0, otaBootCheckStarted = 0;
 size_t otaExpectedSize = 0, otaReceived = 0;
 size_t otaLastChunkOffset = 0, otaLastChunkLength = 0;
+unsigned otaLoggedPercent = 0;
 uint8_t otaLastChunkHash[32] = {};
 String otaToken;
 enum GithubUpdateState { GH_IDLE, GH_DOWNLOADING, GH_DOWNLOADED, GH_FAILED, GH_FINISHED };
@@ -49,7 +51,7 @@ std::atomic<uint32_t> githubUpdateBytes(0);
 std::atomic<bool> githubUpdateCancel(false);
 bool githubUpdateActive = false;
 String githubUpdateUrl, githubExpectedHash, githubUpdateToken;
-char githubUpdateError[128] = {};
+char githubUpdateError[256] = {};
 
 // Messprotokoll für USB und Live-Monitor; nach Änderungen neu kompilieren/hochladen.
 // 0 = nur Sensorfehler, Erholung nach Fehlern und Relaisänderungen (Standard).
@@ -683,7 +685,7 @@ githubForm.addEventListener('submit',async event=>{
       if(state.state==='finished'){message.textContent='Update erfolgreich. Der ESP startet neu; bitte die Seite anschließend neu laden.';break;}
       message.textContent='Firmware wird von GitHub geladen: '+progress.value+' %';
     }
-  }catch(error){message.className='message error';message.textContent='Update nicht abgeschlossen: '+(error.message||'Verbindung unterbrochen')+'. Bitte Status prüfen und erneut versuchen.';}
+  }catch(error){message.className='message error';message.textContent='Update nicht abgeschlossen: '+(error.message||'Verbindung unterbrochen')+' Bitte Status prüfen und erneut versuchen.';}
   finally{button.disabled=false;}
 });
 updateForm.addEventListener('submit',async event=>{
@@ -1786,10 +1788,36 @@ bool otaNumber(const String& value, uint32_t& number) {
 }
 
 void cancelOta() {
+  FirmwareLog.printf("OTA-Diagnose: Abbruch; Update-Fehler=%u (%s).\n",
+    unsigned(Update.getError()), Update.errorString());
   if (Update.isRunning()) Update.abort();
   otaActive = false; otaFinished = false; otaToken = "";
   automaticControl.reset();
   FirmwareLog.println("Firmware-Update abgebrochen. Handbetrieb bleibt ausgeschaltet.\n");
+}
+
+void logOtaPartition(const char* name, const esp_partition_t* partition) {
+  if (!partition) { FirmwareLog.printf("OTA-Diagnose: %s: nicht vorhanden.\n", name); return; }
+  FirmwareLog.printf("OTA-Diagnose: %s: %s, Adresse=0x%08lX, Groesse=%lu Bytes, Typ=%u, Subtyp=%u.\n",
+    name, partition->label, (unsigned long)partition->address, (unsigned long)partition->size,
+    unsigned(partition->type), unsigned(partition->subtype));
+}
+
+void logOtaEnvironment(const char* stage) {
+  FirmwareLog.printf("OTA-Diagnose: %s | Laufzeit=%lu ms | Heap frei=%lu Bytes, groesster Block=%lu Bytes.\n",
+    stage, millis(), (unsigned long)ESP.getFreeHeap(),
+    (unsigned long)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT));
+  logOtaPartition("Aktuelle Partition", esp_ota_get_running_partition());
+  logOtaPartition("Naechste OTA-Partition", esp_ota_get_next_update_partition(nullptr));
+}
+
+void logOtaProgress(size_t received, size_t total) {
+  if (!total) return;
+  const unsigned percent = unsigned((uint64_t(received) * 100) / total);
+  if (percent >= otaLoggedPercent + 10 || (percent == 100 && otaLoggedPercent < 100)) {
+    otaLoggedPercent = percent;
+    FirmwareLog.printf("OTA-Diagnose: Fortschritt %u%% (%u/%u Bytes).\n", percent, unsigned(received), unsigned(total));
+  }
 }
 
 bool checkOtaRequest() {
@@ -1800,19 +1828,25 @@ bool checkOtaRequest() {
 }
 
 void prepareOta() {
+  FirmwareLog.printf("OTA-Diagnose: Manueller Upload angefordert; Argumente=%u.\n", unsigned(server.args()));
+  logOtaEnvironment("Vorbereitung manuell");
   if (server.header("X-Requested-With") != "HeatingUI") { server.send(403, "text/plain", "Bitte das Webinterface verwenden."); return; }
   if (otaActive || otaVerificationPending || modeTransition) { server.send(409, "text/plain", "Steuerung ist beschäftigt."); return; }
   uint32_t size = 0;
   const esp_partition_t* next = esp_ota_get_next_update_partition(nullptr);
   if (server.args() != 1 || !otaNumber(server.arg("size"), size) || size < 1024 || !next || size > next->size) {
+    FirmwareLog.printf("OTA-Diagnose: Vorbereitung abgelehnt; Dateigroesse=%lu, Zielgroesse=%lu Bytes.\n",
+      (unsigned long)size, next ? (unsigned long)next->size : 0UL);
     server.send(400, "text/plain; charset=utf-8", "Ungültige Dateigröße oder keine passende OTA-Partition."); return;
   }
+  FirmwareLog.printf("OTA-Diagnose: Dateigroesse=%lu Bytes; Pumpe wird ausgeschaltet.\n", (unsigned long)size);
   otaActive = true; otaFinished = false;
   manualControl = false; manualPumpOn = false; automaticControl.reset();
   pump.command(false, pump.direction(), millis()); servicePump();
   otaStoppedAt = otaLastActivity = millis();
+  FirmwareLog.println("OTA-Diagnose: Pumpe ausgeschaltet; Update.begin wird aufgerufen.");
   if (!Update.begin(size, U_FLASH)) { cancelOta(); server.send(500, "text/plain", "Update konnte nicht gestartet werden."); return; }
-  otaExpectedSize = size; otaReceived = 0; otaLastChunkLength = 0;
+  otaExpectedSize = size; otaReceived = 0; otaLastChunkLength = 0; otaLoggedPercent = 0;
   char token[17]; snprintf(token, sizeof(token), "%08lx%08lx", (unsigned long)esp_random(), (unsigned long)esp_random());
   otaToken = token;
   FirmwareLog.println("Firmware-Update vorbereitet. Pumpe AUS.\n");
@@ -1828,6 +1862,7 @@ void writeOtaChunk() {
       !encoded.length() || encoded.length() > 5464 ||
       mbedtls_base64_decode(decoded, sizeof(decoded), &length, reinterpret_cast<const unsigned char*>(encoded.c_str()), encoded.length()) != 0 ||
       !length) {
+    FirmwareLog.printf("OTA-Diagnose: Ungueltiger Datenblock bei Offset %lu.\n", (unsigned long)offset);
     cancelOta(); server.send(400, "text/plain; charset=utf-8", "Ungültiger Datenblock. Update abgebrochen."); return;
   }
   uint8_t hash[32];
@@ -1840,6 +1875,8 @@ void writeOtaChunk() {
     server.send(200, "application/json", "{\"received\":" + String(unsigned(otaReceived)) + "}"); return;
   }
   if (offset != otaReceived || length > otaExpectedSize - otaReceived) {
+    FirmwareLog.printf("OTA-Diagnose: Blockposition=%lu, erwartet=%u, Blockgroesse=%u.\n",
+      (unsigned long)offset, unsigned(otaReceived), unsigned(length));
     cancelOta(); server.send(400, "text/plain; charset=utf-8", "Datenblöcke stimmen nicht überein. Update abgebrochen."); return;
   }
   if (Update.write(decoded, length) != length) {
@@ -1847,11 +1884,13 @@ void writeOtaChunk() {
   }
   otaLastChunkOffset = offset; otaLastChunkLength = length; memcpy(otaLastChunkHash, hash, sizeof(hash));
   otaReceived += length;
+  logOtaProgress(otaReceived, otaExpectedSize);
   server.send(200, "application/json", "{\"received\":" + String(unsigned(otaReceived)) + "}");
 }
 
 void finishOta() {
   if (!checkOtaRequest()) return;
+  FirmwareLog.printf("OTA-Diagnose: Abschluss angefordert; empfangen=%u/%u Bytes.\n", unsigned(otaReceived), unsigned(otaExpectedSize));
   if (server.args() != 1 || otaReceived != otaExpectedSize || !Update.end()) {
     cancelOta(); server.send(400, "text/plain; charset=utf-8", "Firmware unvollständig oder ungültig. Update abgebrochen."); return;
   }
@@ -1863,6 +1902,7 @@ void finishOta() {
 void abortOta() {
   if (!checkOtaRequest()) return;
   if (server.args() != 1) { server.send(400, "text/plain", "Ungültige Anfrage."); return; }
+  FirmwareLog.println("OTA-Diagnose: Browser hat Abbruch angefordert.");
   cancelOta(); server.send(200, "application/json", "{\"aborted\":true}");
 }
 
@@ -1870,6 +1910,7 @@ void abortOta() {
 // Hauptschleife und die Pumpen-Sicherheitslogik nicht blockieren.
 void githubDownloadTask(void*) {
   const char* error = nullptr;
+  char requestError[sizeof(githubUpdateError)] = {};
   WiFiClientSecure client;
   client.setCACert(GITHUB_ROOT_CERTS);
   client.setHandshakeTimeout(12);
@@ -1882,7 +1923,25 @@ void githubDownloadTask(void*) {
   mbedtls_sha256_starts_ret(&hash, 0);
   if (!http.begin(client, githubUpdateUrl)) error = "HTTPS-Verbindung konnte nicht vorbereitet werden.";
   int code = error ? 0 : http.GET();
-  if (!error && code != HTTP_CODE_OK) error = "GitHub-Download nicht erreichbar oder TLS-Prüfung fehlgeschlagen.";
+  if (!error && code != HTTP_CODE_OK) {
+    if (code > 0) {
+      snprintf(requestError, sizeof(requestError), "Download-Server antwortet mit HTTP %d.", code);
+    } else {
+      char secureError[120] = {};
+      const int secureCode = client.lastError(secureError, sizeof(secureError));
+      if (secureCode < -1) {
+        snprintf(requestError, sizeof(requestError), "Verbindung fehlgeschlagen: HTTPClient %d (%s); Verbindungscode %d: %.100s.",
+                 code, HTTPClient::errorToString(code).c_str(), secureCode, secureError);
+      } else if (secureCode == -1) {
+        snprintf(requestError, sizeof(requestError), "Verbindung fehlgeschlagen: HTTPClient %d (%s); Verbindungscode -1 (Ursache nicht eindeutig).",
+                 code, HTTPClient::errorToString(code).c_str());
+      } else {
+        snprintf(requestError, sizeof(requestError), "Verbindung fehlgeschlagen: HTTPClient %d (%s); kein weiterer Verbindungscode verfügbar.",
+                 code, HTTPClient::errorToString(code).c_str());
+      }
+    }
+    error = requestError;
+  }
   if (!error && http.getSize() != int(otaExpectedSize)) error = "Dateigröße stimmt nicht mit dem Release überein.";
   uint32_t total = 0, lastData = millis();
   uint8_t buffer[2048];
@@ -1918,6 +1977,8 @@ void githubDownloadTask(void*) {
 }
 
 void startGithubOta() {
+  FirmwareLog.printf("OTA-Diagnose: GitHub-Update angefordert; Argumente=%u.\n", unsigned(server.args()));
+  logOtaEnvironment("Vorbereitung GitHub");
   if (server.header("X-Requested-With") != "HeatingUI") { server.send(403, "text/plain", "Bitte das Webinterface verwenden."); return; }
   if (otaActive || otaVerificationPending || modeTransition) { server.send(409, "text/plain", "Steuerung ist beschäftigt."); return; }
   const String url = server.arg("url"), digest = server.arg("sha256");
@@ -1925,6 +1986,8 @@ void startGithubOta() {
   uint32_t size = 0; const esp_partition_t* next = esp_ota_get_next_update_partition(nullptr);
   if (server.args() != 3 || !url.startsWith(prefix) || !url.endsWith(suffix) || url.length() <= prefix.length() + suffix.length() ||
       !otaNumber(server.arg("size"), size) || size < 1024 || !next || size > next->size || digest.length() != 64) {
+    FirmwareLog.printf("OTA-Diagnose: GitHub-Vorbereitung abgelehnt; Dateigroesse=%lu, Zielgroesse=%lu Bytes.\n",
+      (unsigned long)size, next ? (unsigned long)next->size : 0UL);
     server.send(400, "text/plain; charset=utf-8", "Ungültiges Release oder keine passende OTA-Partition."); return;
   }
   const String tag = url.substring(prefix.length(), url.length() - suffix.length());
@@ -1935,15 +1998,17 @@ void startGithubOta() {
   for (size_t i = 0; i < digest.length(); ++i)
     if (!((digest[i] >= '0' && digest[i] <= '9') || (digest[i] >= 'a' && digest[i] <= 'f'))) { server.send(400, "text/plain", "Ungültige SHA-256-Prüfsumme."); return; }
   if (WiFi.status() != WL_CONNECTED) { server.send(503, "text/plain; charset=utf-8", "ESP32 ist nicht mit dem Heimnetz verbunden."); return; }
+  FirmwareLog.printf("OTA-Diagnose: GitHub-Dateigroesse=%lu Bytes; Pumpe wird ausgeschaltet.\n", (unsigned long)size);
   otaActive = true; otaFinished = false;
   manualControl = false; manualPumpOn = false; automaticControl.reset();
   pump.command(false, pump.direction(), millis()); servicePump();
   otaStoppedAt = otaLastActivity = millis();
+  FirmwareLog.println("OTA-Diagnose: Pumpe ausgeschaltet; Update.begin wird aufgerufen.");
   if (!Update.begin(size, U_FLASH)) { cancelOta(); server.send(500, "text/plain", "Update konnte nicht gestartet werden."); return; }
   otaExpectedSize = size; otaReceived = 0;
   char token[17]; snprintf(token, sizeof(token), "%08lx%08lx", (unsigned long)esp_random(), (unsigned long)esp_random());
   otaToken = token; githubUpdateToken = token; githubUpdateUrl = url; githubExpectedHash = digest;
-  githubUpdateBytes.store(0); githubUpdateCancel.store(false); githubUpdateError[0] = '\0';
+  githubUpdateBytes.store(0); githubUpdateCancel.store(false); githubUpdateError[0] = '\0'; otaLoggedPercent = 0;
   githubUpdateActive = true; githubUpdateState.store(GH_DOWNLOADING);
   if (xTaskCreate(githubDownloadTask, "github-update", 16384, nullptr, 1, nullptr) != pdPASS) {
     githubUpdateActive = false; githubUpdateState.store(GH_FAILED); snprintf(githubUpdateError, sizeof(githubUpdateError), "Download-Task konnte nicht gestartet werden.");
@@ -1997,6 +2062,10 @@ void setup() {
   delay(1000);  // Sensorversorgung vor der Initialisierung stabilisieren lassen
   if (SIMULATION_MODE) simulationPhase = float(esp_random() % 6283U) / 1000.0f;
   FirmwareLog.printf("Heizungssteuerung – Firmware %s\n", FIRMWARE_VERSION);
+  FirmwareLog.printf("OTA-Diagnose: Reset-Ursache=%d | Flash=%lu Bytes | PSRAM=%lu Bytes | Core=%d.%d.%d.\n",
+    int(esp_reset_reason()), (unsigned long)ESP.getFlashChipSize(), (unsigned long)ESP.getPsramSize(),
+    ESP_ARDUINO_VERSION_MAJOR, ESP_ARDUINO_VERSION_MINOR, ESP_ARDUINO_VERSION_PATCH);
+  logOtaEnvironment("Systemstart");
   auto* historyBuffer = static_cast<TemperatureHistory::Sample*>(
     heap_caps_malloc(HISTORY_CAPACITY * sizeof(TemperatureHistory::Sample), MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
   temperatureHistory.attach(historyBuffer, HISTORY_CAPACITY, [](){ servicePump(); yield(); });
@@ -2098,7 +2167,11 @@ void loop() {
   servicePump();
   unsigned long now = millis();
   if (otaActive && otaFinished && now - otaLastActivity >= 2500 && now - otaStoppedAt >= 2500) ESP.restart();
-  if (otaActive && !otaFinished && !githubUpdateActive && now - otaLastActivity >= 30000) cancelOta();
+  if (otaActive && !otaFinished && !githubUpdateActive && now - otaLastActivity >= 30000) {
+    FirmwareLog.println("OTA-Diagnose: Seit 30 Sekunden kein Datenblock; Zeitlimit erreicht.");
+    cancelOta();
+  }
+  if (githubUpdateActive) logOtaProgress(githubUpdateBytes.load(), otaExpectedSize);
   if (githubUpdateActive && (githubUpdateState.load() == GH_DOWNLOADED || githubUpdateState.load() == GH_FAILED)) {
     const bool downloaded = githubUpdateState.load() == GH_DOWNLOADED;
     githubUpdateActive = false;
@@ -2107,6 +2180,8 @@ void loop() {
       FirmwareLog.println("GitHub-Firmware geprüft. Pumpe AUS, Neustart folgt.\n");
     } else {
       if (downloaded) snprintf(githubUpdateError, sizeof(githubUpdateError), "Firmware-Image ist ungültig.");
+      FirmwareLog.printf("GitHub-Update fehlgeschlagen: %s | Empfangen=%u/%u Bytes.\n",
+        githubUpdateError, unsigned(githubUpdateBytes.load()), unsigned(otaExpectedSize));
       githubUpdateState.store(GH_FAILED); cancelOta();
     }
   }

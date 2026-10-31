@@ -6,6 +6,7 @@
 #include "src/AsyncWebConsole/src/AsyncWebConsole.h"
 #include "DashboardStyles.h"
 #include "WebSerialMonitor.h"
+#include <atomic>
 
 extern const char INDEX_HTML[];
 // Die neue Firmware erst nach der Startprüfung in loop() bestätigen.
@@ -77,6 +78,9 @@ ControlWidget controlWidget;
 constexpr size_t MAX_PROXY_BYTES = 32768;
 constexpr unsigned MAX_PROXY_CLIENTS = 8;
 unsigned activeProxies = 0;  // only accessed by AsyncTCP callbacks
+// AsyncTCP callbacks publish counters only. The main loop performs all logging
+// because the shared FirmwareLog buffer is not safe for concurrent writers.
+std::atomic<uint32_t> otaProxyRequests(0), otaProxyConnections(0), otaProxyComplete(0), otaProxyFailed(0);
 struct ProxyContext {
   String request;
   String response;
@@ -84,6 +88,7 @@ struct ProxyContext {
   bool ready = false;
   bool responseAlive = true;
   bool overflow = false;
+  bool otaStart = false;
 };
 void sendProxyData(ProxyContext* ctx, AsyncClient* client) {
   if (!ctx->request.length()) return;
@@ -156,6 +161,8 @@ void proxyRequest(AsyncWebServerRequest* req) {
   ProxyContext* ctx = new ProxyContext();
   AsyncClient* upstream = new AsyncClient();
   if (!ctx || !upstream) { delete ctx; delete upstream; req->send(503, "text/plain", "Nicht genügend Speicher."); return; }
+  ctx->otaStart = req->url() == "/api/update/prepare" || req->url() == "/api/update/github";
+  if (ctx->otaStart) otaProxyRequests.fetch_add(1);
   ctx->request = String(post ? "POST " : "GET ") + target + " HTTP/1.0\r\nHost: localhost\r\nConnection: close\r\n";
   if (req->hasHeader("X-Requested-With") && req->getHeader("X-Requested-With")->value() == "HeatingUI")
     ctx->request += "X-Requested-With: HeatingUI\r\n";
@@ -164,7 +171,9 @@ void proxyRequest(AsyncWebServerRequest* req) {
   if (post) ctx->request += args;
   ++activeProxies;
   upstream->onConnect([](void* arg, AsyncClient* client) {
-    sendProxyData(static_cast<ProxyContext*>(arg), client);
+    ProxyContext* c = static_cast<ProxyContext*>(arg);
+    if (c->otaStart) otaProxyConnections.fetch_add(1);
+    sendProxyData(c, client);
   }, ctx);
   upstream->onAck([](void* arg, AsyncClient* client, size_t, uint32_t) {
     sendProxyData(static_cast<ProxyContext*>(arg), client);
@@ -180,7 +189,12 @@ void proxyRequest(AsyncWebServerRequest* req) {
   upstream->onError([](void*, AsyncClient* client, int8_t) { client->close(true); }, ctx);
   upstream->onDisconnect([](void* arg, AsyncClient* client) {
     ProxyContext* c = static_cast<ProxyContext*>(arg);
-    if (c->overflow || !completeHttpResponse(c->response)) c->response = BAD_GATEWAY;
+    const bool failed = c->overflow || !completeHttpResponse(c->response);
+    if (c->otaStart) {
+      if (failed) otaProxyFailed.fetch_add(1);
+      else otaProxyComplete.fetch_add(1);
+    }
+    if (failed) c->response = BAD_GATEWAY;
     c->ready = true;
     --activeProxies;
     delete client;
@@ -189,6 +203,7 @@ void proxyRequest(AsyncWebServerRequest* req) {
   upstream->setRxTimeout(8);
   req->send(new ProxyResponse(ctx));
   if (!upstream->connect(IPAddress(127, 0, 0, 1), 8080)) {
+    if (ctx->otaStart) otaProxyFailed.fetch_add(1);
     ctx->response = BAD_GATEWAY;
     ctx->ready = true;
     --activeProxies;
@@ -242,6 +257,14 @@ void beginWebSerialMonitor() {
 }
 
 void processWebSerialMonitor() {
+  static uint32_t requests = 0, connections = 0, complete = 0, failed = 0;
+  const uint32_t newRequests = otaProxyRequests.load(), newConnections = otaProxyConnections.load();
+  const uint32_t newComplete = otaProxyComplete.load(), newFailed = otaProxyFailed.load();
+  if (requests != newRequests || connections != newConnections || complete != newComplete || failed != newFailed) {
+    requests = newRequests; connections = newConnections; complete = newComplete; failed = newFailed;
+    FirmwareLog.printf("OTA-Diagnose: Web-Weiterleitung: Anfragen=%lu, verbunden=%lu, Antworten=%lu, Fehler=%lu.\n",
+      (unsigned long)requests, (unsigned long)connections, (unsigned long)complete, (unsigned long)failed);
+  }
   mirroredLog.flushPending();
   if (started) dashboard.update();
 }

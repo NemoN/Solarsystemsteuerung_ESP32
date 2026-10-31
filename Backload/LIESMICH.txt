@@ -121,6 +121,22 @@ dem die Webseite geöffnet ist, als auch der ESP benötigen Internetzugang. Der
 ESP prüft die HTTPS-Zertifikate und die SHA-256-Prüfsumme der Release-Datei.
 Nur Releases mit der Datei Backload.ino.bin und GitHub-SHA-256 sind auswählbar.
 Alternativ kann eine kompilierte Backload.ino.bin manuell hochgeladen werden.
+Bei einem fehlgeschlagenen GitHub-Download zeigt die Update-Seite den HTTP-Status
+oder den HTTPClient-Fehlercode und, falls verfügbar, den Verbindungscode an.
+Dieselbe Meldung steht im Live-Monitor. Ein Verbindungscode allein beweist
+nicht, ob DNS, Netzwerk oder TLS die Ursache ist. Die Prüfung der HTTPS-
+Zertifikate bleibt aktiviert.
+
+Update-Diagnose ab Version 1.11.4
+Den seriellen Monitor auf 115200 Baud einstellen und vor einem Updateversuch
+öffnen. Zeilen mit „OTA-Diagnose“ zeigen unter anderem Flash- und Partitions-
+größen, freien Speicher und die einzelnen Schritte des Updates. Beim Start
+wird die Reset-Ursache als ESP-IDF-Code ausgegeben: 1 = Einschalten,
+3 = Software-Neustart, 4 = Ausnahme/Panic, 5 bis 7 = Watchdog, 9 = Brownout.
+Startmeldungen werden über USB ausgegeben. Der Live-Monitor zeigt nur Meldungen
+ab Verbindung; für Reset-Meldungen deshalb den seriellen Monitor verwenden.
+Diagnoseausgaben enthalten keine WLAN-Passwörter oder Update-Token. Auch die
+sonstigen Meldungen vor dem Weitergeben auf vertrauliche Angaben prüfen.
 Neue Versionen als GitHub-Release mit dem Namen der Versionsnummer (z. B.
 v1.11.1) veröffentlichen und die kompilierte Backload.ino.bin als Release-Datei
 hinzufügen. GitHub berechnet die SHA-256-Prüfsumme für diese Datei.
