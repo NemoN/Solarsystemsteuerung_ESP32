@@ -13,3 +13,4 @@ Browserbefehle an, zeigt keine Eingabezeile und verwendet die deutsche
 Beschriftung des Live-Monitors. Die HTML-Datei trägt die Endung `.h`, damit
 Arduino sie in das Buildverzeichnis kopiert. Vor dem Senden werden getrennte
 WebSocket-Clients bereinigt, damit erneute Verbindungen Ausgaben empfangen.
+Leere Logzeilen bleiben im Live-Monitor auch bei pausierter Ausgabe erhalten.

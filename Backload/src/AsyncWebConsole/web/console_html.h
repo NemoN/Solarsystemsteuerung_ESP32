@@ -52,7 +52,7 @@ R"HTML(
       white-space: pre-wrap;
       word-break: break-word;
     }
-    .line { margin: 0 0 .25rem 0; }
+    .line { margin: 0 0 .25rem 0; min-height: 1em; }
     .sys { color: #9ecbff; }
     .err { color: #ff8a8a; }
     .ok  { color: #9bffa8; }
@@ -235,7 +235,7 @@ R"HTML(
     function pushLine(text, cls) {
       const div = document.createElement('div');
       div.className = 'line ' + (cls || '');
-      const trimmed = text.replace(/\r?\n$/, '');
+      const trimmed = text.replace(/\r?\n$/, '').replace(/\r$/, '');
       const match = trimmed.match(/^\[(\d{2}:\d{2}:\d{2}\.\d{3})\]\s?([\s\S]*)/);
       if (match) {
         const ts = document.createElement('span');
@@ -378,16 +378,11 @@ R"HTML(
         carry = parts.pop() || '';
         if (!receiving) {
           if (keepCheckbox.checked) {
-            for (const part of parts) {
-              if (part.length) pausedBuffer.push(part);
-            }
+            for (const part of parts) pausedBuffer.push(part);
             droppedWhilePaused = pausedBuffer.length;
           } else {
-            for (const part of parts) {
-              if (part.length) droppedWhilePaused++;
-            }
+            droppedWhilePaused += parts.length;
           }
-          carry = '';
           refreshStatus();
           return;
         }
@@ -397,9 +392,7 @@ R"HTML(
           pausedBuffer.length = 0;
           droppedWhilePaused = 0;
         }
-        for (const part of parts) {
-          if (part.length) pushLine(part);
-        }
+        for (const part of parts) pushLine(part);
       };
       ws.onclose = () => {
         isConnected = false;

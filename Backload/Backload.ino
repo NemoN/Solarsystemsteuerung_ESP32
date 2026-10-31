@@ -31,7 +31,7 @@
 #include <time.h>
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
-const char* FIRMWARE_VERSION = "1.11.4";
+const char* FIRMWARE_VERSION = "1.11.5";
 
 // Beim ersten Start ohne gespeicherte Betriebsart läuft die echte Steuerung.
 // Der Testmodus wird über das Webinterface nach Bestätigung ein-/ausgeschaltet.
