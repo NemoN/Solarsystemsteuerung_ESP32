@@ -124,6 +124,8 @@ ESP prüft die HTTPS-Zertifikate und die SHA-256-Prüfsumme der Release-Datei.
 Nur Releases mit der Datei Backload.ino.bin und GitHub-SHA-256 sind auswählbar.
 Nach Auswahl einer Version kann die zugehörige .bin-Datei auch über den
 Downloadlink direkt von GitHub auf den PC oder das Tablet gespeichert werden.
+Wenn verfügbar, enthält der Dateiname die Versionsnummer; die zusätzliche
+Datei wird nur bei gleicher Größe und SHA-256 wie Backload.ino.bin angeboten.
 Der Download startet kein Update auf dem ESP. Das Endgerät benötigt Internet.
 Bei unterbrochener Verbindung oder vorübergehendem Serverfehler versucht der
 ESP den GitHub-Download höchstens dreimal. Jeder Neuversuch verwirft die
@@ -158,8 +160,12 @@ auswählen; nur ein Programm darf den Port gleichzeitig geöffnet haben.
 Diagnoseausgaben enthalten keine WLAN-Passwörter oder Update-Token. Auch die
 sonstigen Meldungen vor dem Weitergeben auf vertrauliche Angaben prüfen.
 Neue Versionen als GitHub-Release mit dem Namen der Versionsnummer (z. B.
-v1.11.1) veröffentlichen und die kompilierte Backload.ino.bin als Release-Datei
+v1.11.8) veröffentlichen und die kompilierte Backload.ino.bin als Release-Datei
 hinzufügen. GitHub berechnet die SHA-256-Prüfsumme für diese Datei.
+Für den manuellen Download dieselbe Datei unverändert zusätzlich mit Versions-
+nummer hochladen, z. B. Backload-1.11.8.bin. Backload.ino.bin bleibt für die
+Update-Funktion bereits installierter Versionen erforderlich. Kein separates
+Quellcode-Archiv als Release-Datei hochladen; der Quellcode liegt im Repository.
 In der Arduino IDE die Binärdatei über „Sketch → Kompilierte Binärdatei
 exportieren“ erstellen. Die normale .ino.bin verwenden, keine .merged.bin.
 Der Zugriff auf das lokale Webinterface ist nicht durch ein Update-Passwort

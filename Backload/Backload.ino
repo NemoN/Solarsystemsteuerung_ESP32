@@ -31,7 +31,7 @@
 #include <time.h>
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
-const char* FIRMWARE_VERSION = "1.11.7";
+const char* FIRMWARE_VERSION = "1.11.8";
 
 // Beim ersten Start ohne gespeicherte Betriebsart läuft die echte Steuerung.
 // Der Testmodus wird über das Webinterface nach Bestätigung ein-/ausgeschaltet.
@@ -653,7 +653,7 @@ function updateReleaseDownload(){
   const selected=githubForm.elements.release.value;
   const release=selected===''?null:githubReleases[Number(selected)];
   releaseDownload.hidden=!release;
-  if(release)releaseDownloadLink.href='https://github.com/NemoN/Solarsystemsteuerung_ESP32/releases/download/'+encodeURIComponent(release.tag)+'/Backload.ino.bin';
+  if(release)releaseDownloadLink.href='https://github.com/NemoN/Solarsystemsteuerung_ESP32/releases/download/'+encodeURIComponent(release.tag)+'/'+encodeURIComponent(release.downloadAsset?release.downloadAsset.name:'Backload.ino.bin');
   else releaseDownloadLink.removeAttribute('href');
 }
 githubForm.elements.release.addEventListener('change',updateReleaseDownload);
@@ -670,7 +670,11 @@ document.getElementById('release-check').addEventListener('click',async event=>{
     const response=await fetch('https://api.github.com/repos/NemoN/Solarsystemsteuerung_ESP32/releases?per_page=100',{cache:'no-store',headers:{Accept:'application/vnd.github+json'}});
     if(!response.ok)throw new Error('GitHub meldet HTTP '+response.status);
     const releases=await response.json();if(!Array.isArray(releases))throw new Error('Ungültige GitHub-Antwort');
-    githubReleases=releases.filter(r=>!r.draft&&Array.isArray(r.assets)).map(r=>({tag:r.tag_name,name:r.name||r.tag_name,date:r.published_at||'',prerelease:r.prerelease,asset:r.assets.find(a=>a.name==='Backload.ino.bin'&&typeof a.digest==='string'&&/^sha256:[0-9a-f]{64}$/.test(a.digest)&&a.size>=1024&&a.size<=3145728)})).filter(r=>r.asset&&/^[A-Za-z0-9._-]+$/.test(r.tag)).sort((a,b)=>b.date.localeCompare(a.date));
+    githubReleases=releases.filter(r=>!r.draft&&Array.isArray(r.assets)&&typeof r.tag_name==='string'&&/^[A-Za-z0-9._-]+$/.test(r.tag_name)).map(r=>{
+      const asset=r.assets.find(a=>a.name==='Backload.ino.bin'&&typeof a.digest==='string'&&/^sha256:[0-9a-f]{64}$/.test(a.digest)&&a.size>=1024&&a.size<=3145728);
+      const downloadAsset=asset&&r.assets.find(a=>a.name==='Backload-'+r.tag_name.replace(/^v/,'')+'.bin'&&a.digest===asset.digest&&a.size===asset.size);
+      return {tag:r.tag_name,name:r.name||r.tag_name,date:r.published_at||'',prerelease:r.prerelease,asset,downloadAsset};
+    }).filter(r=>r.asset).sort((a,b)=>b.date.localeCompare(a.date));
     select.replaceChildren(new Option(githubReleases.length?'Version auswählen …':'Keine passenden Releases',''));
     githubReleases.forEach((r,i)=>select.add(new Option(r.name+(r.prerelease?' · Vorabversion':'')+(r.tag.replace(/^v/,'')===currentFirmwareVersion?' · installiert':''),String(i))));
     updateReleaseDownload();

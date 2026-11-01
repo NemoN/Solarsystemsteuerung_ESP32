@@ -24,8 +24,9 @@ let fail = false;
 const context = vm.createContext({document, Option: function(text, value) { this.text = text; this.value = value; },
   request: async () => ({version: '1.11.5'}),
   fetch: async () => { if (fail) throw new Error('offline'); return {ok: true, json: async () => [
-    {tag_name: 'v1.11.5', name: 'Version 1.11.5', published_at: '2026-10-31', assets: [asset]},
-    {tag_name: 'v1.11.4', name: 'Version 1.11.4', published_at: '2026-10-30', assets: [asset]},
+    {tag_name: 'v1.11.5', name: 'Version 1.11.5', published_at: '2026-10-31', assets: [asset, {...asset, name: 'Backload-1.11.5.bin'}]},
+    {tag_name: 'v1.11.4', name: 'Version 1.11.4', published_at: '2026-10-30', assets: [asset, {...asset, name: 'Backload-1.11.4.bin', digest: 'sha256:'+'b'.repeat(64)}]},
+    {tag_name: 'v1.11.3', name: 'Version 1.11.3', published_at: '2026-10-29', assets: [asset]},
   ]}; }});
 vm.runInContext(sketch.slice(start, end), context);
 
@@ -34,9 +35,11 @@ vm.runInContext(sketch.slice(start, end), context);
   assert.equal(download.hidden, true);
   select.value = '0'; listeners.change();
   assert.equal(download.hidden, false);
-  assert.equal(link.href, 'https://github.com/NemoN/Solarsystemsteuerung_ESP32/releases/download/v1.11.5/Backload.ino.bin');
+  assert.equal(link.href, 'https://github.com/NemoN/Solarsystemsteuerung_ESP32/releases/download/v1.11.5/Backload-1.11.5.bin');
   select.value = '1'; listeners.change();
   assert.match(link.href, /\/v1\.11\.4\/Backload\.ino\.bin$/);
+  select.value = '2'; listeners.change();
+  assert.match(link.href, /\/v1\.11\.3\/Backload\.ino\.bin$/);
   select.value = ''; listeners.change();
   assert.equal(download.hidden, true); assert.equal(link.href, undefined);
   select.value = '0'; listeners.change(); fail = true;
