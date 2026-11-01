@@ -92,6 +92,8 @@ Auswahl bleibt im jeweiligen Browser gespeichert.
 Die Infoseite zeigt Chipmodell, Revision, CPU, Firmware, Slots und nutzbaren
 sowie freien RAM und PSRAM. Die angezeigte PSRAM-Gesamtgröße ist der für die
 Software nutzbare Speicher und kann unter der physisch verbauten Größe liegen.
+Das Dashboard und die WLAN-Seite zeigen die Signalstärke der Heimnetzverbindung
+des ESP in dBm. Ohne Heimnetzverbindung ist dieser Wert nicht verfügbar.
 
 Temperaturverlauf im PSRAM
 Unter /verlauf zeigt die Oberfläche alle fünf Sensoren als Temperaturkurven.
@@ -149,6 +151,10 @@ wird die Reset-Ursache als ESP-IDF-Code ausgegeben: 1 = Einschalten,
 3 = Software-Neustart, 4 = Ausnahme/Panic, 5 bis 7 = Watchdog, 9 = Brownout.
 Startmeldungen werden über USB ausgegeben. Der Live-Monitor zeigt nur Meldungen
 ab Verbindung; für Reset-Meldungen deshalb den seriellen Monitor verwenden.
+Bei USB CDC On Boot = Enabled gehen die Anwendungslogs sowohl an natives USB
+als auch an den USB-UART-Wandler (GPIO 43/44). Bei Disabled nutzt Serial den
+USB-UART-Wandler. In der IDE den passenden Port des angeschlossenen Kabels
+auswählen; nur ein Programm darf den Port gleichzeitig geöffnet haben.
 Diagnoseausgaben enthalten keine WLAN-Passwörter oder Update-Token. Auch die
 sonstigen Meldungen vor dem Weitergeben auf vertrauliche Angaben prüfen.
 Neue Versionen als GitHub-Release mit dem Namen der Versionsnummer (z. B.

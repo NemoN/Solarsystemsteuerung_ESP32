@@ -3,7 +3,7 @@
 #include <Print.h>
 
 // Gleiche print/println/printf-Schnittstelle wie Serial, zusätzlich im Browser.
-// Serial.begin() bleibt im Hauptsketch; USB funktioniert auch vor dem Monitorstart.
+// Die seriellen Ausgänge werden im Hauptsketch vor dem Monitorstart initialisiert.
 extern Print& FirmwareLog;
 
 void beginWebSerialMonitor();

@@ -31,7 +31,7 @@
 #include <time.h>
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
-const char* FIRMWARE_VERSION = "1.11.6";
+const char* FIRMWARE_VERSION = "1.11.7";
 
 // Beim ersten Start ohne gespeicherte Betriebsart läuft die echte Steuerung.
 // Der Testmodus wird über das Webinterface nach Bestätigung ein-/ausgeschaltet.
@@ -229,7 +229,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <body><main>
 <script>document.body.classList.toggle('wifi-page',location.pathname==='/wlan');document.body.classList.toggle('test-page',location.pathname==='/testwerte');document.body.classList.toggle('history-page',location.pathname==='/verlauf');document.body.classList.toggle('update-page',location.pathname==='/update');document.body.classList.toggle('info-page',location.pathname==='/info');</script>
 <nav class="page-nav" aria-label="Navigation"><a class="dashboard-link" href="/">← Zur Steuerung</a><a class="wifi-link" href="/wlan">WLAN einrichten</a><a class="history-link" href="/verlauf">Temperaturverlauf</a><a class="update-link" href="/update">Firmware aktualisieren</a><a class="info-link" href="/info">ESP-Info</a><a class="test-values-link" href="/testwerte?test=on" hidden>Testwerte bearbeiten</a><a id="console-link" href="/webserial" target="_blank" rel="noopener">Live-Monitor öffnen</a><a id="test-link" href="/?test=on" hidden>Testmodus starten</a><div class="nav-settings"><span id="firmware-version">Firmware-Version …</span><button id="theme-toggle" class="theme-toggle" type="button">Helles Design</button></div></nav>
-<header class="dashboard-header"><h1>Solarsystemsteuerung</h1><div class="header-status"><p id="connection" role="status">Verbindung wird aufgebaut …</p><p id="device-clock" class="muted">ESP32-Zeit wird geladen …</p></div></header>
+<header class="dashboard-header"><h1>Solarsystemsteuerung</h1><div class="header-status"><p id="connection" role="status">Verbindung wird aufgebaut …</p><p id="device-clock" class="muted">ESP32-Zeit wird geladen …</p><p id="wifi-signal" class="muted">WLAN-Signal wird geladen …</p></div></header>
 <div id="sim-banner" role="status" hidden><strong>Testmodus:</strong> Alle Temperaturen und Pumpenzustände sind simuliert. Der anfängliche Sechs-Stunden-Verlauf ist erzeugt. Die echten Pumpenrelais bleiben ausgeschaltet. <button id="test-stop" type="button">Testmodus beenden</button></div>
 <p id="test-message" class="message" role="status"></p>
 <section aria-labelledby="pump-heading">
@@ -581,7 +581,9 @@ wifiScanButton.addEventListener('click',async()=>{
 function updateWifi(wifi){
   const states={unconfigured:'Noch kein WLAN gespeichert.',queued:'WLAN-Wechsel wird vorbereitet …',starting:'Verbindung wird vorbereitet …',connecting:'Verbindungsaufbau mit '+wifi.ssid+' …',connected:'Verbunden mit '+wifi.ssid,retry:'Keine WLAN-Verbindung. Name, Passwort und Empfang prüfen. Automatischer Wiederholungsversuch nach 30 Sekunden.'};
   const status=document.getElementById('wifi-status');
-  status.textContent=states[wifi.state]||'WLAN-Status unbekannt';
+  const signal=wifi.state==='connected'&&Number.isFinite(wifi.rssi)?wifi.rssi+' dBm':null;
+  status.textContent=(states[wifi.state]||'WLAN-Status unbekannt')+(signal?' · Signal: '+signal:'');
+  document.getElementById('wifi-signal').textContent=signal?'Heim-WLAN: '+signal:'Heim-WLAN-Signal: nicht verfügbar';
   status.className=wifi.state==='retry'?'error':'';
   document.getElementById('wifi-address').textContent=(wifi.ip?'Im Heimnetz: http://'+wifi.ip+' · ':'')+'ESP32-Zugang: http://'+wifi.apIp;
   if(wifiPending&&wifi.changeId===wifiPending.id){
@@ -918,6 +920,7 @@ async function refresh(){
     updateStorageDiagram(null);
     document.getElementById('test-page-status').textContent='Keine Verbindung zum ESP32. Testmodus und Werte sind nicht aktuell.';
     document.getElementById('device-clock').textContent='ESP32-Zeit: keine aktuellen Daten.';
+    document.getElementById('wifi-signal').textContent='Heim-WLAN-Signal: keine aktuellen Daten.';
     document.getElementById('wifi-status').textContent='WLAN-Status nicht aktuell: Verbindung zum ESP32 unterbrochen.';
     roofBadge.textContent='Status unbekannt';roofBadge.className='badge';
     roofDetail.textContent='Keine aktuellen Daten vom Haupt-ESP.';
@@ -1310,6 +1313,7 @@ String wifiStatusJson() {
   return "{\"state\":" + jsonString(states[wifiPhase]) +
     ",\"ssid\":" + jsonString(wifiCredentials.ssid) +
     ",\"changeId\":" + jsonString(wifiChangeId) +
+    ",\"rssi\":" + (connected ? String(WiFi.RSSI()) : String("null")) +
     ",\"ip\":" + jsonString(connected ? WiFi.localIP().toString() : String("")) +
     ",\"apIp\":" + jsonString(WiFi.softAPIP().toString()) + "}";
 }
@@ -2145,6 +2149,10 @@ void setup() {
   setenv("TZ", TIME_ZONE, 1);
   tzset();
   Serial.begin(115200);
+#if ARDUINO_USB_CDC_ON_BOOT
+  // Serial ist natives USB-CDC; Serial0 bedient zusätzlich den USB-UART-Wandler.
+  Serial0.begin(115200);
+#endif
   delay(1000);  // Sensorversorgung vor der Initialisierung stabilisieren lassen
   if (SIMULATION_MODE) simulationPhase = float(esp_random() % 6283U) / 1000.0f;
   FirmwareLog.printf("Heizungssteuerung – Firmware %s\n", FIRMWARE_VERSION);

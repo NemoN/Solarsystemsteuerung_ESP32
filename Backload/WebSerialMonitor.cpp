@@ -39,7 +39,13 @@ class MirroredLog : public Print {
  public:
   size_t write(uint8_t c) override { return write(&c, 1); }
   size_t write(const uint8_t* data, size_t length) override {
-    const size_t written = Serial.write(data, length);
+    size_t written = Serial.write(data, length);
+#if ARDUINO_USB_CDC_ON_BOOT
+    // Bei USB CDC On Boot liegt Serial am nativen USB-Anschluss, Serial0 am
+    // USB-UART-Wandler (GPIO 43/44). Beide erhalten dieselben Meldungen.
+    const size_t uartWritten = Serial0.write(data, length);
+    if (uartWritten > written) written = uartWritten;
+#endif
     if (!monitor) return written;
     for (size_t i = 0; i < length; ++i) {
       line[used++] = char(data[i]);
