@@ -87,6 +87,18 @@ WLAN-Einstellungen: http://<ESP32-IP>/wlan
 ESP-Informationen: http://<ESP32-IP>/info
 Live-Monitor: http://<ESP32-IP>:81/ (oder Link in der Oberfläche).
 Die Oberfläche und Steuerungs-API verwenden Port 80, der Monitor Port 81.
+Vergleichsversionen 1.11.9-mit-ap und 1.11.9-ohne-ap: Beide starten zunächst
+mit ESP32-Zugang. In der Ohne-AP-Version wird dieser nach 30 Sekunden stabiler
+Heimnetzverbindung und abgeschlossener Update-Startprüfung ausgeschaltet. Bei
+30 Sekunden Verbindungsausfall, fehlenden Zugangsdaten oder einer WLAN-
+Neueinrichtung startet er als Notzugang erneut. Nach einer Verbindung bleibt
+er wieder 30 Sekunden an; ein laufendes Update über den Notzugang wird nicht
+durch Abschalten unterbrochen. Der Zustand steht auf der WLAN-Seite.
+Der Vergleich soll zeigen, ob AP+STA das Update beeinflusst; die Ursache von
+Verbindungsabbrüchen ist damit nicht automatisch behoben. Einstellungen und
+Temperaturregelung sind in beiden Versionen gleich. Der Quellcode verwendet
+ohne zusätzlichen Compiler-Schalter die Variante mit AP; für die andere beim
+Kompilieren BACKLOAD_AP_COMPARISON_NO_AP definieren.
 Das helle oder dunkle Design kann in der Navigation umgeschaltet werden; die
 Auswahl bleibt im jeweiligen Browser gespeichert.
 Die Infoseite zeigt Chipmodell, Revision, CPU, Firmware, Slots und nutzbaren

@@ -13,6 +13,7 @@
 #include "PumpControl.h"
 #include "AutomaticControl.h"
 #include "TemperatureHistory.h"
+#include "RecoveryApPolicy.h"
 #include <esp_heap_caps.h>
 #include <esp_ota_ops.h>
 #include <esp_timer.h>
@@ -31,7 +32,13 @@
 #include <time.h>
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
-const char* FIRMWARE_VERSION = "1.11.8";
+#ifdef BACKLOAD_AP_COMPARISON_NO_AP
+const char* FIRMWARE_VERSION = "1.11.9-ohne-ap";
+constexpr bool AP_RECOVERY_ONLY = true;
+#else
+const char* FIRMWARE_VERSION = "1.11.9-mit-ap";
+constexpr bool AP_RECOVERY_ONLY = false;
+#endif
 
 // Beim ersten Start ohne gespeicherte Betriebsart läuft die echte Steuerung.
 // Der Testmodus wird über das Webinterface nach Bestätigung ein-/ausgeschaltet.
@@ -152,6 +159,7 @@ const unsigned long WIFI_CONNECT_TIMEOUT = 20000;
 const unsigned long WIFI_RETRY_INTERVAL = 30000;
 bool wifiScanRequested = false;
 String wifiChangeId; // Nur im RAM; bestätigt die zuletzt angenommene Änderung.
+RecoveryApPolicy recoveryApPolicy(30000);
 
 
 struct TemperatureController {
@@ -317,7 +325,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 </section></div>
 <section id="wifi-section" aria-labelledby="wifi-heading">
 <h2 id="wifi-heading">WLAN einrichten</h2>
-<p class="muted">Mit einem 2,4-GHz-WLAN verbinden. Der eigene ESP32-WLAN-Zugang bleibt erreichbar.</p>
+<p id="wifi-ap-description" class="muted">Mit einem 2,4-GHz-WLAN verbinden. Der eigene ESP32-WLAN-Zugang bleibt erreichbar.</p>
 <p id="wifi-status" role="status">WLAN-Status wird geladen …</p>
 <p id="wifi-address" class="muted"></p>
 <button id="wifi-scan" type="button">WLANs suchen</button>
@@ -585,7 +593,8 @@ function updateWifi(wifi){
   status.textContent=(states[wifi.state]||'WLAN-Status unbekannt')+(signal?' · Signal: '+signal:'');
   document.getElementById('wifi-signal').textContent=signal?'Heim-WLAN: '+signal:'Heim-WLAN-Signal: nicht verfügbar';
   status.className=wifi.state==='retry'?'error':'';
-  document.getElementById('wifi-address').textContent=(wifi.ip?'Im Heimnetz: http://'+wifi.ip+' · ':'')+'ESP32-Zugang: http://'+wifi.apIp;
+  document.getElementById('wifi-ap-description').textContent=wifi.apRecoveryOnly?'Testversion: Der ESP32-Zugang wird bei stabiler Heimnetzverbindung ausgeschaltet und bei längerem Ausfall wieder aktiviert.':'Mit einem 2,4-GHz-WLAN verbinden. Der eigene ESP32-WLAN-Zugang bleibt erreichbar.';
+  document.getElementById('wifi-address').textContent=(wifi.ip?'Im Heimnetz: http://'+wifi.ip+' · ':'')+(wifi.apIp?'ESP32-Zugang: http://'+wifi.apIp:'ESP32-Zugang: ausgeschaltet');
   if(wifiPending&&wifi.changeId===wifiPending.id){
     if(wifiPending.revision===wifiRevision){
       wifiForm.elements.password.value='';
@@ -1311,6 +1320,33 @@ void processWifi() {
   }
 }
 
+// Nur in der Vergleichsversion: Das AP/STA-Verhalten wird unabhängig von
+// Sensormessung und Pumpe geschaltet. Bootvalidierung und Neueinrichtung
+// benötigen den AP; WLAN-Ausfälle lösen den Notzugang nach 30 Sekunden aus.
+void processRecoveryAp() {
+  if (!AP_RECOVERY_ONLY) return;
+  const uint32_t now = millis();
+  const bool connected = wifiPhase == WIFI_CONNECTED && WiFi.status() == WL_CONNECTED;
+  const bool apActive = (WiFi.getMode() & WIFI_AP) != 0;
+  // Ein bereits über den Notzugang laufendes Update nicht durch Abschalten
+  // dieses Zugangs unterbrechen. Ist der AP aus, bleibt er beim Update aus.
+  const bool reconfiguring = !wifiCredentials.ssid[0] || wifiPhase == WIFI_QUEUED || wifiPhase == WIFI_STARTING || (otaActive && apActive);
+  const auto action = recoveryApPolicy.update(now, connected, apActive, !otaVerificationPending, reconfiguring);
+  static uint32_t lastAttempt = 0;
+  static bool waitingRetry = false;
+  if (action == RecoveryApPolicy::Keep) { waitingRetry = false; return; }
+  if (waitingRetry && uint32_t(now - lastAttempt) < 5000) return;
+  lastAttempt = now;
+  waitingRetry = true;
+  if (action == RecoveryApPolicy::Disable) {
+    if (WiFi.enableAP(false)) FirmwareLog.println("WLAN-Test: ESP32-Zugang ausgeschaltet; Heimnetz bleibt aktiv.");
+    else FirmwareLog.println("WLAN-Test: ESP32-Zugang konnte nicht ausgeschaltet werden.");
+  } else {
+    if (WiFi.softAP(AP_SSID, AP_PASSWORD)) FirmwareLog.println("WLAN-Test: ESP32-Notzugang aktiviert: http://192.168.4.1");
+    else FirmwareLog.println("WLAN-Test: ESP32-Notzugang konnte nicht aktiviert werden.");
+  }
+}
+
 String wifiStatusJson() {
   const char* states[] = {"unconfigured", "queued", "starting", "connecting", "connected", "retry"};
   bool connected = wifiPhase == WIFI_CONNECTED && WiFi.status() == WL_CONNECTED;
@@ -1319,7 +1355,8 @@ String wifiStatusJson() {
     ",\"changeId\":" + jsonString(wifiChangeId) +
     ",\"rssi\":" + (connected ? String(WiFi.RSSI()) : String("null")) +
     ",\"ip\":" + jsonString(connected ? WiFi.localIP().toString() : String("")) +
-    ",\"apIp\":" + jsonString(WiFi.softAPIP().toString()) + "}";
+    ",\"apRecoveryOnly\":" + String(AP_RECOVERY_ONLY ? "true" : "false") +
+    ",\"apIp\":" + jsonString((WiFi.getMode() & WIFI_AP) ? WiFi.softAPIP().toString() : String("")) + "}";
 }
 
 void startWifiScan() {
@@ -2319,6 +2356,7 @@ void loop() {
   // Keine zweisekündige Pause: HTTP-Anfragen zwischen Messungen bearbeiten.
   server.handleClient();
   processWifi();
+  processRecoveryAp();
   processRoofHeartbeat();
   processWebSerialMonitor();
   servicePump();

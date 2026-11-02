@@ -1,0 +1,23 @@
+// Übt die echte WLAN-Anzeige mit ein- und ausgeschaltetem ESP-Zugang aus.
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const sketch = fs.readFileSync(require('node:path').join(__dirname, '../Backload/Backload.ino'), 'utf8');
+const start = sketch.indexOf('function updateWifi(wifi)');
+const end = sketch.indexOf('function updateRoof(', start);
+assert(start >= 0 && end > start);
+const nodes = Object.fromEntries(['wifi-status', 'wifi-address', 'wifi-signal', 'wifi-ap-description'].map(id => [id, {}]));
+const context = vm.createContext({document: {getElementById: id => nodes[id]}, wifiPending: null, wifiDirty: true});
+vm.runInContext(sketch.slice(start, end), context);
+const wifi = {state: 'connected', ssid: 'Heimnetz', ip: '192.168.1.10', apIp: '192.168.4.1', rssi: -64, apRecoveryOnly: false};
+context.updateWifi(wifi);
+assert.match(nodes['wifi-address'].textContent, /192\.168\.4\.1/);
+assert.match(nodes['wifi-ap-description'].textContent, /bleibt erreichbar/);
+context.updateWifi({...wifi, apIp: '', apRecoveryOnly: true});
+assert.match(nodes['wifi-address'].textContent, /ausgeschaltet/);
+assert(!nodes['wifi-address'].textContent.includes('192.168.4.1'));
+assert.match(nodes['wifi-ap-description'].textContent, /längerem Ausfall/);
+context.updateWifi({...wifi, state: 'retry', ip: '', rssi: null, apRecoveryOnly: true});
+assert.match(nodes['wifi-address'].textContent, /192\.168\.4\.1/);
+assert.match(nodes['wifi-signal'].textContent, /nicht verfügbar/);
+console.log('PASS: WLAN-Anzeige für aktiven AP, ausgeschalteten AP und Notzugang.');

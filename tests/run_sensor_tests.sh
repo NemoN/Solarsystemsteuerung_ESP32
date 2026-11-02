@@ -28,3 +28,8 @@ trap 'rm -rf "$test_dir"' EXIT HUP INT TERM
   "$project_dir/Backload/TemperatureHistory.cpp" "$project_dir/tests/test_temperature_history.cpp" \
   -o "$test_dir/history-tests"
 "$test_dir/history-tests"
+
+"${CXX:-c++}" -std=c++11 -Wall -Wextra -Werror -fsanitize=address,undefined \
+  -I"$project_dir/Backload" "$project_dir/tests/test_recovery_ap_policy.cpp" \
+  -o "$test_dir/recovery-ap-tests"
+"$test_dir/recovery-ap-tests"
