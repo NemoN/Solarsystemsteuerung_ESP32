@@ -245,6 +245,7 @@ void beginWebSerialMonitor() {
   dashboard.server().on("/api/settings", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/pump", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/automatic", HTTP_POST, proxyRequest);
+  dashboard.server().on("/api/heating", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/test-mode", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/simulation", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/wifi", HTTP_POST, proxyRequest);

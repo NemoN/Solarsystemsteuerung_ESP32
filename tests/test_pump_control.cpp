@@ -7,6 +7,31 @@
 int main() {
   const auto forward = PumpDirection::CombiToBuffer;
   const auto reverse = PumpDirection::BufferToCombi;
+  // Die Brennersperre wirkt auch bei direkten Handbefehlen und in Umschaltpausen.
+  PumpControl oil;
+  oil.command(true, forward, 0);
+  assert(oil.on());
+  oil.setChargingAllowed(false, 10);
+  assert(!oil.on() && !oil.requestedOn());
+  oil.command(true, forward, 20);
+  assert(!oil.on() && !oil.requestedOn());
+  oil.setChargingAllowed(true, 30);
+  assert(!oil.on()); // Keine Wiederaufnahme eines verworfenen Handauftrags.
+  oil.setChargingAllowed(false, 40);
+  oil.command(true, reverse, 100);
+  oil.update(2200);
+  oil.update(2300);
+  assert(oil.on() && oil.direction() == reverse);
+  oil.setChargingAllowed(false, 2400);
+  assert(oil.on()); // Rückladung trotz Ölfreigabe.
+  oil.command(true, forward, 2500);
+  oil.update(5000);
+  assert(!oil.on());
+  oil.update(5100);
+  assert(!oil.on() && !oil.requestedOn());
+  oil.setChargingAllowed(true, 5200);
+  assert(!oil.on());
+
   PumpControl pump;
   assert(!pump.on() && !pump.switching() && !pump.requestedOn());
 

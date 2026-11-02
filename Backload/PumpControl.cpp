@@ -7,6 +7,8 @@ void PumpControl::command(bool on, PumpDirection direction, uint32_t now) {
 }
 
 void PumpControl::update(uint32_t now) {
+  if (!chargingAllowed_ && requestedDirection_ == PumpDirection::CombiToBuffer)
+    requestedOn_ = false;
   if (!requestedOn_) on_ = false;
 
   // Nach dem Schalten der Richtung das Relais erst abfallen/anziehen lassen.

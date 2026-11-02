@@ -9,6 +9,7 @@ separat auf einem Docker-Server.
 Der Screenshot zeigt den Testmodus mit simulierten Temperaturen und Pumpenzuständen.
 
 - [Firmware und Einrichtung](Backload/LIESMICH.txt)
+- [Schaltbedingungen der Backload-Regelung](Documentation/Backload-Regelung.md)
 - [Temperaturarchiv](history-server/README.md)
 - [Tests](tests/)
 

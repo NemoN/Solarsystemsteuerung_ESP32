@@ -16,7 +16,7 @@ assert.match(nodes['wifi-ap-description'].textContent, /bleibt erreichbar/);
 context.updateWifi({...wifi, apIp: '', apRecoveryOnly: true});
 assert.match(nodes['wifi-address'].textContent, /ausgeschaltet/);
 assert(!nodes['wifi-address'].textContent.includes('192.168.4.1'));
-assert.match(nodes['wifi-ap-description'].textContent, /längerem Ausfall/);
+assert.match(nodes['wifi-ap-description'].textContent, /längerem WLAN-Ausfall/);
 context.updateWifi({...wifi, state: 'retry', ip: '', rssi: null, apRecoveryOnly: true});
 assert.match(nodes['wifi-address'].textContent, /192\.168\.4\.1/);
 assert.match(nodes['wifi-signal'].textContent, /nicht verfügbar/);

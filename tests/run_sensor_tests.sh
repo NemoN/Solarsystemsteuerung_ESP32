@@ -33,3 +33,5 @@ trap 'rm -rf "$test_dir"' EXIT HUP INT TERM
   -I"$project_dir/Backload" "$project_dir/tests/test_recovery_ap_policy.cpp" \
   -o "$test_dir/recovery-ap-tests"
 "$test_dir/recovery-ap-tests"
+
+python3 "$project_dir/tests/test_heating_integration.py"
