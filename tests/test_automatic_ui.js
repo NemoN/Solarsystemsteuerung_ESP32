@@ -4,46 +4,49 @@ const vm = require('node:vm');
 const sketch = fs.readFileSync(require('node:path').join(__dirname, '../Backload/Backload.ino'), 'utf8');
 const nodes = {};
 const node = id => nodes[id] || (nodes[id] = {});
-const form = {elements: Object.fromEntries(['start'].map(key => [key, {}])), contains: () => false};
+const form = {elements: Object.fromEntries(['start'].map(key => [key, {dataset:{}}])), contains: () => false};
 const context = vm.createContext({
   document: {getElementById: node}, autoForm: form, autoDirty: false, autoBusy: false,
-  inputNumber: n => n.toFixed(1), temperatureNumber: new Intl.NumberFormat('de-DE', {minimumFractionDigits:1, maximumFractionDigits:1}),
+  settingNumber: n => String(n), setpointNumber: new Intl.NumberFormat('de-DE', {maximumFractionDigits:1}),
 });
 const start = sketch.indexOf('function updateAutomatic(state)');
 const end = sketch.indexOf('function updateSimulation(', start);
 assert(start > 0 && end > start);
 vm.runInContext(sketch.slice(start, end), context);
-const state = {configValid:true, winter:false, controlSensorId:0, allowCharging:true, targetOffset:0, differenceStart:8, differenceStop:0};
+const state = {configValid:true, winter:false, controlSensorId:0, allowCharging:true, targetOffset:0, differenceStart:8, differenceStop:3};
 const controllers = [
   {id:0, name:'Kombispeicher oben', target:68, configValid:true, valid:true},
   {id:1, name:'Kombispeicher Mitte', target:69, configValid:true, valid:true},
   {id:2, name:'Pufferspeicher', valid:true},
 ];
 let text = context.automaticRuleText(state, controllers, {manual:false});
-assert.match(text.chargeStart, /68,0 °C.*8,0 K/);
-assert.match(text.returnStart, /Puffer − Kombi ≥ 8,0 K/);
-assert.doesNotMatch(text.returnStart, /68,0/);
-assert.match(text.chargeStop, /Kombi ≤ Puffer/);
+assert.match(text.chargeStart, /68 °C.*8 K/);
+assert.match(text.returnStart, /Puffer − Kombi ≥ 8 K/);
+assert.doesNotMatch(text.returnStart, /68/);
+assert.match(text.chargeStop, /Kombi − Puffer ≤ 3 K/);
 assert.doesNotMatch(text.chargeStop, /68,0|2,0 K/);
-assert.match(text.returnStop, /Puffer ≤ Kombi/);
+assert.match(text.returnStop, /Puffer − Kombi ≤ 3 K/);
 const blocked = context.automaticRuleText({...state, allowCharging:false}, controllers, {manual:false});
 assert.match(blocked.chargeStart, /Sommer-.Winterumschaltung gesperrt/);
 assert.equal(blocked.returnStart, text.returnStart);
 assert.equal(blocked.returnStop, text.returnStop);
-// Ein alter winter-/controlSensorId-Wert darf nie auf Mitte umschalten.
+// Im Winter gilt der Mittelfühler; der gemeinsame Sollwert bleibt aus c0.
 const legacy = {...state, winter:true, controlSensorId:1};
 text = context.automaticRuleText(legacy, controllers, {manual:false});
-assert.match(text.sensor, /oben.*68,0 °C/);
-assert.match(text.chargeStart, /68,0 °C.*8,0 K/);
-assert.match(text.returnStart, /Puffer − Kombi ≥ 8,0 K/);
-assert.doesNotMatch(text.returnStart, /68,0/);
+assert.match(text.sensor, /Mitte.*68 °C/);
+assert.match(text.chargeStart, /68 °C.*8 K/);
+assert.match(text.returnStart, /Puffer − Kombi ≥ 8 K/);
+assert.doesNotMatch(text.returnStart, /68/);
 context.updateAutomatic(legacy);
-assert.equal(form.elements.start.value, '8.0');
+assert.equal(form.elements.start.value, '8');
+context.updateAutomatic({...legacy,differenceStart:8.5});
+assert.equal(form.elements.start.value, '8.5'); // Altwert unverändert sichtbar.
+assert.match(context.automaticRuleText({...state,differenceStart:8.5},controllers,{}).returnStart,/8,5 K/);
 assert.equal(context.automaticRuleText({...state, differenceStart:4.9}, controllers, {}), null);
 assert.equal(context.automaticRuleText({...state, differenceStart:10.1}, controllers, {}), null);
 const badTarget=controllers.map(c=>c.id===0?{...c,target:45,configValid:false}:c);
 const independent=context.automaticRuleText(state,badTarget,{manual:false});
-assert.match(independent.chargeStart,/Starttemperatur muss 65–70/);
+assert.match(independent.chargeStart,/Starttemperatur muss 68–72/);
 assert.equal(independent.returnStart,text.returnStart);
 assert.equal(independent.returnStop,text.returnStop);
 const failed = controllers.map(c => ({...c, valid:false}));
@@ -82,6 +85,9 @@ Object.assign(form.elements.start, {value:'8.0'});
   await submit({preventDefault(){}});
   assert.equal(posted,saved);
   assert.match(context.autoMessage.textContent,/5 bis 10 K/);
+  form.elements.start.value='8.5';
+  await submit({preventDefault(){}});
+  assert.equal(posted,saved);
 
   // Die manuelle Brennerfreigabe hat einen eigenen Zustand und API-Endpunkt.
   for(const id of ['heating-switch','heating-badge','heating-detail','heating-switch-label','oil-burner-diagram']){
@@ -114,7 +120,7 @@ Object.assign(form.elements.start, {value:'8.0'});
   assert.match(node('oil-burner-diagram').attributes['aria-label'],/Freigegeben.*Relais 4: AN/);
   context.simulationEnabled=true;
   context.updateHeating({winter:true,configValid:true,relayOn:false});
-  assert.match(node('heating-detail').textContent,/Testmodus.*Relais 4 bleibt AUS/);
+  assert.equal(node('heating-detail').textContent,'');
   assert.equal(node('oil-burner-state').textContent,'Freigegeben (simuliert)');
   assert.equal(diagramClasses.has('released'),true);
   assert.match(node('oil-burner-detail').textContent,/Relais 4: AUS/);
@@ -132,5 +138,5 @@ Object.assign(form.elements.start, {value:'8.0'});
   assert.equal(node('oil-burner-detail').textContent,'Keine aktuellen Daten');
   const last=posted;
   await context.changeHeating();assert.equal(posted,last);
-  console.log('PASS: feste obere Fühler, 5–10 K, Rückladung, getrennte Ölfreigabe, Brenner-SVG, Simulation und unbekannte Zustände.');
+  console.log('PASS: Sommer-/Winterfühler, 5–10 K, 3-K-Stopp, Ölsperre, Brenner-SVG, Simulation und unbekannte Zustände.');
 })().catch(error => { console.error(error); process.exitCode=1; });

@@ -33,10 +33,10 @@
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
 #ifdef BACKLOAD_AP_COMPARISON_NO_AP
-const char* FIRMWARE_VERSION = "1.13.1-ohne-ap";
+const char* FIRMWARE_VERSION = "1.14.0-ohne-ap";
 constexpr bool AP_RECOVERY_ONLY = true;
 #else
-const char* FIRMWARE_VERSION = "1.13.1-mit-ap";
+const char* FIRMWARE_VERSION = "1.14.0-mit-ap";
 constexpr bool AP_RECOVERY_ONLY = false;
 #endif
 
@@ -122,7 +122,8 @@ struct ControllerLimits {
   float maxHysteresis;
 };
 
-// Nur Kombispeicher oben hat einen Sollwert. Das alte c0-Format enthält
+// Der gemeinsame Einlagerungssollwert liegt aus Kompatibilitätsgründen in c0.
+// Er gilt für den durch Sommer/Winter gewählten Kombifühler. Das c0-Format enthält
 // weiterhin einen ungenutzten per-Sensor-Hysteresewert zur NVS-Kompatibilität.
 // Die wirksame Startdifferenz ist automaticThresholds.differenceStart (5–10 K).
 const ControllerLimits ROOM_HEATING_LIMITS = {
@@ -208,6 +209,7 @@ extern const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 :root{font-family:system-ui,sans-serif;color:#192f35;background:#f3f5f4;color-scheme:light}
 *{box-sizing:border-box}body{margin:0}main{max-width:860px;margin:auto;padding:36px 22px}
 h1{font-size:clamp(1.7rem,5vw,2.4rem);margin:0 0 12px}h2{font-size:1.25rem;margin:0}
+.dashboard-header{display:flex;align-items:center;justify-content:space-between;gap:18px 28px;flex-wrap:wrap}.header-status{margin-left:auto;text-align:right}
 p{line-height:1.6}header{margin-bottom:30px}.muted{color:#4e6268}
 section{border-top:1px solid #b9c8c9;padding:26px 0} .heading,.readings{display:flex;gap:18px;justify-content:space-between;align-items:center;flex-wrap:wrap}
 .readings{justify-content:flex-start;margin:20px 0;font-variant-numeric:tabular-nums}.temperature{font-size:1.7rem;font-weight:650}
@@ -228,14 +230,21 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 .storage-overview{display:grid;grid-template-columns:160px minmax(0,1fr);align-items:center;gap:24px;max-width:784px;margin:22px auto 8px}.storage-overview .pump-flow{width:100%;max-width:none;margin:0}.burner-diagram{display:grid;gap:4px;text-align:center;color:var(--ink2,#4e6268);line-height:1.4}.burner-icon{display:block;width:128px;max-width:100%;margin:0 auto}.burner-body{fill:var(--bg2,#fff)}.burner-indicator{fill:currentColor}.burner-diagram strong{color:var(--ink1,#192f35);font-size:1rem}.burner-diagram output{font-size:.88rem;font-weight:700}.burner-diagram>span{font-size:.78rem;color:var(--ink2,#4e6268)}.burner-diagram.released{color:#ffb454}html.light .burner-diagram.released{color:#9c4b0b}
 @media(max-width:700px){.storage-overview{grid-template-columns:minmax(0,1fr);gap:12px}.storage-overview .pump-flow{grid-row:1;grid-column:1}.burner-diagram{grid-template-columns:88px minmax(0,1fr);text-align:left;gap:2px 14px;justify-self:start}.burner-icon{width:88px;grid-row:1/span 3;grid-column:1}.burner-diagram>:not(svg){grid-column:2}}
 .pump-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;margin-top:24px}.pump-controls>div{min-width:0}.pump-controls .relay-switch{width:100%;text-align:left;min-height:58px}.pump-controls .switch-track{flex-shrink:0}.pump-controls p{margin:10px 0 0;font-size:.9rem}.relay-switch:active{background:#c9e9d9}
-#pump-progress:empty,#pump-message:empty{display:none}
+#heating-detail:empty,#pump-progress:empty,#pump-message:empty{display:none}
 .rule-table-hint{display:none}.automatic-rules{margin-top:20px}.automatic-rules summary{cursor:pointer;font-weight:600}.rule-table-wrap{overflow-x:auto;max-width:100%}.automatic-rules table{width:100%;min-width:560px;border-collapse:collapse;font-size:.9rem;line-height:1.5}.automatic-rules th,.automatic-rules td{padding:12px;text-align:left;vertical-align:top;border-bottom:1px solid #b9c8c9}.automatic-rules th:first-child{width:140px}
 @media(max-width:760px){.pump-controls{grid-template-columns:1fr}.pump-controls .relay-switch{width:auto;min-width:240px}}
+.relay-switch[data-state="off"]{background:#d8f2e2;color:#164d30;border-color:#72b58d}.relay-switch[data-state="off"] .switch-track{background:#17643c}
+#manual-switch[data-state="off"],#manual-switch[data-state="off"]:hover{background:#e6eaee;color:#25313b;border-color:#aab5bd}#manual-switch[data-state="off"] .switch-track{background:#60757b}
+.relay-switch[data-state="on"]{background:#ffe1df;color:#7d1f22;border-color:#d88482}.relay-switch[data-state="on"] .switch-track{background:#a42b30}
+#heating-switch[data-state="off"],#heating-switch[data-state="off"]:hover{background:#fff0b5;color:#5c4100;border-color:#c89c28}#heating-switch[data-state="off"] .switch-track{background:#805b00}.badge.summer-active{background:#fff0b5;color:#5c4100}
+.storage-overview{position:relative}.storage-overview>.burner-diagram,.storage-overview>.pump-flow{position:relative;z-index:1}.storage-overview>.burner-pipes{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;z-index:0}.burner-pipes path{fill:none;stroke-width:2.5;stroke-linejoin:round}.burner-pipes .pipe-vl{stroke:#e76c58}.burner-pipes .pipe-rl{stroke:#4d9bd5}.burner-pipes text{font:600 10px system-ui,sans-serif;fill:var(--ink1,#192f35);paint-order:stroke;stroke:var(--bg1,#f3f5f4);stroke-width:3px;stroke-linejoin:round}
+@media(max-width:700px){.storage-overview{grid-template-columns:minmax(0,1fr);gap:28px}.storage-overview .pump-flow{grid-row:2;grid-column:1}.burner-diagram{grid-row:1;grid-template-columns:88px minmax(0,1fr);text-align:left;gap:2px 14px;justify-self:start}.burner-icon{width:88px;grid-row:1/span 3;grid-column:1}.burner-diagram>:not(svg){grid-column:2}}
 .message{min-height:1.6em;margin:12px 0 0}.rule{margin:16px 0 0;font-size:.9rem}footer{border-top:1px solid #b9c8c9;padding-top:18px;font-size:.9rem}
 #wifi-form{grid-template-columns:repeat(2,minmax(0,1fr))}#wifi-form button{grid-column:1/-1;justify-self:start}#wifi-status,#wifi-address{overflow-wrap:anywhere}
 #wifi-networks{display:block;width:100%;min-height:46px;margin:8px 0 16px;padding:10px;border:1px solid #8c9fa3;border-radius:6px;font:inherit;background:white;color:inherit}#wifi-scan-message{margin:10px 0;min-height:1.6em}#wifi-network-label[hidden]{display:none}
-#controllers form{grid-template-columns:minmax(0,1fr) auto}#auto-form{grid-template-columns:minmax(0,1fr) auto;max-width:640px}#auto-form .full{grid-column:1/-1}#auto-form select{display:block;width:100%;min-height:46px;margin-top:8px;padding:10px;border:1px solid #8c9fa3;border-radius:6px;font:inherit;background:white;color:inherit}#auto-form .check{display:flex;align-items:center;gap:10px;min-height:44px}#auto-form input[type=checkbox]{width:20px;min-height:20px;margin:0;accent-color:#17636b}#auto-form button{justify-self:start}
-#sim-banner{padding:12px 16px;background:#fff0d7;border:1px solid #b87922;border-radius:6px}#sim-form{display:block}#sim-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.sim-item{padding:0}.sim-check{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.9rem}.sim-check input{width:20px;min-height:20px;margin:0;accent-color:#17636b}#sim-form button{margin-top:20px}
+#controllers form{grid-template-columns:minmax(0,1fr) auto}#auto-form{grid-template-columns:minmax(0,var(--setting-stepper-width,1fr)) auto;max-width:640px}#auto-form .full{grid-column:1/-1}#auto-form select{display:block;width:100%;min-height:46px;margin-top:8px;padding:10px;border:1px solid #8c9fa3;border-radius:6px;font:inherit;background:white;color:inherit}#auto-form .check{display:flex;align-items:center;gap:10px;min-height:44px}#auto-form input[type=checkbox]{width:20px;min-height:20px;margin:0;accent-color:#17636b}#auto-form button{justify-self:start}#auto-form .stepper button{justify-self:stretch}
+@media(min-width:761px){#auto-form label{white-space:nowrap}}
+#sim-banner{padding:12px 16px;background:#e6eaee;color:#25313b;border:1px solid #c7cfd5;border-radius:6px}#sim-banner button{background:#f6f8fa;color:#25313b;border:1px solid #aab5bd}#sim-banner button:hover{background:#dce2e7}#sim-form{display:block}#sim-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.sim-item{padding:0}.sim-check{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.9rem}.sim-check input{width:20px;min-height:20px;margin:0;accent-color:#17636b}#sim-form button{margin-top:20px}
 @media(max-width:560px){#sim-fields{grid-template-columns:1fr}}
 @media(max-width:560px){.rule-table-hint{display:block;font-size:.8rem}main{padding:26px 18px}form{grid-template-columns:1fr 1fr}#controllers form,#auto-form{grid-template-columns:1fr}button{grid-column:1/-1}.stepper button{grid-column:auto}.heading{align-items:flex-start}}
 </style>
@@ -248,15 +257,16 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <p id="test-message" class="message" role="status"></p>
 <section aria-labelledby="heating-heading">
 <div class="heading"><h2 id="heating-heading">Sommer / Winter · Ölbrenner</h2><span id="heating-badge" class="badge" role="status">Status wird geladen …</span></div>
-<p>Sommer: Ölbrenner gesperrt. Winter: Ölbrenner über Relais 4 freigegeben.</p>
+<p>Sommer: Kombi oben, Öl gesperrt. Winter: Kombi Mitte, Öl freigegeben.</p>
 <button id="heating-switch" class="relay-switch" type="button" role="switch" aria-checked="false" aria-describedby="heating-detail" disabled><span class="switch-track" aria-hidden="true"></span><span id="heating-switch-label">Winterbetrieb · Ölbrenner freigeben</span></button>
 <p id="heating-detail" class="muted">Betriebsart wird geladen …</p>
-<p class="muted">Öl freigegeben: Kombi → Puffer gesperrt, auch im Handbetrieb. Puffer → Kombi bleibt möglich.</p>
+<p class="muted">Öl freigegeben: Kombi → Puffer gesperrt, auch bei manueller Steuerung. Puffer → Kombi bleibt möglich.</p>
 <p id="heating-message" class="message" role="status"></p>
 </section>
 <section aria-labelledby="pump-heading">
 <div class="heading"><h2 id="pump-heading">Pumpensteuerung</h2><span id="pump-badge" class="badge" role="status">Status wird geladen …</span></div>
 <div class="storage-overview">
+<svg class="burner-pipes" aria-hidden="true"><path class="pipe-vl"/><path class="pipe-rl"/><text class="pipe-vl-label">VL</text><text class="pipe-rl-label">RL</text></svg>
 <div id="oil-burner-diagram" class="burner-diagram" role="img" aria-label="Ölbrennerfreigabe: Status unbekannt">
 <svg class="burner-icon" viewBox="0 0 128 96" aria-hidden="true">
 <g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round">
@@ -290,22 +300,21 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <div class="pump-controls">
 <div><button id="manual-switch" class="relay-switch" type="button" role="switch" aria-checked="false" aria-describedby="manual-help" disabled><span class="switch-track" aria-hidden="true"></span><span>Manuelle Steuerung</span></button><p id="manual-help" class="muted">Handbetrieb übergeht Temperaturregelung und Sensorfehler. Nach Neustart ist er aus; die Automatik kann starten.</p></div>
 <div><button id="pump-switch" class="relay-switch" type="button" role="switch" aria-checked="false" aria-describedby="pump-help" disabled><span class="switch-track" aria-hidden="true"></span><span>Pumpe ein / aus</span></button><p id="pump-help" class="muted">Zuerst die manuelle Steuerung einschalten.</p></div>
-<div><button id="direction-switch" class="relay-switch" type="button" role="switch" aria-checked="false" aria-describedby="direction-help" disabled><span class="switch-track" aria-hidden="true"></span><span>Pumprichtung</span></button><p id="direction-help" class="muted">Aus: Kombi → Puffer. Ein: Puffer → Kombi.</p></div>
+<div><button id="direction-switch" class="relay-switch" type="button" role="switch" aria-checked="false" aria-describedby="direction-help" disabled><span class="switch-track" aria-hidden="true"></span><span>Pumprichtung · Relais 2</span></button><p id="direction-help" class="muted">Aus: Kombi → Puffer. Ein: Puffer → Kombi.</p></div>
 </div>
 <p id="pump-mode-detail" class="muted">Steuerungsmodus wird geladen …</p>
 <p id="pump-progress" class="message" role="status"></p>
 <p id="pump-message" class="message" role="status"></p>
 <p class="muted">Richtungswechsel: Die Pumpe pausiert 2 Sekunden, auch im Handbetrieb.</p>
-<p class="muted">Die Zuordnung des Richtungsrelais ist angenommen und muss an der Anlage überprüft werden.</p>
 </section>
 <section aria-labelledby="auto-heading">
 <h2 id="auto-heading">Automatische Regelung</h2>
-<p class="muted">Geregelt wird mit Kombispeicher oben und Pufferspeicher oben. Die übrigen Sensoren dienen zur Anzeige.</p>
+<p class="muted">Kombi oben im Sommer, Kombi Mitte im Winter; verglichen wird jeweils mit Puffer oben.</p>
 <form id="auto-form">
-<label>Startdifferenz zwischen den Speichern (5–10 K)<input type="number" name="start" min="5" max="10" step="0.1" required></label>
+<div><label for="auto-start">Startdifferenz zwischen den Speichern (5–10 K)</label><div class="stepper"><button type="button" data-direction="-1" aria-label="Startdifferenz senken">−</button><input id="auto-start" type="number" name="start" min="5" max="10" step="1" inputmode="numeric" required><button type="button" data-direction="1" aria-label="Startdifferenz erhöhen">+</button></div></div>
 <button type="submit">Regelung speichern</button>
 </form>
-<p class="muted">Start bei eingestelltem Temperaturunterschied, Stopp beim Temperaturausgleich. Die Starttemperatur gilt nur für Kombi → Puffer.</p>
+<p class="muted">Start bei eingestellter Differenz, Stopp bei 3 K. Die Starttemperatur gilt nur für Kombi → Puffer.</p>
 <p id="auto-error" class="error" role="alert" hidden></p>
 <p id="auto-message" class="message" role="status"></p>
 <details class="automatic-rules"><summary>Gespeicherte Schaltbedingungen</summary>
@@ -393,8 +402,18 @@ themeToggle.addEventListener('click',()=>{
 });
 syncThemeToggle();
 const temperatureNumber=new Intl.NumberFormat('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1});
-const setpointNumber=new Intl.NumberFormat('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1});
+const setpointNumber=new Intl.NumberFormat('de-DE',{maximumFractionDigits:1});
 const inputNumber=value=>typeof value==='number'&&Number.isFinite(value)?value.toFixed(1):'';
+// Gespeicherte Nachkommastellen unverfälscht zeigen; neue Eingaben sind ganzzahlig.
+const settingNumber=value=>typeof value==='number'&&Number.isFinite(value)?String(value):'';
+function stepIntegerInput(input,direction){
+  const current=input.value===''?Number(input.dataset.savedValue):Number(input.value);
+  const minimum=Number(input.min),maximum=Number(input.max);
+  const next=Math.min(maximum,Math.max(minimum,Number.isInteger(current)?current+direction:direction>0?Math.ceil(current):Math.floor(current)));
+  if(!Number.isFinite(next)||input.value===settingNumber(next))return;
+  input.value=settingNumber(next);
+  input.dispatchEvent(new Event('input',{bubbles:true}));
+}
 const panels=new Map();
 const wifiForm=document.getElementById('wifi-form');
 const wifiMessage=document.getElementById('wifi-message');
@@ -412,7 +431,30 @@ const pumpBadge=document.getElementById('pump-badge');
 const pumpMessage=document.getElementById('pump-message');
 const autoForm=document.getElementById('auto-form');
 const autoMessage=document.getElementById('auto-message');
+function syncAutoStepperWidth(){
+  const target=document.querySelector('#controllers section[data-sensor-id="0"] .stepper');
+  if(!target)return;
+  const width=target.getBoundingClientRect().width;
+  if(width>0)autoForm.style.setProperty('--setting-stepper-width',width+'px');
+}
+window.addEventListener('resize',syncAutoStepperWidth);
 const heatingSwitch=document.getElementById('heating-switch');
+function drawBurnerPipes(){
+  const box=document.querySelector('.storage-overview'),icon=box.querySelector('.burner-icon'),tank=box.querySelector('.pump-flow'),wires=box.querySelector('.burner-pipes');
+  const a=box.getBoundingClientRect(),b=icon.getBoundingClientRect(),t=tank.getBoundingClientRect();
+  if(!a.width||!a.height||!b.width||!t.width)return;
+  wires.setAttribute('viewBox',`0 0 ${a.width} ${a.height}`);
+  const x1=b.left-a.left+b.width*123/128,x2=t.left-a.left+t.width*14/440,mid=(x1+x2)/2,mobile=t.top>=b.bottom;
+  for(const [name,by,ty] of [['vl',42,90],['rl',54,116]]){
+    const y1=b.top-a.top+b.height*by/96,y2=t.top-a.top+t.height*ty/280;
+    const lane=b.bottom-a.top+(name==='vl'?6:14),edge=x2-(name==='vl'?7:14);
+    wires.querySelector('.pipe-'+name).setAttribute('d',mobile?`M${x1} ${y1} H${x1+6} V${lane} H${edge} V${y2} H${x2}`:`M${x1} ${y1} H${mid} V${y2} H${x2}`);
+    const label=wires.querySelector('.pipe-'+name+'-label');label.setAttribute('x',mobile?x1+9:mid+2);label.setAttribute('y',mobile?lane:y2-3);
+  }
+}
+window.addEventListener('resize',drawBurnerPipes);
+if(typeof ResizeObserver!=='undefined')new ResizeObserver(drawBurnerPipes).observe(document.querySelector('.storage-overview'));
+requestAnimationFrame(drawBurnerPipes);
 const heatingMessage=document.getElementById('heating-message');
 let heatingState=null,heatingBusy=false,heatingRevision=0;
 const simForm=document.getElementById('sim-form');
@@ -447,6 +489,7 @@ function updatePump(state){
   if(!state||typeof state.manual!=='boolean'||typeof state.on!=='boolean'||typeof state.requestedOn!=='boolean'||![0,1].includes(state.direction)||![0,1].includes(state.requestedDirection))throw new Error('Ungültiger Pumpenstatus');
   pumpState=state;
   manualSwitch.setAttribute('aria-checked',String(state.manual));
+  manualSwitch.setAttribute('data-state',state.manual?'on':'off');
   pumpSwitch.setAttribute('aria-checked',String(state.requestedOn));
   directionSwitch.setAttribute('aria-checked',String(state.requestedDirection===1));
   pumpBadge.textContent='Pumpe: '+(state.on?'AN':'AUS')+(state.switching?' · Richtungswechsel':'');
@@ -456,12 +499,13 @@ function updatePump(state){
   document.getElementById('pump-flow-arrow').setAttribute('d',state.direction===0?'M187 154H253':'M253 154H187');
   document.getElementById('pump-flow-arrow').style.visibility='visible';
   document.querySelector('.pump-flow').classList.toggle('stopped',!state.on);
-  document.getElementById('pump-mode-detail').textContent=state.manual?'Handbetrieb aktiv · Ölbrennersperre gilt.':state.automaticConfigured?'Automatik aktiv · Bei Fehler eines oberen Fühlers bleibt die Pumpe aus.':'Automatik gesperrt · Pumpe aus.';
+  document.getElementById('pump-mode-detail').textContent=state.manual?'Handbetrieb aktiv · Ölbrennersperre gilt.':state.automaticConfigured?'Automatik aktiv · Bei Fehler eines Regelungsfühlers bleibt die Pumpe aus.':'Automatik gesperrt · Pumpe aus.';
   document.getElementById('pump-progress').textContent=state.phase==='stopping'?'Pumpe aus · Richtungswechsel nach 2 Sekunden.':state.phase==='settling'?'Richtung umgeschaltet · Relais schaltet.':'';
   updatePumpControls();
 }
 function unknownPump(){
   pumpState=null;
+  manualSwitch.setAttribute('data-state','unknown');
   pumpBadge.textContent='Pumpe: Status unbekannt';pumpBadge.className='badge';
   document.getElementById('pump-direction-state').textContent='Keine aktuelle Förderrichtung. Verbindung zum ESP32 prüfen.';
   document.getElementById('pump-flow-title').textContent='Förderrichtung unbekannt';
@@ -518,18 +562,20 @@ function updateHeating(state){
   heatingState=state;
   heatingSwitch.disabled=heatingBusy;
   heatingSwitch.setAttribute('aria-checked',String(state.configValid&&state.winter));
-  document.getElementById('heating-switch-label').textContent=state.configValid?'Winterbetrieb · Ölbrenner freigeben':'Sommerbetrieb bestätigen';
+  heatingSwitch.setAttribute('data-state',!state.configValid?'unknown':state.winter?'on':'off');
+  document.getElementById('heating-switch-label').textContent=state.configValid?(state.winter?'Winterbetrieb':'Sommerbetrieb'):'Sommerbetrieb bestätigen';
   const badge=document.getElementById('heating-badge');
-  badge.textContent=state.configValid?(state.winter?'Winter · Öl freigegeben':'Sommer · Öl gesperrt'):'Betriebsart unbekannt';
-  badge.className='badge'+(!state.configValid?' waiting':state.winter?' on':'');
-  document.getElementById('heating-detail').textContent=!state.configValid?'Gespeicherte Betriebsart ungültig. Sommerbetrieb bestätigen; Ölbrenner und Einlagerung bleiben aus.':
-    simulationEnabled?'Testmodus: Der Schalter wird simuliert. Relais 4 bleibt AUS.':
+  badge.textContent=state.configValid?(state.winter?'Winter · Kombi Mitte · Öl freigegeben':'Sommer · Kombi oben · Öl gesperrt'):'Betriebsart unbekannt';
+  badge.className='badge'+(!state.configValid?' waiting':state.winter?' heat-active':' summer-active');
+  document.getElementById('heating-detail').textContent=!state.configValid?'Betriebsart ungültig. Sommerbetrieb bestätigen; Ölbrenner und Automatik bleiben aus.':
+    simulationEnabled?'':
     'Relais 4: '+(state.relayOn?'AN · Ölbrenner freigegeben.':state.winter?'AUS · Freigabe während Update oder Neustart pausiert.':'AUS · Ölbrenner gesperrt.');
   updateBurnerDiagram(state);
   updatePumpControls();
 }
 function unknownHeating(){
   heatingState=null;heatingSwitch.disabled=true;
+  heatingSwitch.setAttribute('data-state','unknown');
   document.getElementById('heating-badge').textContent='Betriebsart unbekannt';
   document.getElementById('heating-badge').className='badge waiting';
   document.getElementById('heating-detail').textContent='Keine aktuellen Daten. Verbindung zum ESP32 prüfen; die Betriebsart wird erneut abgefragt.';
@@ -563,32 +609,37 @@ async function changeHeating(){
 heatingSwitch.addEventListener('click',changeHeating);
 autoForm.addEventListener('input',()=>{autoDirty=true;autoMessage.textContent='Noch nicht gespeichert.';autoMessage.className='message';});
 autoForm.addEventListener('change',()=>{autoDirty=true;autoMessage.textContent='Noch nicht gespeichert.';autoMessage.className='message';});
+autoForm.addEventListener('click',event=>{
+  const button=event.target.closest('.stepper button');
+  if(button&&!button.disabled)stepIntegerInput(autoForm.elements.start,Number(button.dataset.direction));
+});
 function updateAutomatic(state){
   if(!state)return;
   document.getElementById('auto-error').hidden=state.configValid;
-  document.getElementById('auto-error').textContent=state.configValid?'':'Automatik gesperrt: Einstellungen prüfen und erneut speichern; gegebenenfalls den Gerätespeicher prüfen.';
+  document.getElementById('auto-error').textContent=state.configValid?'':'Automatik gesperrt: Betriebsart und Einstellungen prüfen.';
+  autoForm.elements.start.dataset.savedValue=state.differenceStart;
   if(autoDirty||autoBusy||autoForm.contains(document.activeElement))return;
-  autoForm.elements.start.value=inputNumber(state.differenceStart);
+  autoForm.elements.start.value=settingNumber(state.differenceStart);
 }
 function automaticSensorId(state){
-  return 0; // Beide oberen Sensoren sind fest zugeordnet; kein Modus wählt Mitte.
+  return state.controlSensorId === 1 ? 1 : 0;
 }
 function automaticRuleText(state,controllers,pump){
   if(!state||!state.configValid||!Array.isArray(controllers))return null;
-  const id=automaticSensorId(state),combi=controllers.find(c=>c.id===id),buffer=controllers.find(c=>c.id===2);
-  if(!combi||!buffer||!Number.isFinite(state.differenceStart)||
+  const id=automaticSensorId(state),combi=controllers.find(c=>c.id===id),buffer=controllers.find(c=>c.id===2),settings=controllers.find(c=>c.id===0);
+  if(!combi||!buffer||!settings||!Number.isFinite(state.differenceStart)||
      state.differenceStart<5||state.differenceStart>10)return null;
-  const temp=value=>temperatureNumber.format(value)+' °C',delta=value=>temperatureNumber.format(value)+' K';
-  const targetValid=combi.configValid&&Number.isFinite(combi.target)&&combi.target>=65&&combi.target<=70;
+  const temp=value=>setpointNumber.format(value)+' °C',delta=value=>setpointNumber.format(value)+' K';
+  const targetValid=settings.configValid&&Number.isFinite(settings.target)&&settings.target>=68&&settings.target<=72;
   return {
-    sensor:'Fühler: '+combi.name+' und Pufferspeicher oben. Starttemperatur: '+(targetValid?temp(combi.target):'ungültig')+'.',
+    sensor:'Fühler: '+combi.name+' und Pufferspeicher oben. Starttemperatur: '+(targetValid?temp(settings.target):'ungültig')+'.',
     status:pump&&pump.manual?'Handbetrieb aktiv · Ölbrennersperre gilt.':
       !combi.valid||!buffer.valid?'Sensorfehler · Automatik hält die Pumpe aus.':'Gespeicherte Einstellungen.',
-    chargeStart:!state.allowCharging?'Einlagerung durch Sommer-/Winterumschaltung gesperrt.':!targetValid?'Einlagerung gesperrt: Starttemperatur muss 65–70 °C betragen.':
-      'Ölbrennerfreigabe AUS UND Kombi ≥ '+temp(combi.target)+' UND Kombi − Puffer ≥ '+delta(state.differenceStart)+'.',
-    chargeStop:'Kombi ≤ Puffer (Temperaturausgleich) ODER Ölbrenner freigegeben / Betriebsart unbekannt.',
+    chargeStart:!state.allowCharging?'Einlagerung durch Sommer-/Winterumschaltung gesperrt.':!targetValid?'Einlagerung gesperrt: Starttemperatur muss 68–72 °C betragen.':
+      'Ölbrennerfreigabe AUS UND Kombi ≥ '+temp(settings.target)+' UND Kombi − Puffer ≥ '+delta(state.differenceStart)+'.',
+    chargeStop:'Kombi − Puffer ≤ 3 K ODER Ölbrenner freigegeben / Betriebsart unbekannt.',
     returnStart:'Puffer − Kombi ≥ '+delta(state.differenceStart)+'. Ohne Mindesttemperatur oder Ölsperre.',
-    returnStop:'Puffer ≤ Kombi (Temperaturausgleich).'
+    returnStop:'Puffer − Kombi ≤ 3 K.'
   };
 }
 function updateAutomaticRules(state,controllers,pump){
@@ -668,8 +719,8 @@ simForm.addEventListener('submit',async event=>{
 });
 autoForm.addEventListener('submit',async event=>{
   event.preventDefault();if(autoBusy)return;
-  if(!Number.isFinite(Number(autoForm.elements.start.value))||autoForm.elements.start.value.trim()===''||Number(autoForm.elements.start.value)<5||Number(autoForm.elements.start.value)>10){
-    autoMessage.className='message error';autoMessage.textContent='Die Startdifferenz muss 5 bis 10 K betragen.';return;
+  if(!Number.isInteger(Number(autoForm.elements.start.value))||autoForm.elements.start.value.trim()===''||Number(autoForm.elements.start.value)<5||Number(autoForm.elements.start.value)>10){
+    autoMessage.className='message error';autoMessage.textContent='Startdifferenz: ganze Zahl von 5 bis 10 K eingeben.';return;
   }
   const values=new URLSearchParams({start:autoForm.elements.start.value});
   autoBusy=true;autoRevision++;pumpRevision++;autoForm.querySelectorAll('input,select,button').forEach(e=>e.disabled=true);autoMessage.textContent='Wird gespeichert …';autoMessage.className='message';
@@ -920,14 +971,14 @@ function createPanel(c){
   const limits=c.limits;
   section.innerHTML=`<div class="heading"><h2></h2><span class="badge">Sensor: —</span></div>
     <div class="readings"><output class="temperature">—</output></div>
-    <form><div><label for="target-${c.id}">Einlagerung ab (65–70 °C)</label><div class="stepper"><button type="button" data-field="target" data-direction="-1">−</button><input id="target-${c.id}" name="target" type="number" inputmode="decimal" step="0.1" required><button type="button" data-field="target" data-direction="1">+</button></div></div>
+    <form><div><label for="target-${c.id}">Einlagerung ab (68–72 °C)</label><div class="stepper"><button type="button" data-field="target" data-direction="-1">−</button><input id="target-${c.id}" name="target" type="number" inputmode="numeric" step="1" required><button type="button" data-field="target" data-direction="1">+</button></div></div>
     <input name="hysteresis" type="hidden">
     <button type="submit">Speichern</button></form><p class="message" role="status"></p><p class="config-error error" role="alert" hidden></p><p class="rule muted"></p>`;
   section.querySelector('h2').textContent=c.name;
   const form=section.querySelector('form');
   form.elements.target.min=limits.minTarget;form.elements.target.max=limits.maxTarget;
   form.elements.hysteresis.min=limits.minHysteresis;form.elements.hysteresis.max=limits.maxHysteresis;
-  form.elements.target.value=inputNumber(c.target);form.elements.hysteresis.value=inputNumber(c.hysteresis);
+  form.elements.target.value=settingNumber(c.target);form.elements.hysteresis.value=inputNumber(c.hysteresis);
   form.elements.target.dataset.savedValue=c.target;
   form.elements.hysteresis.dataset.savedValue=c.hysteresis;
   form.querySelectorAll('.stepper button').forEach(button=>{
@@ -941,19 +992,12 @@ function createPanel(c){
   form.addEventListener('focusout',event=>{
     if(!event.target.matches('input[type="number"]')||event.target.value==='')return;
     const value=Number(event.target.value);
-    if(Number.isFinite(value))event.target.value=inputNumber(value);
+    if(Number.isFinite(value))event.target.value=settingNumber(value);
   });
   form.addEventListener('click',event=>{
     const button=event.target.closest('.stepper button');
     if(!button||button.disabled)return;
-    const input=form.elements[button.dataset.field];
-    const fallback=Number(input.dataset.savedValue);
-    const current=input.value===''?fallback:Number(input.value);
-    const minimum=Number(input.min),maximum=Number(input.max);
-    const next=Math.min(maximum,Math.max(minimum,Math.round((current+Number(button.dataset.direction)*0.1)*10)/10));
-    if(!Number.isFinite(next)||input.value===inputNumber(next))return;
-    input.value=inputNumber(next);
-    input.dispatchEvent(new Event('input',{bubbles:true}));
+    stepIntegerInput(form.elements[button.dataset.field],Number(button.dataset.direction));
   });
   form.addEventListener('submit',async event=>{
     event.preventDefault();if(saving||section.dataset.configValid!=='true')return;
@@ -1036,11 +1080,12 @@ async function refresh(){
     if(autoRequestRevision===autoRevision){updateAutomatic(data.automatic);updateAutomaticRules(data.automatic,data.controllers,data.pump);}
     if(!pumpBusy&&revision===pumpRevision)updatePump(data.pump);
     updateStorageDiagram(data.controllers);
+    drawBurnerPipes();
     const clock=document.getElementById('device-clock');
     clock.textContent=data.clock.available
       ?'ESP32-Zeit: '+data.clock.local+' '+data.clock.zone+(data.wifi.ip?'':' · läuft ohne WLAN weiter')
       :'ESP32-Zeit: noch nicht synchronisiert. WLAN mit Internetzugang erforderlich.';
-    document.getElementById('firmware-version').textContent='Firmware-Version '+data.version;
+    document.getElementById('firmware-version').textContent='Firmware-Version '+data.version.replace(/-(?:ohne|mit)-ap$/i,'');
     currentFirmwareVersion=data.version;
     for(const c of data.controllers){
       if(!panels.has(c.id))panels.set(c.id,createPanel(c));
@@ -1053,11 +1098,12 @@ async function refresh(){
       configError.textContent=c.configValid?'':'Konfigurationsfehler: Grenzen oder Standardwerte im Sketch prüfen.';
       p.form.querySelectorAll('input,button').forEach(e=>e.disabled=!c.configValid||(e.tagName==='BUTTON'&&saving));
       const badge=p.section.querySelector('.badge');badge.textContent=c.valid?'Sensor: OK':'Sensorfehler';badge.className='badge'+(c.valid?' on':'');
-      p.section.querySelector('.rule').textContent=data.pump.manual?'Handbetrieb: Starttemperatur ohne Wirkung. Ölbrennersperre gilt.':'Starttemperatur nur für Kombi → Puffer.';
+      p.section.querySelector('.rule').textContent=data.pump.manual?'Handbetrieb: Starttemperatur ohne Wirkung. Ölbrennersperre gilt.':'Starttemperatur für den gewählten Kombifühler.';
       p.form.elements.target.dataset.savedValue=c.target;
       p.form.elements.hysteresis.dataset.savedValue=c.hysteresis;
-      if(!p.isDirty()&&!p.form.contains(document.activeElement)&&!saving){p.form.elements.target.value=inputNumber(c.target);p.form.elements.hysteresis.value=inputNumber(c.hysteresis);}
+      if(!p.isDirty()&&!p.form.contains(document.activeElement)&&!saving){p.form.elements.target.value=settingNumber(c.target);p.form.elements.hysteresis.value=inputNumber(c.hysteresis);}
     }
+    syncAutoStepperWidth();
     connection.className='muted';connection.textContent='Verbunden · Messwerte werden alle 2 Sekunden aktualisiert';
   }catch(error){
     if(!pumpBusy&&revision===pumpRevision)unknownPump();
@@ -1238,11 +1284,12 @@ void servicePump() {
 void updateAutomaticPump() {
   if (modeTransition || otaActive || otaVerificationPending) return;
   if (manualControl) { automaticControl.reset(); return; }
-  TemperatureController& combi = controllers[0]; // Ausschließlich Kombispeicher oben.
+  TemperatureController& combi = controllers[oilBurnerEnabled ? 1 : 0];
   TemperatureController& buffer = controllers[2];
-  const TransferDemand demand = automaticControl.update(AUTOMATIC_PUMP_CONFIGURED && storageReady && autoSettingsValid,
+  TemperatureController& settings = controllers[0];
+  const TransferDemand demand = automaticControl.update(AUTOMATIC_PUMP_CONFIGURED && storageReady && autoSettingsValid && heatingModeValid,
     chargingAllowed(), combi.valid, combi.currentTemp,
-    buffer.valid, buffer.currentTemp, combi.configValid ? combi.targetTemp : NAN, automaticThresholds);
+    buffer.valid, buffer.currentTemp, settings.configValid ? settings.targetTemp : NAN, automaticThresholds);
   PumpDirection direction = pump.direction();
   if (demand == TransferDemand::CombiToBuffer) direction = PumpDirection::CombiToBuffer;
   if (demand == TransferDemand::BufferToCombi) direction = PumpDirection::BufferToCombi;
@@ -1329,7 +1376,7 @@ void measureTemperatures() {
             unsigned(reading.lowerThreshold), unsigned(reading.upperThreshold),
             unsigned(reading.configBefore), unsigned(reading.configWithBias), unsigned(reading.configAfterConversion),
             manualControl ? " | Handbetrieb aktiv" :
-            (i == 0 || i == 2) ? " | Automatik: Pumpe AUS" : " | nur Anzeige");
+            (i == (oilBurnerEnabled ? 1 : 0) || i == 2) ? " | Automatik: Pumpe AUS" : " | nur Anzeige");
         }
       } else {
         if (i == 0) {
@@ -1679,17 +1726,18 @@ String pumpStatusJson() {
     ",\"requestedDirection\":" + String(pump.requestedDirection() == PumpDirection::BufferToCombi ? 1 : 0) +
     ",\"phase\":\"" + phase + "\",\"switching\":" + String(pump.switching() ? "true" : "false") +
     ",\"remainingMs\":" + String(pump.remainingMs(millis())) +
-    ",\"automaticConfigured\":" + String(AUTOMATIC_PUMP_CONFIGURED && storageReady && autoSettingsValid ? "true" : "false") + "}";
+    ",\"automaticConfigured\":" + String(AUTOMATIC_PUMP_CONFIGURED && storageReady && autoSettingsValid && heatingModeValid ? "true" : "false") + "}";
 }
 
 String automaticStatusJson() {
-  // Der frühere winter-Alias bezog sich auf Fühlerwahl; niemals als Ölfreigabe lesen.
-  return "{\"winter\":false,\"controlSensorId\":0" +
+  // Ein Schalter wählt den Kombifühler und steuert die Ölbrennerfreigabe.
+  return "{\"winter\":" + String(oilBurnerEnabled ? "true" : "false") +
+    ",\"controlSensorId\":" + String(oilBurnerEnabled ? 1 : 0) +
     String(",\"allowCharging\":") + String(chargingAllowed() ? "true" : "false") +
-    ",\"configValid\":" + String(storageReady && autoSettingsValid ? "true" : "false") +
+    ",\"configValid\":" + String(storageReady && autoSettingsValid && heatingModeValid ? "true" : "false") +
     ",\"targetOffset\":0" +
     ",\"differenceStart\":" + jsonNumber(automaticThresholds.differenceStart) +
-    ",\"differenceStop\":0}";
+    ",\"differenceStop\":" + jsonNumber(AutomaticControl::STOP_DIFFERENCE) + "}";
 }
 
 String heatingStatusJson() {
@@ -1876,13 +1924,25 @@ void saveAutomaticSettings() {
     return;
   }
   // Die neue Differenz gilt für den nächsten Start. Einen laufenden Transfer
-  // beim Speichern nicht vor dem Temperaturausgleich unterbrechen.
+  // beim Speichern nicht vor Erreichen der Stoppdifferenz unterbrechen.
   automaticThresholds = next;
   autoSettingsValid = true;
   measureTemperatures();
   lastMeasurement = millis();
   server.sendHeader("Cache-Control", "no-store");
   server.send(200, "application/json", automaticStatusJson());
+}
+
+void applyHeatingMode(bool next) {
+  const bool modeChanged = !heatingModeValid || oilBurnerEnabled != next;
+  oilBurnerEnabled = next;
+  heatingModeValid = true;
+  if (modeChanged && !manualControl) {
+    automaticControl.reset();
+    pump.command(false, pump.direction(), millis());
+  }
+  servicePump(); // Sperre und Pumpe zuerst anwenden, dann Ölfreigabe schalten.
+  updateAutomaticPump(); // Gewählten Fühler und mögliche Rückladung neu prüfen.
 }
 
 void saveHeatingMode() {
@@ -1900,10 +1960,7 @@ void saveHeatingMode() {
   if (!storageReady || preferences.putBool("oil1", next) != 1) {
     server.send(500, "text/plain; charset=utf-8", "Betriebsart konnte nicht gespeichert werden. Schaltung unverändert."); return;
   }
-  oilBurnerEnabled = next;
-  heatingModeValid = true;
-  servicePump(); // Sperre und Pumpe zuerst anwenden, dann Ölfreigabe schalten.
-  updateAutomaticPump(); // Auch eine mögliche Rückladung unmittelbar neu prüfen.
+  applyHeatingMode(next);
   FirmwareLog.printf("%sBetriebsart: %s | Ölbrennerfreigabe: %s | Relais 4: %s | Kombi -> Puffer: %s.\n\n",
     SIMULATION_MODE ? "[SIMULATION] " : "", next ? "Winter" : "Sommer", next ? "AN" : "AUS",
     oilBurnerRelayOn() ? "AN" : "AUS", chargingAllowed() ? "temperaturabhängig möglich" : "gesperrt");

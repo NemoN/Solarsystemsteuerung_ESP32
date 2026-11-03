@@ -26,8 +26,8 @@ TransferDemand AutomaticControl::update(bool enabled, bool allowCharging, bool c
     return demand_;
   }
   if (demand_ == TransferDemand::CombiToBuffer &&
-      (!allowCharging || combi <= buffer)) reset();
-  if (demand_ == TransferDemand::BufferToCombi && buffer <= combi) reset();
+      (!allowCharging || combi - buffer <= STOP_DIFFERENCE)) reset();
+  if (demand_ == TransferDemand::BufferToCombi && buffer - combi <= STOP_DIFFERENCE) reset();
   if (demand_ == TransferDemand::Off) {
     // Die Mindesttemperatur gilt ausschließlich für den Start der Einlagerung.
     if (allowCharging && validChargeTarget(target) && combi >= target && combi - buffer >= t.differenceStart)

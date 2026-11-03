@@ -17,22 +17,21 @@ int main() {
   assert(automatic.update(true, true, true, 68, true, 60, 68, t) == charge);
   // Der Sollwert ist nur eine Startfreigabe, keine spätere Ausschaltgrenze.
   assert(automatic.update(true, true, true, 67, true, 62, 68, t) == charge);
-  assert(automatic.update(true, true, true, 65, true, 64, 68, t) == charge);
-  assert(automatic.update(true, true, true, 65, true, 64, 68, {10}) == charge);
-  assert(automatic.update(true, true, true, 64.01f, true, 64, 68, t) == charge);
-  assert(automatic.update(true, true, true, 64, true, 64, 68, t) == off);
+  assert(automatic.update(true, true, true, 67.1f, true, 64, 68, t) == charge);
+  assert(automatic.update(true, true, true, 67.1f, true, 64, 68, {10}) == charge);
+  assert(automatic.update(true, true, true, 67, true, 64, 68, t) == off);
   assert(automatic.update(true, true, true, 68, true, 60, 68, t) == charge);
   assert(automatic.update(true, true, true, 63.9f, true, 64, 68, t) == off);
 
   // Rückladung ohne Sollwertgrenze, auch bei niedrigen Temperaturen und Ölbetrieb.
   assert(automatic.update(true, false, true, 37, true, 44.9f, 68, t) == off);
   assert(automatic.update(true, false, true, 37, true, 45, 68, t) == discharge);
-  assert(automatic.update(true, false, true, 40, true, 41, 68, t) == discharge);
-  assert(automatic.update(true, false, true, 40, true, 41, 68, {10}) == discharge);
-  assert(automatic.update(true, false, true, 41, true, 41, 68, t) == off);
+  assert(automatic.update(true, false, true, 40, true, 43.1f, 68, t) == discharge);
+  assert(automatic.update(true, false, true, 40, true, 43.1f, 68, {10}) == discharge);
+  assert(automatic.update(true, false, true, 40, true, 43, 68, t) == off);
   assert(automatic.update(true, false, true, 72, true, 80, 68, t) == discharge);
-  assert(automatic.update(true, false, true, 78, true, 79, 68, t) == discharge);
-  assert(automatic.update(true, false, true, 79.1f, true, 79, 68, t) == off);
+  assert(automatic.update(true, false, true, 75.9f, true, 79, 68, t) == discharge);
+  assert(automatic.update(true, false, true, 76, true, 79, 68, t) == off);
   // Ein ungültiger Einlagerungssollwert darf eine sinnvolle Rückladung nicht sperren.
   assert(automatic.update(true, true, true, 37, true, 45, NAN, t) == discharge);
   automatic.reset();
@@ -46,10 +45,10 @@ int main() {
   assert(automatic.update(true, true, true, 40, true, 45, 68, t) == discharge);
   assert(automatic.update(true, false, true, 40, true, 45, 68, t) == discharge);
 
-  assert(AutomaticControl::validChargeTarget(65));
-  assert(AutomaticControl::validChargeTarget(70));
-  assert(!AutomaticControl::validChargeTarget(64.9f));
-  assert(!AutomaticControl::validChargeTarget(70.1f));
+  assert(AutomaticControl::validChargeTarget(68));
+  assert(AutomaticControl::validChargeTarget(72));
+  assert(!AutomaticControl::validChargeTarget(67.9f));
+  assert(!AutomaticControl::validChargeTarget(72.1f));
   assert(!AutomaticControl::validChargeTarget(NAN));
   assert(AutomaticControl::validThresholds({5}));
   assert(AutomaticControl::validThresholds({10}));
@@ -57,7 +56,7 @@ int main() {
   assert(!AutomaticControl::validThresholds({10.1f}));
   assert(!AutomaticControl::validThresholds({NAN}));
   automatic.reset();
-  assert(automatic.update(true, true, true, 65, true, 60, 65, {5}) == charge);
+  assert(automatic.update(true, true, true, 68, true, 63, 68, {5}) == charge);
   automatic.reset();
   assert(automatic.update(true, true, true, 70, true, 60, 70, {10}) == charge);
   assert(automatic.update(true, true, true, 70, true, 50, 68, {10.1f}) == off);
@@ -112,5 +111,5 @@ int main() {
   request(41, true, 41, 200);
   pump.update(5000);
   assert(!pump.on() && !pump.requestedOn());
-  puts("PASS: Startfreigabe 65–70°C, Differenz 5–10K, Temperaturausgleich, freie Rückladung, Ölsperre, Altdaten und Umkehrpause.");
+  puts("PASS: Startfreigabe 68–72°C, Differenz 5–10K, Stopp bei 3K, Rückladung, Ölsperre, Altdaten und Umkehrpause.");
 }

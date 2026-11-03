@@ -14,8 +14,9 @@ struct AutomaticThresholds {
 // unabhängig davon aktiv. Relais 4 sperrt die Einlagerung zusätzlich im Handbetrieb.
 class AutomaticControl {
 public:
-  static constexpr float MIN_CHARGE_TARGET = 65.0f;
-  static constexpr float MAX_CHARGE_TARGET = 70.0f;
+  static constexpr float MIN_CHARGE_TARGET = 68.0f;
+  static constexpr float MAX_CHARGE_TARGET = 72.0f;
+  static constexpr float STOP_DIFFERENCE = 3.0f;
   static bool validChargeTarget(float target);
   static bool validThresholds(const AutomaticThresholds& thresholds);
   // Historisches auto1-Format: Nur Slot 1 ist weiterhin wirksam.

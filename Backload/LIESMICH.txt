@@ -1,9 +1,9 @@
-Backload 1.13.1 – automatische und manuelle Pumpensteuerung
+Backload 1.14.0 – automatische und manuelle Pumpensteuerung
 
 Sensoren und Relais
 Fünf MAX31865-Sensoren mit gemeinsamer Software-SPI-Verbindung:
   CS GPIO 4: Kombispeicher oben      (API-ID 0)
-  CS GPIO 5: Kombispeicher Mitte     (API-ID 1, nur Anzeige)
+  CS GPIO 5: Kombispeicher Mitte     (API-ID 1, Winterfühler)
   CS GPIO 6: Pufferspeicher oben    (API-ID 2)
   CS GPIO 7: Kombispeicher unten     (API-ID 3, nur Anzeige)
   CS GPIO 15: Solarpanel            (API-ID 4, nur Anzeige)
@@ -27,58 +27,55 @@ Einschalten und Reset am realen Aufbau prüfen; die Software übernimmt die
 Steuerung erst nach Beginn von setup().
 
 Sommer / Winter und Automatik
-Der manuelle Sommer-/Winterschalter steuert Relais 4:
-- Sommer: Ölbrennerfreigabe AUS, Einlagerung Kombi -> Puffer möglich.
-- Winter: Ölbrennerfreigabe AN, Einlagerung Kombi -> Puffer gesperrt.
-Die Rückladung aus dem Puffer bleibt in beiden Betriebsarten bei passenden
-Temperaturen möglich. Die Sperre der Einlagerung gilt auch im Handbetrieb.
-Die Anzeige ist eine Brennerfreigabe, keine Rückmeldung über eine Flamme.
+Der manuelle Sommer-/Winterschalter wählt den Kombifühler und steuert Relais 4:
+- Sommer: Kombi oben, Ölbrennerfreigabe AUS, Einlagerung möglich.
+- Winter: Kombi Mitte, Ölbrennerfreigabe AN, Einlagerung gesperrt.
+Puffer oben ist in beiden Betriebsarten der Vergleichsfühler. Die Rückladung
+bleibt bei passenden Temperaturen möglich, auch im Winter. Die Ölsperre gilt
+auch im Handbetrieb. Die Freigabe ist keine Rückmeldung über echten Brennerlauf.
 Vor dem Einschalten von Relais 4 wird eine laufende Einlagerung gestoppt.
-
-Die Automatik wertet ausschließlich Kombispeicher oben und Pufferspeicher
-oben aus. Kombispeicher Mitte, unten und Solarpanel dienen nur zur Anzeige;
-ihre Fehler stoppen die Regelung nicht.
+Bei Betriebsartwechsel wird ein laufender Automatikauftrag zurückgesetzt;
+der neu gewählte Fühler muss die Startbedingungen erneut erfüllen.
+Kombi unten und Solarpanel dienen nur zur Anzeige.
 
 Zwei Einstellungen:
-- Einlagerung ab: 65 bis 70 °C, Vorgabe 68 °C, bei Kombispeicher oben.
+- Einlagerung ab: 68 bis 72 °C, Vorgabe 68 °C, beim gewählten Kombifühler.
 - Startdifferenz zwischen den Speichern: 5 bis 10 K, Vorgabe 8 K.
-Diese Grenzen gelten im Webinterface, in den APIs und in der Regelung.
-Ein zusätzlicher Sollwert-Startabstand und ein Stoppabstand entfallen.
+Im Webinterface erfolgen neue Eingaben in ganzen Zahlen. Bereits gespeicherte
+Dezimalwerte bleiben unverändert und werden weiterhin genau angezeigt.
 
 Kombi -> Puffer: Start bei Kombi >= Einlagerungstemperatur UND
-Kombi - Puffer >= Startdifferenz UND Ölbrenner gesperrt. Danach weiterlaufen,
-auch unterhalb der Einlagerungstemperatur. Stopp bei Kombi <= Puffer oder
-wenn der Ölbrenner freigegeben wird bzw. die Betriebsart unbekannt ist.
+Kombi - Puffer >= Startdifferenz UND Ölbrenner gesperrt. Stopp bei
+Kombi - Puffer <= 3 K oder bei Ölfreigabe/unbekannter Betriebsart.
 Puffer -> Kombi: Start bei Puffer - Kombi >= Startdifferenz, unabhängig von
-Kombi-Sollwert und Ölbrenner. Stopp bei Puffer <= Kombi.
-Gleichheit oder bereits umgekehrtes Temperaturgefälle beendet den Transfer.
+Starttemperatur und Ölfreigabe. Stopp bei Puffer - Kombi <= 3 K.
+Die Starttemperatur wird nur beim Start der Einlagerung geprüft. Die 3-K-
+Stoppdifferenz gilt fest für beide Richtungen.
 
-Beispiel 68 °C / 8 K: Kombi 68 und Puffer 60 starten die Einlagerung bei Öl AUS;
-Kombi 66 und Puffer 64 lassen sie weiterlaufen. Bei 65/65 wird gestoppt.
-Kombi 37 und Puffer 45 starten die Rückladung auch im Winter, ebenso 72/80.
-Ein Fehler an einem oberen Fühler, ungültige Startdifferenz oder fehlender
-Gerätespeicher sperrt die Automatik. Ein ungültiger Einlagerungssollwert sperrt
-nur den Einlagerungsstart; Rückladung bleibt möglich.
+Beispiel bei 68 °C / 8 K: Kombi 68 und Puffer 60 starten die Einlagerung,
+Kombi 67 und Puffer 63,5 lassen sie weiterlaufen; bei 67/64 wird gestoppt.
+Kombi Mitte 37 und Puffer 45 starten die Rückladung auch im Winter; bei 42/45
+wird gestoppt. Ein Fehler am gewählten Kombifühler oder Puffer stoppt die
+Automatik. Bei unbekannter Betriebsart bleibt die Automatik ausgeschaltet.
+Ein ungültiger Einlagerungssollwert sperrt nur den Einlagerungsstart.
 
-Die Sommer-/Winterauswahl liegt in oil1; beim ersten Start gilt Sommer/Öl AUS.
-Die frühere Sommer-/Winter-Fühlerwahl wird niemals als Ölfreigabe übernommen.
-Aus auto1 wird nur eine gültige Startdifferenz im Bereich 5–10 K übernommen.
-Alte Sollwert-Startabstände und Stoppschwellen werden ignoriert. Ein alter
-Startwert außerhalb der neuen Grenzen sperrt die Automatik, bis gültig neu
-gespeichert wird. Im Formular wird dafür 8 K angeboten.
-Ein alter oberer Kombi-Sollwert innerhalb 65–70 °C bleibt erhalten. Andernfalls
-gilt 68 °C mit Logmeldung; der alte NVS-Datensatz bleibt beim Lesen erhalten.
-Der alte per-Sensor-Hysteresewert in c0 bleibt nur aus Formatgründen vorhanden;
-c1/c2 für Mitte und Puffer bleiben unbenutzt erhalten.
+Die Betriebsart liegt in oil1; beim ersten Start gilt Sommer/Öl AUS. Frühe
+Fühlerwahl-Felder aus auto1 werden nicht als Brennerfreigabe übernommen.
+Aus auto1 wird eine gültige Startdifferenz im Bereich 5–10 K übernommen.
+Ein ungültiger alter Startwert sperrt die Automatik bis zum Speichern.
+Ein gespeicherter Kombi-Sollwert von 68–72 °C bleibt erhalten; andere Werte
+werden beim Lesen durch 68 °C ersetzt, ohne den alten NVS-Datensatz zu ändern.
+Die Einstellung wird in c0 gespeichert und gilt für den gewählten Kombifühler.
+Alte c1/c2-Werte sowie der per-Sensor-Hysteresewert bleiben unbenutzt erhalten.
 
 Unter „Gespeicherte Schaltbedingungen“ stehen die wirksamen Start-/Stoppregeln.
 Vollständige Beschreibung: Documentation/Backload-Regelung.md.
-POST /api/heating: winter=0/1 schaltet Sommer/Winter und die Ölbrennerfreigabe.
-POST /api/automatic: nur start; alte schreibende Clients anpassen.
-Die Statusfelder targetOffset und differenceStop sind fest 0 (Kompatibilität).
-Nach einem Neustart ist der Handbetrieb aus; die gespeicherte Ölfreigabe und
-nach gültigen Messungen die Automatik werden wieder aktiv. Während Update,
-Startprüfung, Moduswechsel und Testbetrieb bleibt das echte Relais 4 AUS.
+POST /api/heating: winter=0/1 wählt den Fühler und die Ölbrennerfreigabe.
+POST /api/automatic: start; alte schreibende Clients müssen angepasst werden.
+GET /api/status meldet controlSensorId=0/1 und differenceStop=3.
+Nach Neustart ist der Handbetrieb aus; gespeicherte Betriebsart und bei gültigen
+Messungen die Automatik werden wieder aktiv. Während Update, Startprüfung,
+Moduswechsel und Testbetrieb bleibt das echte Relais 4 AUS.
 
 Handbetrieb
 Manuelle Steuerung einschalten; die Pumpe bleibt zunächst AUS. Danach können
@@ -117,7 +114,7 @@ WLAN-Einstellungen: http://<ESP32-IP>/wlan
 ESP-Informationen: http://<ESP32-IP>/info
 Live-Monitor: http://<ESP32-IP>:81/ (oder Link in der Oberfläche).
 Die Oberfläche und Steuerungs-API verwenden Port 80, der Monitor Port 81.
-Varianten 1.13.1-mit-ap und 1.13.1-ohne-ap: Beide starten zunächst
+Varianten 1.14.0-mit-ap und 1.14.0-ohne-ap: Beide starten zunächst
 mit ESP32-Zugang. In der Ohne-AP-Version wird dieser nach 30 Sekunden stabiler
 Heimnetzverbindung und abgeschlossener Update-Startprüfung ausgeschaltet. Bei
 30 Sekunden Verbindungsausfall, fehlenden Zugangsdaten oder einer WLAN-

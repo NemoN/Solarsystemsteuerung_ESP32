@@ -56,11 +56,11 @@ TemperatureController controllers[5]={{true,true,68,68},{false,false,NAN,0},
 '''
 harness += "\n".join(function(signature) for signature in (
     "bool chargingAllowed()", "bool oilBurnerRelayOn()",
-    "void servicePump()", "void updateAutomaticPump()"))
+    "void servicePump()", "void updateAutomaticPump()", "void applyHeatingMode(bool next)"))
 harness += r'''
 int main() {
   for (int& pin:pins) pin=HIGH;
-  // Ausschließlich die oberen Sensoren regeln; Mitte/unten/Solar dürfen fehlen.
+  // Sommer: oben und Puffer regeln; Mitte/unten/Solar dürfen fehlen.
   updateAutomaticPump();
   assert(pump.on() && pins[PUMP_ENABLE_PIN]==LOW);
   controllers[1]={true,false,800,0};
@@ -77,8 +77,7 @@ int main() {
   updateAutomaticPump(); assert(pump.on());
 
   // Winter sperrt eine laufende Vorladung vor dem Einschalten des Brennerrelais.
-  oilBurnerEnabled=true;
-  writes.clear(); servicePump();
+  writes.clear(); applyHeatingMode(true);
   assert(!pump.on() && pins[PUMP_ENABLE_PIN]==HIGH && pins[OIL_BURNER_PIN]==LOW);
   assert(writes.front()==std::make_pair(PUMP_ENABLE_PIN,HIGH));
   assert(writes.back()==std::make_pair(OIL_BURNER_PIN,LOW));
@@ -91,7 +90,7 @@ int main() {
   manualControl=false;
 
   // Rückladung bei 37/45°C bleibt im Winter möglich, inklusive Umkehrpause.
-  controllers[0].currentTemp=37;controllers[2].currentTemp=45;
+  controllers[1].currentTemp=37;controllers[2].currentTemp=45;
   now=100;updateAutomaticPump();assert(!pump.on());
   now=2099;servicePump();assert(!pump.on());
   now=2100;servicePump();assert(!pump.on());
@@ -100,13 +99,24 @@ int main() {
   manualControl=true;manualDirection=PumpDirection::BufferToCombi;manualPumpOn=true;
   servicePump();assert(pump.on() && manualPumpOn);
   manualControl=false;
+  // Beim Fühlerwechsel muss eine Rückladung die Startdifferenz erneut erfüllen.
+  controllers[0].currentTemp=44;applyHeatingMode(false);
+  assert(!pump.on() && pins[OIL_BURNER_PIN]==HIGH);
+  applyHeatingMode(true);assert(pump.on() && pins[OIL_BURNER_PIN]==LOW);
+  // Winter verwendet Mitte: oben darf fehlen, ein Fehler an Mitte stoppt.
+  controllers[0].valid=false;updateAutomaticPump();assert(pump.on());
+  controllers[1].valid=false;updateAutomaticPump();assert(!pump.on());
+  controllers[1].valid=true;updateAutomaticPump();assert(pump.on());
+  controllers[0].valid=true;
   controllers[0].configValid=false;updateAutomaticPump();assert(pump.on());
   controllers[0].configValid=true;
-  controllers[0].currentTemp=44;updateAutomaticPump();assert(pump.on());
+  controllers[1].currentTemp=41;updateAutomaticPump();assert(pump.on());
+  controllers[1].currentTemp=42;updateAutomaticPump();assert(!pump.on());
+  controllers[1].currentTemp=37;updateAutomaticPump();assert(pump.on());
 
-  // Modus-/NVS-Fehler verhindert Einlagerung und Brennerfreigabe, keine Rückladung.
+  // Unbekannte Betriebsart: Fühlerwahl unbekannt, Automatik und Brenner AUS.
   heatingModeValid=false;servicePump();assert(pump.on() && pins[OIL_BURNER_PIN]==HIGH);
-  updateAutomaticPump();assert(pump.on());
+  updateAutomaticPump();assert(!pump.on());
   heatingModeValid=true;
   otaActive=true;servicePump();assert(pins[OIL_BURNER_PIN]==HIGH);
   otaActive=false;servicePump();assert(pins[OIL_BURNER_PIN]==LOW);
@@ -119,11 +129,11 @@ int main() {
   pump=PumpControl();automaticControl.reset();
   for (int& pin:pins) pin=HIGH;
   SIMULATION_MODE=true;
-  controllers[0].currentTemp=37;
+  controllers[1].currentTemp=37;
   updateAutomaticPump();now+=2200;servicePump();now+=100;servicePump();
   assert(pump.on() && pins[PUMP_ENABLE_PIN]==HIGH && pins[PUMP_DIRECTION_PIN]==HIGH &&
     pins[OIL_BURNER_PIN]==HIGH);
-  puts("PASS: obere Fühler, Anzeige-Sensorfehler, Winter-/Handbetriebssperre, Rückladung, GPIO-Schaltreihenfolge und Simulation.");
+  puts("PASS: Sommer-/Winterfühler, 3K-Stopp, Sensorfehler, Ölsperre, GPIO-Schaltreihenfolge und Simulation.");
 }
 '''
 
