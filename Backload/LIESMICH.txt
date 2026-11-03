@@ -1,4 +1,4 @@
-Backload 1.14.0 – automatische und manuelle Pumpensteuerung
+Backload 1.14.4 – automatische und manuelle Pumpensteuerung
 
 Sensoren und Relais
 Fünf MAX31865-Sensoren mit gemeinsamer Software-SPI-Verbindung:
@@ -112,9 +112,10 @@ AsyncWebConsole 0.3.2 sind mit ihren Lizenztexten im Sketch enthalten.
 Webinterface: http://<ESP32-IP>/
 WLAN-Einstellungen: http://<ESP32-IP>/wlan
 ESP-Informationen: http://<ESP32-IP>/info
+Organigramm und GPIO-Zuordnung: http://<ESP32-IP>/organigramm
 Live-Monitor: http://<ESP32-IP>:81/ (oder Link in der Oberfläche).
 Die Oberfläche und Steuerungs-API verwenden Port 80, der Monitor Port 81.
-Varianten 1.14.0-mit-ap und 1.14.0-ohne-ap: Beide starten zunächst
+Varianten 1.14.4-mit-ap und 1.14.4-ohne-ap: Beide starten zunächst
 mit ESP32-Zugang. In der Ohne-AP-Version wird dieser nach 30 Sekunden stabiler
 Heimnetzverbindung und abgeschlossener Update-Startprüfung ausgeschaltet. Bei
 30 Sekunden Verbindungsausfall, fehlenden Zugangsdaten oder einer WLAN-

@@ -33,10 +33,10 @@
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
 #ifdef BACKLOAD_AP_COMPARISON_NO_AP
-const char* FIRMWARE_VERSION = "1.14.0-ohne-ap";
+const char* FIRMWARE_VERSION = "1.14.4-ohne-ap";
 constexpr bool AP_RECOVERY_ONLY = true;
 #else
-const char* FIRMWARE_VERSION = "1.14.0-mit-ap";
+const char* FIRMWARE_VERSION = "1.14.4-mit-ap";
 constexpr bool AP_RECOVERY_ONLY = false;
 #endif
 
@@ -210,6 +210,7 @@ extern const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 *{box-sizing:border-box}body{margin:0}main{max-width:860px;margin:auto;padding:36px 22px}
 h1{font-size:clamp(1.7rem,5vw,2.4rem);margin:0 0 12px}h2{font-size:1.25rem;margin:0}
 .dashboard-header{display:flex;align-items:center;justify-content:space-between;gap:18px 28px;flex-wrap:wrap}.header-status{margin-left:auto;text-align:right}
+.page-nav a{display:inline-flex;align-items:center;gap:7px}.nav-icon{width:18px;height:18px;flex:none}body:not(.organigram-page) #organigram-section{display:none}body.organigram-page main>:not(#organigram-section):not(.page-nav):not(script):not(#test-message){display:none}
 p{line-height:1.6}header{margin-bottom:30px}.muted{color:#4e6268}
 section{border-top:1px solid #b9c8c9;padding:26px 0} .heading,.readings{display:flex;gap:18px;justify-content:space-between;align-items:center;flex-wrap:wrap}
 .readings{justify-content:flex-start;margin:20px 0;font-variant-numeric:tabular-nums}.temperature{font-size:1.7rem;font-weight:650}
@@ -250,8 +251,25 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 </style>
 </head>
 <body><main>
-<script>document.body.classList.toggle('wifi-page',location.pathname==='/wlan');document.body.classList.toggle('test-page',location.pathname==='/testwerte');document.body.classList.toggle('history-page',location.pathname==='/verlauf');document.body.classList.toggle('update-page',location.pathname==='/update');document.body.classList.toggle('info-page',location.pathname==='/info');</script>
-<nav class="page-nav" aria-label="Navigation"><a class="dashboard-link" href="/">← Zur Steuerung</a><a class="wifi-link" href="/wlan">WLAN einrichten</a><a class="history-link" href="/verlauf">Temperaturverlauf</a><a class="update-link" href="/update">Firmware aktualisieren</a><a class="info-link" href="/info">ESP-Info</a><a class="test-values-link" href="/testwerte?test=on" hidden>Testwerte bearbeiten</a><a id="console-link" href="/webserial" target="_blank" rel="noopener">Live-Monitor öffnen</a><a id="test-link" href="/?test=on" hidden>Testmodus starten</a><div class="nav-settings"><span id="firmware-version">Firmware-Version …</span><button id="theme-toggle" class="theme-toggle" type="button">Helles Design</button></div></nav>
+<script>document.body.classList.toggle('wifi-page',location.pathname==='/wlan');document.body.classList.toggle('test-page',location.pathname==='/testwerte');document.body.classList.toggle('history-page',location.pathname==='/verlauf');document.body.classList.toggle('update-page',location.pathname==='/update');document.body.classList.toggle('info-page',location.pathname==='/info');document.body.classList.toggle('organigram-page',location.pathname==='/organigramm');</script>
+<nav class="page-nav" aria-label="Navigation">
+  <div class="nav-sticky">
+  <button id="nav-toggle" type="button" aria-controls="nav-links" aria-expanded="false" hidden><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Menü</button>
+  <div id="nav-links" class="nav-links">
+  <a class="dashboard-link" href="/"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 18l-6-6 6-6"/><path d="M9 12h11"/></svg><span>Zur Steuerung</span></a>
+  <a class="history-link" href="/verlauf"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 4v16h16"/><path d="M7 15l4-4 3 2 5-7"/></svg><span>Temperaturverlauf</span></a>
+  <a class="organigram-link" href="/organigramm"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="8" y="2" width="8" height="5" rx="1"/><rect x="2" y="17" width="8" height="5" rx="1"/><rect x="14" y="17" width="8" height="5" rx="1"/><path d="M12 7v5M6 17v-5h12v5"/></svg><span>Organigramm</span></a>
+  <a class="info-link" href="/info"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5h.01"/></svg><span>ESP-Info</span></a>
+  <a href="/webserial" id="console-link" target="_blank" rel="noopener"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg><span>Live-Monitor öffnen</span></a>
+  <div class="nav-divider" role="separator"></div>
+  <a class="test-values-link" href="/testwerte?test=on" hidden><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3M8 15h8"/></svg><span>Testwerte bearbeiten</span></a>
+  <a href="/?test=on" id="test-link" hidden><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4z"/></svg><span>Testmodus starten</span></a>
+  <a class="update-link" href="/update"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 9a7 7 0 0 1 12-2l2 5M18 15a7 7 0 0 1-12 2l-2-5"/></svg><span>Firmware aktualisieren</span></a>
+  <a class="wifi-link" href="/wlan"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 8.8a15 15 0 0 1 20 0M5.5 12.3a10 10 0 0 1 13 0M9 15.8a5 5 0 0 1 6 0"/><circle cx="12" cy="19" r="1" fill="currentColor" stroke="none"/></svg><span>WLAN einrichten</span></a>
+  </div>
+  <div class="nav-settings"><button id="theme-toggle" class="theme-toggle" type="button">Helles Design</button><span id="firmware-version">Firmware-Version …</span></div>
+  </div>
+</nav>
 <header class="dashboard-header"><h1>Solarsystemsteuerung</h1><div class="header-status"><p id="connection" role="status">Verbindung wird aufgebaut …</p><p id="device-clock" class="muted">ESP32-Zeit wird geladen …</p><p id="wifi-signal" class="muted">WLAN-Signal wird geladen …</p></div></header>
 <div id="sim-banner" role="status" hidden><strong>Testmodus:</strong> Werte, Verlauf und Pumpe sind simuliert. Echte Relais bleiben aus. <button id="test-stop" type="button">Testmodus beenden</button></div>
 <p id="test-message" class="message" role="status"></p>
@@ -328,6 +346,36 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 </details>
 </section>
 <p id="test-page-status" role="status">Verbindung wird aufgebaut …</p>
+<section id="organigram-section" aria-labelledby="organigram-heading">
+<div class="heading"><h2 id="organigram-heading">Organigramm · Backload</h2><span id="org-status" class="badge" role="status">Status wird geladen …</span></div>
+<p class="muted">Regelungsablauf und Anschlüsse dieser Steuerung.</p>
+<div class="org-flow">
+  <div class="org-node org-mode"><h3>Betriebsart</h3><div class="org-modes"><div><strong>Sommer</strong><span>Kombi oben · Öl gesperrt</span></div><div><strong>Winter</strong><span>Kombi Mitte · Öl freigegeben</span></div></div></div>
+  <div class="org-arrow" aria-hidden="true"><svg viewBox="0 0 24 30"><path d="M12 2v20m-6-6 6 6 6-6"/></svg></div>
+  <div class="org-branches">
+    <article class="org-node org-charge"><h3>Kombi → Puffer</h3><p class="org-kicker">Einlagern · Start</p><ul><li>Kombi ≥ <strong id="org-target">— °C</strong></li><li>Kombi − Puffer ≥ <strong class="org-start">— K</strong></li><li>Ölfreigabe aus</li></ul><p class="org-stop">Stopp: Differenz ≤ <strong class="org-stop-value">— K</strong> oder Ölfreigabe an.</p></article>
+    <article class="org-node org-return"><h3>Puffer → Kombi</h3><p class="org-kicker">Rückladen · Start</p><ul><li>Puffer − Kombi ≥ <strong class="org-start">— K</strong></li><li>Keine Mindesttemperatur</li><li>In Sommer und Winter möglich</li></ul><p class="org-stop">Stopp: Differenz ≤ <strong class="org-stop-value">— K</strong>.</p></article>
+  </div>
+  <div class="org-arrow" aria-hidden="true"><svg viewBox="0 0 24 30"><path d="M12 2v20m-6-6 6 6 6-6"/></svg></div>
+  <div class="org-node org-interlock"><strong>Pumpe &amp; Richtungswechsel</strong><span>Bei Fehler eines Regelungsfühlers stoppt die Automatik. Vor einem Richtungswechsel pausiert die Pumpe 2 Sekunden.</span></div>
+</div>
+<div class="org-io">
+  <div><h3>Sensoren · MAX31865</h3><p class="muted">Chip-Select (CS)</p><table><thead><tr><th scope="col">Fühler</th><th scope="col">GPIO</th></tr></thead><tbody>
+    <tr><th scope="row">Kombispeicher oben <small>Sommer</small></th><td id="org-cs-0">—</td></tr>
+    <tr><th scope="row">Kombispeicher Mitte <small>Winter</small></th><td id="org-cs-1">—</td></tr>
+    <tr><th scope="row">Pufferspeicher oben <small>Vergleich</small></th><td id="org-cs-2">—</td></tr>
+    <tr><th scope="row">Kombispeicher unten <small>Anzeige</small></th><td id="org-cs-3">—</td></tr>
+    <tr><th scope="row">Solarpanel <small>Anzeige</small></th><td id="org-cs-4">—</td></tr>
+  </tbody></table><p class="org-spi muted">Gemeinsamer SPI: CLK <span id="org-spi-clk">—</span> · MOSI <span id="org-spi-mosi">—</span> · MISO <span id="org-spi-miso">—</span></p></div>
+  <div><h3>Relais</h3><p class="muted">Active Low · LOW = AN</p><table><thead><tr><th scope="col">Funktion</th><th scope="col">GPIO</th></tr></thead><tbody>
+    <tr><th scope="row">1 · Pumpe ein / aus</th><td id="org-relay-pump">—</td></tr>
+    <tr><th scope="row">2 · Pumprichtung</th><td id="org-relay-direction">—</td></tr>
+    <tr><th scope="row">3 · Solarpumpe <small>reserviert</small></th><td id="org-relay-solar">—</td></tr>
+    <tr><th scope="row">4 · Ölbrennerfreigabe</th><td id="org-relay-oil">—</td></tr>
+  </tbody></table><p class="org-spi muted">Richtungsrelais AUS: <span id="org-direction-off">—</span> (Zuordnung an der Anlage prüfen).</p></div>
+</div>
+<p class="org-note muted">Die Ölfreigabe zeigt den Schaltbefehl; eine Rückmeldung über den tatsächlichen Brennerlauf gibt es nicht. GPIO 9 und 10 müssen zur Verdrahtung passen.</p>
+</section>
 <section id="info-section" aria-labelledby="info-heading">
 <h2 id="info-heading">ESP-Informationen</h2><p class="muted">Speicherwerte: Aktualisierung alle 5 Sekunden.</p>
 <p id="info-status" class="muted" role="status">Gerätedaten werden geladen …</p>
@@ -387,6 +435,26 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 const root=document.getElementById('controllers');
 const connection=document.getElementById('connection');
 const themeToggle=document.getElementById('theme-toggle');
+const navToggle=document.getElementById('nav-toggle'),navLinks=document.getElementById('nav-links');
+const compactNav=window.matchMedia('(max-width: 999px)');
+function syncNavigation(){
+  navToggle.hidden=!compactNav.matches;
+  navLinks.hidden=compactNav.matches;
+  navToggle.setAttribute('aria-expanded','false');
+}
+navToggle.addEventListener('click',()=>{
+  const expanded=navToggle.getAttribute('aria-expanded')==='true';
+  navLinks.hidden=expanded;
+  navToggle.setAttribute('aria-expanded',String(!expanded));
+});
+navToggle.addEventListener('keydown',event=>{
+  if(event.key==='Escape'&&!navLinks.hidden){navLinks.hidden=true;navToggle.setAttribute('aria-expanded','false');navToggle.focus();}
+});
+navLinks.addEventListener('keydown',event=>{
+  if(event.key==='Escape'&&compactNav.matches){navLinks.hidden=true;navToggle.setAttribute('aria-expanded','false');navToggle.focus();}
+});
+if(compactNav.addEventListener)compactNav.addEventListener('change',syncNavigation);else compactNav.addListener(syncNavigation);
+syncNavigation();
 function syncThemeToggle(){
   const light=document.documentElement.classList.contains('light');
   themeToggle.textContent=light?'Dunkles Design':'Helles Design';
@@ -663,6 +731,7 @@ function updateSimulation(data){
   document.querySelector('.history-link').href=simulationEnabled?'/verlauf?test=on':'/verlauf';
   document.querySelector('.update-link').href=simulationEnabled?'/update?test=on':'/update';
   document.querySelector('.info-link').href=simulationEnabled?'/info?test=on':'/info';
+  document.querySelector('.organigram-link').href=simulationEnabled?'/organigramm?test=on':'/organigramm';
   if(!testParameterHandled){
     testParameterHandled=true;
     const url=new URL(location.href),wanted=url.searchParams.get('test');
@@ -1065,6 +1134,31 @@ async function loadSparklines(){
   }catch(error){sparkData=null;sparkMessage='Verlauf nicht erreichbar. Neuer Versuch erfolgt automatisch.';}
   finally{sparkLoading=false;panels.forEach((p,id)=>drawSparkline(p.sparkline,id,p.section.querySelector('h2').textContent));}
 }
+function updateOrganigram(data){
+  const status=document.getElementById('org-status');
+  const controllers=data&&Array.isArray(data.controllers)?data.controllers:[];
+  const automatic=data&&data.automatic,heating=data&&data.heating,hardware=data&&data.hardware;
+  const valid=!!(automatic&&automatic.configValid&&heating&&heating.configValid);
+  const summary=!data?'Status nicht verfügbar':!valid?'Automatik gesperrt':
+    (data.simulation?'Testmodus · ':'')+(heating.winter?'Winter · Kombi Mitte':'Sommer · Kombi oben');
+  if(status.textContent!==summary)status.textContent=summary;
+  status.className='badge'+(!data||!valid?' waiting':'');
+  const settings=controllers.find(c=>c.id===0);
+  document.getElementById('org-target').textContent=settings&&settings.configValid&&Number.isFinite(settings.target)?setpointNumber.format(settings.target)+' °C':'— °C';
+  const start=automatic&&Number.isFinite(automatic.differenceStart)?setpointNumber.format(automatic.differenceStart)+' K':'— K';
+  const stop=automatic&&Number.isFinite(automatic.differenceStop)?setpointNumber.format(automatic.differenceStop)+' K':'— K';
+  document.querySelectorAll('.org-start').forEach(e=>e.textContent=start);
+  document.querySelectorAll('.org-stop-value').forEach(e=>e.textContent=stop);
+  for(let i=0;i<5;i++){
+    const c=controllers.find(item=>item.id===i);
+    document.getElementById('org-cs-'+i).textContent=c&&Number.isInteger(c.csPin)?String(c.csPin):'—';
+  }
+  for(const [id,key] of [['org-relay-pump','pump'],['org-relay-direction','direction'],['org-relay-solar','solar'],['org-relay-oil','oil'],['org-spi-clk','clk'],['org-spi-mosi','mosi'],['org-spi-miso','miso']]){
+    const pin=hardware&&hardware[key];
+    document.getElementById(id).textContent=Number.isInteger(pin)?String(pin):'—';
+  }
+  document.getElementById('org-direction-off').textContent=hardware&&hardware.directionOff===0?'Kombi → Puffer':hardware&&hardware.directionOff===1?'Puffer → Kombi':'—';
+}
 async function refresh(){
   const revision=pumpRevision;
   const autoRequestRevision=autoRevision;
@@ -1079,6 +1173,7 @@ async function refresh(){
     if(!heatingBusy&&heatingRequestRevision===heatingRevision)updateHeating(data.heating);
     if(autoRequestRevision===autoRevision){updateAutomatic(data.automatic);updateAutomaticRules(data.automatic,data.controllers,data.pump);}
     if(!pumpBusy&&revision===pumpRevision)updatePump(data.pump);
+    if(document.body.classList.contains('organigram-page')&&!heatingBusy&&heatingRequestRevision===heatingRevision&&autoRequestRevision===autoRevision)updateOrganigram(data);
     updateStorageDiagram(data.controllers);
     drawBurnerPipes();
     const clock=document.getElementById('device-clock');
@@ -1106,6 +1201,7 @@ async function refresh(){
     syncAutoStepperWidth();
     connection.className='muted';connection.textContent='Verbunden · Messwerte werden alle 2 Sekunden aktualisiert';
   }catch(error){
+    if(document.body.classList.contains('organigram-page'))updateOrganigram(null);
     if(!pumpBusy&&revision===pumpRevision)unknownPump();
     if(!heatingBusy&&heatingRequestRevision===heatingRevision)unknownHeating();
     updateStorageDiagram(null);
@@ -1202,7 +1298,7 @@ if(document.body.classList.contains('history-page')){
   historyRange.addEventListener('change',loadHistory);window.addEventListener('resize',drawHistory);loadHistory();setInterval(loadHistory,60000);
 }
 if(document.body.classList.contains('info-page')){loadDeviceInfo();setInterval(loadDeviceInfo,5000);}
-if(!document.body.classList.contains('history-page')&&!document.body.classList.contains('wifi-page')&&!document.body.classList.contains('test-page')&&!document.body.classList.contains('update-page')&&!document.body.classList.contains('info-page')){loadSparklines();setInterval(loadSparklines,60000);}
+if(!document.body.classList.contains('history-page')&&!document.body.classList.contains('wifi-page')&&!document.body.classList.contains('test-page')&&!document.body.classList.contains('update-page')&&!document.body.classList.contains('info-page')&&!document.body.classList.contains('organigram-page')){loadSparklines();setInterval(loadSparklines,60000);}
 refresh();
 </script></main></body></html>)HTML";
 
@@ -1830,7 +1926,8 @@ void sendStatus() {
     if (i) json += ',';
     // Namen sind feste Zeichenketten im Sketch, keine Benutzereingaben.
     json += "{\"id\":" + String(i) + ",\"name\":\"" + String(c.name) +
-      "\",\"temperature\":" + (c.valid ? String(c.currentTemp, 1) : String("null")) +
+      "\",\"csPin\":" + String(unsigned(c.csPin)) +
+      ",\"temperature\":" + (c.valid ? String(c.currentTemp, 1) : String("null")) +
       ",\"valid\":" + String(c.valid ? "true" : "false") +
       ",\"fault\":" + String(c.fault) +
       ",\"rawRtd\":" + String(c.rawRtd) +
@@ -1856,6 +1953,11 @@ void sendStatus() {
   bool roofOnline = roofSeen && WiFi.status() == WL_CONNECTED && millis() - lastRoofHeartbeat < ROOF_TIMEOUT;
   json += "],\"pump\":" + pumpStatusJson() + ",\"automatic\":" + automaticStatusJson() +
     ",\"heating\":" + heatingStatusJson() +
+    ",\"hardware\":{\"clk\":" + String(SPI_CLK) + ",\"mosi\":" + String(SPI_MOSI) +
+    ",\"miso\":" + String(SPI_MISO) + ",\"pump\":" + String(unsigned(PUMP_ENABLE_PIN)) +
+    ",\"direction\":" + String(unsigned(PUMP_DIRECTION_PIN)) + ",\"solar\":" + String(unsigned(SOLAR_PUMP_PIN)) +
+    ",\"oil\":" + String(unsigned(OIL_BURNER_PIN)) +
+    ",\"directionOff\":" + String(DIRECTION_RELAY_OFF_DIRECTION == PumpDirection::BufferToCombi ? 1 : 0) + "}" +
     ",\"wifi\":" + wifiStatusJson() + ",\"clock\":" + clockStatusJson() +
     ",\"roof\":{\"seen\":" + String(roofSeen ? "true" : "false") +
     ",\"online\":" + String(roofOnline ? "true" : "false") +

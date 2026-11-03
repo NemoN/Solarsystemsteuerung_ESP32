@@ -236,6 +236,7 @@ void beginWebSerialMonitor() {
   dashboard.server().on("/verlauf", HTTP_GET, [](AsyncWebServerRequest* req) { dashboard.servePage(req); });
   dashboard.server().on("/update", HTTP_GET, [](AsyncWebServerRequest* req) { dashboard.servePage(req); });
   dashboard.server().on("/info", HTTP_GET, [](AsyncWebServerRequest* req) { dashboard.servePage(req); });
+  dashboard.server().on("/organigramm", HTTP_GET, [](AsyncWebServerRequest* req) { dashboard.servePage(req); });
   dashboard.server().on("/webserial", HTTP_GET, [](AsyncWebServerRequest* req) {
     req->redirect(String("http://") + req->client()->localIP().toString() + ":81/");
   });
