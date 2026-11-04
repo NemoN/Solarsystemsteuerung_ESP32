@@ -1,11 +1,11 @@
-Backload 1.14.4 – automatische und manuelle Pumpensteuerung
+Backload 1.14.5 – automatische und manuelle Pumpensteuerung
 
 Sensoren und Relais
 Fünf MAX31865-Sensoren mit gemeinsamer Software-SPI-Verbindung:
   CS GPIO 4: Kombispeicher oben      (API-ID 0)
   CS GPIO 5: Kombispeicher Mitte     (API-ID 1, Winterfühler)
-  CS GPIO 6: Pufferspeicher oben    (API-ID 2)
-  CS GPIO 7: Kombispeicher unten     (API-ID 3, nur Anzeige)
+  CS GPIO 6: Kombispeicher unten     (API-ID 3, nur Anzeige)
+  CS GPIO 7: Pufferspeicher oben     (API-ID 2)
   CS GPIO 15: Solarpanel            (API-ID 4, nur Anzeige)
   SPI: CLK GPIO 38, MOSI GPIO 11, MISO GPIO 13.
 Die ursprünglichen drei Sensor-IDs bleiben gleich; das vorhandene
@@ -115,7 +115,7 @@ ESP-Informationen: http://<ESP32-IP>/info
 Organigramm und GPIO-Zuordnung: http://<ESP32-IP>/organigramm
 Live-Monitor: http://<ESP32-IP>:81/ (oder Link in der Oberfläche).
 Die Oberfläche und Steuerungs-API verwenden Port 80, der Monitor Port 81.
-Varianten 1.14.4-mit-ap und 1.14.4-ohne-ap: Beide starten zunächst
+Varianten 1.14.5-mit-ap und 1.14.5-ohne-ap: Beide starten zunächst
 mit ESP32-Zugang. In der Ohne-AP-Version wird dieser nach 30 Sekunden stabiler
 Heimnetzverbindung und abgeschlossener Update-Startprüfung ausgeschaltet. Bei
 30 Sekunden Verbindungsausfall, fehlenden Zugangsdaten oder einer WLAN-

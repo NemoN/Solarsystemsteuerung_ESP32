@@ -33,10 +33,10 @@
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
 #ifdef BACKLOAD_AP_COMPARISON_NO_AP
-const char* FIRMWARE_VERSION = "1.14.4-ohne-ap";
+const char* FIRMWARE_VERSION = "1.14.5-ohne-ap";
 constexpr bool AP_RECOVERY_ONLY = true;
 #else
-const char* FIRMWARE_VERSION = "1.14.4-mit-ap";
+const char* FIRMWARE_VERSION = "1.14.5-mit-ap";
 constexpr bool AP_RECOVERY_ONLY = false;
 #endif
 
@@ -186,8 +186,8 @@ struct TemperatureController {
 TemperatureController controllers[] = {
   {4, 0, 68.0, 1.5, "Kombispeicher oben", nullptr, NAN, 0, false, &ROOM_HEATING_LIMITS, false, 0, nullptr, nullptr},
   {5, -1, 0, 0, "Kombispeicher Mitte", nullptr, NAN, 0, false, nullptr, false, 0, nullptr, nullptr},
-  {6, -1, 0, 0, "Pufferspeicher oben", nullptr, NAN, 0, false, nullptr, false, 0, nullptr, nullptr},
-  {7, -1, 0, 0, "Kombispeicher unten", nullptr, NAN, 0, false, nullptr, false, 0, nullptr, nullptr},
+  {7, -1, 0, 0, "Pufferspeicher oben", nullptr, NAN, 0, false, nullptr, false, 0, nullptr, nullptr},
+  {6, -1, 0, 0, "Kombispeicher unten", nullptr, NAN, 0, false, nullptr, false, 0, nullptr, nullptr},
   {15, -1, 0, 0, "Solarpanel", nullptr, NAN, 0, false, nullptr, false, 0, nullptr, nullptr}
 };
 const int numControllers = sizeof(controllers) / sizeof(controllers[0]);
