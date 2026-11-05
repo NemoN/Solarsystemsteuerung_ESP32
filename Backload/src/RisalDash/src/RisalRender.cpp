@@ -15,11 +15,13 @@ void RisalUI::_handleRoot(AsyncWebServerRequest* req) {
   else if (want == "uz") eff = "uz";
   else if (want == "ar") { eff = "ar"; rtl = true; }
   int active = req->hasParam("layout") ? req->getParam("layout")->value().toInt() : 0;
-  req->sendChunked("text/html", [this, eff, rtl, active](uint8_t* buf, size_t maxLen, size_t index) -> size_t {
+  AsyncWebServerResponse* response = req->beginChunkedResponse("text/html", [this, eff, rtl, active](uint8_t* buf, size_t maxLen, size_t index) -> size_t {
     WindowPrint w(buf, maxLen, index);
     _renderRoot(w, eff, rtl, active);
     return w.produced();
   });
+  response->addHeader("Cache-Control", "no-store");
+  req->send(response);
 }
 
 void RisalUI::_renderRoot(Print& out, const char* eff, bool rtl, int active) {

@@ -6,14 +6,19 @@
 #include <Adafruit_MAX31865.h>
 #include <WiFi.h>
 #include <WiFiUdp.h>
+#include <ESPmDNS.h>
 #include <WebServer.h>
 #include <Preferences.h>
 #include "WebSerialMonitor.h"
 #include "SensorReading.h"
 #include "PumpControl.h"
 #include "AutomaticControl.h"
+#include "SolarControl.h"
 #include "TemperatureHistory.h"
 #include "RecoveryApPolicy.h"
+#include "Hostname.h"
+#include "StatusLed.h"
+#include <esp32-hal-rgb-led.h>
 #include <esp_heap_caps.h>
 #include <esp_ota_ops.h>
 #include <esp_timer.h>
@@ -33,10 +38,10 @@
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
 #ifdef BACKLOAD_AP_COMPARISON_NO_AP
-const char* FIRMWARE_VERSION = "1.14.5-ohne-ap";
+const char* FIRMWARE_VERSION = "2.0.0-ohne-ap";
 constexpr bool AP_RECOVERY_ONLY = true;
 #else
-const char* FIRMWARE_VERSION = "1.14.5-mit-ap";
+const char* FIRMWARE_VERSION = "2.0.0-mit-ap";
 constexpr bool AP_RECOVERY_ONLY = false;
 #endif
 
@@ -91,12 +96,17 @@ const char* AP_PASSWORD = "Solar2026";
 #define SPI_MISO  13
 #define SPI_MOSI  11
 #define LED_PIN   2
+// Integrierte adressierbare RGB-LED; GPIO 48 am Testgerät bestätigt.
+constexpr uint8_t RGB_STATUS_PIN = 48;
 
 // Vier Active-Low-Relais: LOW = Relais AN, HIGH = Relais AUS.
 const uint8_t PUMP_ENABLE_PIN = 3;
 const uint8_t PUMP_DIRECTION_PIN = 8;
-const uint8_t SOLAR_PUMP_PIN = 9;  // Relais 3: reserviert, bleibt AUS.
+const uint8_t SOLAR_PUMP_PIN = 9;  // Relais 3: Solarpumpe, Active Low.
 const uint8_t OIL_BURNER_PIN = 10; // Relais 4: manuelle Ölbrennerfreigabe.
+static_assert(RGB_STATUS_PIN != SPI_CLK && RGB_STATUS_PIN != SPI_MOSI && RGB_STATUS_PIN != SPI_MISO &&
+  RGB_STATUS_PIN != LED_PIN && RGB_STATUS_PIN != PUMP_ENABLE_PIN && RGB_STATUS_PIN != PUMP_DIRECTION_PIN &&
+  RGB_STATUS_PIN != SOLAR_PUMP_PIN && RGB_STATUS_PIN != OIL_BURNER_PIN, "RGB-LED benötigt einen eigenen GPIO.");
 // Vorgesehene Belegung; an die tatsächliche Verdrahtung des Relaisboards anpassen.
 static_assert(OIL_BURNER_PIN != PUMP_ENABLE_PIN && OIL_BURNER_PIN != PUMP_DIRECTION_PIN &&
   OIL_BURNER_PIN != SOLAR_PUMP_PIN, "Relais benötigen unterschiedliche GPIOs.");
@@ -109,6 +119,9 @@ PumpDirection manualDirection = DIRECTION_RELAY_OFF_DIRECTION;
 const bool AUTOMATIC_PUMP_CONFIGURED = true;
 AutomaticControl automaticControl;
 AutomaticThresholds automaticThresholds = {8.0f};
+SolarControl solarControl;
+float solarStartDifference = SolarControl::DEFAULT_START;
+bool solarSettingsValid = true;
 bool oilBurnerEnabled = false; // Sommer = AUS, Winter = AN; keine Flammenrückmeldung.
 bool heatingModeValid = false;
 bool autoSettingsValid = true;
@@ -134,13 +147,21 @@ const unsigned long MEASUREMENT_INTERVAL = 2000;
 const size_t HISTORY_CAPACITY = 365UL * 24 * 60;
 TemperatureHistory temperatureHistory;
 unsigned long lastMeasurement = 0;
+uint32_t lastSolarMeasurement = 0;
+bool solarMeasurementReady = false;
+constexpr uint32_t SOLAR_MAX_MEASUREMENT_AGE = 10000;
 unsigned long lastHeartbeat = 0;
 bool ledState = LOW;
+StatusLed statusLed;
+bool statusLedPinSafe = false;
 bool storageReady = false;
 // Der asynchrone öffentliche Server verbindet sich nur über Loopback mit
 // dieser Steuerungs-API; deren Handler laufen weiterhin im Hauptzyklus.
 WebServer server(IPAddress(127, 0, 0, 1), 8080);
 Preferences preferences;
+Preferences hostnamePreferences;
+bool hostnameStorageReady = false, hostnameUsesDefault = true, mdnsReady = false;
+String configuredHostname, activeHostname;
 WiFiUDP roofUdp;
 const uint16_t ROOF_HEARTBEAT_PORT = 4210;
 const char ROOF_HEARTBEAT[] = "DACHSENSOR_1";
@@ -251,26 +272,31 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 </style>
 </head>
 <body><main>
-<script>document.body.classList.toggle('wifi-page',location.pathname==='/wlan');document.body.classList.toggle('test-page',location.pathname==='/testwerte');document.body.classList.toggle('history-page',location.pathname==='/verlauf');document.body.classList.toggle('update-page',location.pathname==='/update');document.body.classList.toggle('info-page',location.pathname==='/info');document.body.classList.toggle('organigram-page',location.pathname==='/organigramm');</script>
+<script>document.body.classList.toggle('settings-page',['/einstellungen','/testwerte','/sicherheit'].includes(location.pathname));document.body.classList.toggle('history-page',location.pathname==='/verlauf');document.body.classList.toggle('info-page',location.pathname==='/info');document.body.classList.toggle('organigram-page',location.pathname==='/regelungsuebersicht');</script>
 <nav class="page-nav" aria-label="Navigation">
   <div class="nav-sticky">
   <button id="nav-toggle" type="button" aria-controls="nav-links" aria-expanded="false" hidden><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Menü</button>
   <div id="nav-links" class="nav-links">
-  <a class="dashboard-link" href="/"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M15 18l-6-6 6-6"/><path d="M9 12h11"/></svg><span>Zur Steuerung</span></a>
+  <a class="dashboard-link" href="/"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21v-7h6v7"/></svg><span>Steuerung</span></a>
   <a class="history-link" href="/verlauf"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 4v16h16"/><path d="M7 15l4-4 3 2 5-7"/></svg><span>Temperaturverlauf</span></a>
-  <a class="organigram-link" href="/organigramm"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="8" y="2" width="8" height="5" rx="1"/><rect x="2" y="17" width="8" height="5" rx="1"/><rect x="14" y="17" width="8" height="5" rx="1"/><path d="M12 7v5M6 17v-5h12v5"/></svg><span>Organigramm</span></a>
+  <a class="organigram-link" href="/regelungsuebersicht"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="8" y="2" width="8" height="5" rx="1"/><rect x="2" y="17" width="8" height="5" rx="1"/><rect x="14" y="17" width="8" height="5" rx="1"/><path d="M12 7v5M6 17v-5h12v5"/></svg><span>Regelungsübersicht</span></a>
   <a class="info-link" href="/info"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5h.01"/></svg><span>ESP-Info</span></a>
   <a href="/webserial" id="console-link" target="_blank" rel="noopener"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg><span>Live-Monitor öffnen</span></a>
   <div class="nav-divider" role="separator"></div>
-  <a class="test-values-link" href="/testwerte?test=on" hidden><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3M8 15h8"/></svg><span>Testwerte bearbeiten</span></a>
   <a href="/?test=on" id="test-link" hidden><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="m10 8 6 4-6 4z"/></svg><span>Testmodus starten</span></a>
-  <a class="update-link" href="/update"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M20 7v5h-5M4 17v-5h5"/><path d="M6 9a7 7 0 0 1 12-2l2 5M18 15a7 7 0 0 1-12 2l-2-5"/></svg><span>Firmware aktualisieren</span></a>
-  <a class="wifi-link" href="/wlan"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 8.8a15 15 0 0 1 20 0M5.5 12.3a10 10 0 0 1 13 0M9 15.8a5 5 0 0 1 6 0"/><circle cx="12" cy="19" r="1" fill="currentColor" stroke="none"/></svg><span>WLAN einrichten</span></a>
+  <a class="settings-link" href="/einstellungen"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z"/><path d="M19.4 13.5a7.7 7.7 0 0 0 0-3l1.5-1.2-1.5-2.6-1.8.7a8 8 0 0 0-2.6-1.5L14.7 4h-3l-.4 1.9a8 8 0 0 0-2.6 1.5l-1.8-.7-1.5 2.6 1.5 1.2a7.7 7.7 0 0 0 0 3l-1.5 1.2 1.5 2.6 1.8-.7a8 8 0 0 0 2.6 1.5l.4 1.9h3l.4-1.9a8 8 0 0 0 2.6-1.5l1.8.7 1.5-2.6-1.5-1.2Z" transform="translate(-.2 0)"/></svg><span>Einstellungen</span></a>
+  <div id="settings-subnav" class="settings-subnav" role="group" aria-label="Einstellungsbereiche">
+    <a href="#appearance-section">Darstellung</a>
+    <a href="#security-section">Zugangspasswort</a>
+    <a href="#hostname-section">Hostname</a>
+    <a href="#wifi-section">WLAN einrichten</a>
+    <a href="#update-section">Firmware aktualisieren</a>
+    <a href="#simulation-settings">Testwerte</a>
   </div>
-  <div class="nav-settings"><button id="theme-toggle" class="theme-toggle" type="button">Helles Design</button><span id="firmware-version">Firmware-Version …</span></div>
+  </div>
   </div>
 </nav>
-<header class="dashboard-header"><h1>Solarsystemsteuerung</h1><div class="header-status"><p id="connection" role="status">Verbindung wird aufgebaut …</p><p id="device-clock" class="muted">ESP32-Zeit wird geladen …</p><p id="wifi-signal" class="muted">WLAN-Signal wird geladen …</p></div></header>
+<header class="dashboard-header"><div class="dashboard-title"><h1>Solarsystemsteuerung</h1><p id="firmware-version" class="muted">Version: …</p></div><div class="header-status"><p class="connection-status" role="status"><span id="connection-dot" class="connection-dot" aria-hidden="true"></span><span id="connection">Verbindung wird aufgebaut …</span></p><p id="device-clock" class="muted">ESP32-Zeit wird geladen …</p><p class="wifi-signal-status muted"><svg id="wifi-signal-bars" class="wifi-signal-bars" viewBox="0 0 25 18" role="img" aria-label="WLAN-Signalstärke nicht verfügbar"><rect x="0" y="15" width="3" height="3" rx=".5"/><rect x="5" y="12" width="3" height="6" rx=".5"/><rect x="10" y="9" width="3" height="9" rx=".5"/><rect x="15" y="6" width="3" height="12" rx=".5"/><rect x="20" y="3" width="3" height="15" rx=".5"/></svg><span id="wifi-signal">WLAN-Signal wird geladen …</span></p></div></header>
 <div id="sim-banner" role="status" hidden><strong>Testmodus:</strong> Werte, Verlauf und Pumpe sind simuliert. Echte Relais bleiben aus. <button id="test-stop" type="button">Testmodus beenden</button></div>
 <p id="test-message" class="message" role="status"></p>
 <section aria-labelledby="heating-heading">
@@ -284,7 +310,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <section aria-labelledby="pump-heading">
 <div class="heading"><h2 id="pump-heading">Pumpensteuerung</h2><span id="pump-badge" class="badge" role="status">Status wird geladen …</span></div>
 <div class="storage-overview">
-<svg class="burner-pipes" aria-hidden="true"><path class="pipe-vl"/><path class="pipe-rl"/><text class="pipe-vl-label">VL</text><text class="pipe-rl-label">RL</text></svg>
+<svg class="burner-pipes" aria-hidden="true"><path class="pipe-vl"/><path class="pipe-rl"/><path class="solar-link"/><text class="pipe-vl-label">VL</text><text class="pipe-rl-label">RL</text></svg>
 <div id="oil-burner-diagram" class="burner-diagram" role="img" aria-label="Ölbrennerfreigabe: Status unbekannt">
 <svg class="burner-icon" viewBox="0 0 128 96" aria-hidden="true">
 <g fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" stroke-linecap="round">
@@ -313,17 +339,27 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 </g>
 <path id="pump-flow-arrow" d="M187 154H253" marker-end="url(#flow-arrowhead)"/>
 </svg>
+<div id="solar-pump-diagram" class="solar-diagram" role="img" aria-label="Solarpumpe: Status unbekannt">
+<svg class="solar-icon" viewBox="0 0 128 110" aria-hidden="true">
+<g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+<circle cx="96" cy="15" r="6"/><path d="M96 3v3m0 18v3M84 15h3m18 0h3M87.5 6.5l2.2 2.2m12.6 12.6 2.2 2.2m0-17-2.2 2.2"/>
+<path class="solar-panel-body" d="M19 14h55l8 30H11z"/><path d="M15 29h63M35 14l-3 30m23-30 3 30M46 44v9h18v14"/>
+<circle class="solar-pump-body" cx="64" cy="81" r="14"/><g class="solar-pump-rotor"><circle cx="64" cy="81" r="3"/><path d="M64 70v8m11 3h-8m-3 11v-8m-11-3h8"/></g><path d="M50 81H36"/>
+</g></svg>
+<strong>Solarpumpe</strong><output id="solar-diagram-state">Status unbekannt</output>
+<span id="solar-diagram-panel">Solarpanel: keine aktuellen Daten</span><span id="solar-diagram-detail">Keine aktuellen Daten</span>
+</div>
 </div>
 <p id="pump-direction-state" class="muted">Förderrichtung wird geladen …</p>
 <div class="pump-controls">
-<div><button id="manual-switch" class="relay-switch" type="button" role="switch" aria-checked="false" aria-describedby="manual-help" disabled><span class="switch-track" aria-hidden="true"></span><span>Manuelle Steuerung</span></button><p id="manual-help" class="muted">Handbetrieb übergeht Temperaturregelung und Sensorfehler. Nach Neustart ist er aus; die Automatik kann starten.</p></div>
-<div><button id="pump-switch" class="relay-switch" type="button" role="switch" aria-checked="false" aria-describedby="pump-help" disabled><span class="switch-track" aria-hidden="true"></span><span>Pumpe ein / aus</span></button><p id="pump-help" class="muted">Zuerst die manuelle Steuerung einschalten.</p></div>
+<div><button id="manual-switch" class="relay-switch" type="button" role="switch" aria-checked="false" aria-describedby="manual-help" disabled><span class="switch-track" aria-hidden="true"></span><span>Manuelle Steuerung</span></button><p id="manual-help" class="muted">Die manuelle Steuerung gilt nur für die Umladepumpe und übergeht dort die Temperaturregelung und Sensorfehler. Nach einem Neustart ist sie ausgeschaltet.</p></div>
+<div><button id="pump-switch" class="relay-switch" type="button" role="switch" aria-checked="false" aria-describedby="pump-help" disabled><span class="switch-track" aria-hidden="true"></span><span>Umladepumpe ein / aus</span></button><p id="pump-help" class="muted">Zuerst die manuelle Steuerung einschalten.</p></div>
 <div><button id="direction-switch" class="relay-switch" type="button" role="switch" aria-checked="false" aria-describedby="direction-help" disabled><span class="switch-track" aria-hidden="true"></span><span>Pumprichtung · Relais 2</span></button><p id="direction-help" class="muted">Aus: Kombi → Puffer. Ein: Puffer → Kombi.</p></div>
 </div>
 <p id="pump-mode-detail" class="muted">Steuerungsmodus wird geladen …</p>
 <p id="pump-progress" class="message" role="status"></p>
 <p id="pump-message" class="message" role="status"></p>
-<p class="muted">Richtungswechsel: Die Pumpe pausiert 2 Sekunden, auch im Handbetrieb.</p>
+<p class="muted">Richtungswechsel: Die Pumpe pausiert 2 Sekunden, auch bei manueller Steuerung.</p>
 </section>
 <section aria-labelledby="auto-heading">
 <h2 id="auto-heading">Automatische Regelung</h2>
@@ -345,36 +381,92 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <tr><th scope="row">Puffer → Kombi</th><td id="auto-return-start"></td><td id="auto-return-stop"></td></tr></tbody></table></div>
 </details>
 </section>
-<p id="test-page-status" role="status">Verbindung wird aufgebaut …</p>
+<section id="solar-section" aria-labelledby="solar-heading">
+<div class="heading"><h2 id="solar-heading">Solarpumpe</h2><span id="solar-badge" class="badge" role="status">Status wird geladen …</span></div>
+<p class="muted">Relais 3 regelt unabhängig von der Umladepumpe anhand von Solarpanel und Kombispeicher unten.</p>
+<p id="solar-detail" class="muted">Werte werden geladen …</p>
+<form id="solar-form">
+<div><label for="solar-start">Einschaltdifferenz (3–10 K)</label><div class="stepper"><button type="button" data-direction="-1" aria-label="Solar-Einschaltdifferenz senken">−</button><input id="solar-start" type="number" name="start" min="3" max="10" step="0.1" inputmode="decimal" required><button type="button" data-direction="1" aria-label="Solar-Einschaltdifferenz erhöhen">+</button></div></div>
+<button type="submit">Solarregelung speichern</button>
+</form>
+<p class="muted">Einschalten ab eingestellter Differenz; Ausschalten bei höchstens 1 K oder Sensorfehler.</p>
+<p id="solar-message" class="message" role="status"></p>
+</section>
+
 <section id="organigram-section" aria-labelledby="organigram-heading">
-<div class="heading"><h2 id="organigram-heading">Organigramm · Backload</h2><span id="org-status" class="badge" role="status">Status wird geladen …</span></div>
-<p class="muted">Regelungsablauf und Anschlüsse dieser Steuerung.</p>
+<header class="org-header"><div><h1 id="organigram-heading">Regelungsübersicht</h1><p class="muted">So entscheidet die Steuerung über Betriebsart und Förderrichtung.</p></div><span id="org-status" class="badge" role="status">Status wird geladen …</span></header>
 <div class="org-flow">
-  <div class="org-node org-mode"><h3>Betriebsart</h3><div class="org-modes"><div><strong>Sommer</strong><span>Kombi oben · Öl gesperrt</span></div><div><strong>Winter</strong><span>Kombi Mitte · Öl freigegeben</span></div></div></div>
-  <div class="org-arrow" aria-hidden="true"><svg viewBox="0 0 24 30"><path d="M12 2v20m-6-6 6 6 6-6"/></svg></div>
-  <div class="org-branches">
-    <article class="org-node org-charge"><h3>Kombi → Puffer</h3><p class="org-kicker">Einlagern · Start</p><ul><li>Kombi ≥ <strong id="org-target">— °C</strong></li><li>Kombi − Puffer ≥ <strong class="org-start">— K</strong></li><li>Ölfreigabe aus</li></ul><p class="org-stop">Stopp: Differenz ≤ <strong class="org-stop-value">— K</strong> oder Ölfreigabe an.</p></article>
-    <article class="org-node org-return"><h3>Puffer → Kombi</h3><p class="org-kicker">Rückladen · Start</p><ul><li>Puffer − Kombi ≥ <strong class="org-start">— K</strong></li><li>Keine Mindesttemperatur</li><li>In Sommer und Winter möglich</li></ul><p class="org-stop">Stopp: Differenz ≤ <strong class="org-stop-value">— K</strong>.</p></article>
+  <div class="org-mode">
+    <div class="org-section-title"><svg class="org-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M19 5l-1.5 1.5m-11 11L5 19"/></svg><h2>Betriebsart</h2></div>
+    <div class="org-modes">
+      <div id="org-mode-summer" class="org-season"><div class="org-season-title"><strong>Sommer</strong><span id="org-mode-summer-state" class="org-mode-state"></span></div><span>Kombispeicher oben · Öl gesperrt</span></div>
+      <div id="org-mode-winter" class="org-season"><div class="org-season-title"><strong>Winter</strong><span id="org-mode-winter-state" class="org-mode-state"></span></div><span>Kombispeicher Mitte · Öl freigegeben</span></div>
+    </div>
+    <p class="org-mode-note">Puffer oben ist in beiden Betriebsarten der Vergleichsfühler.</p>
   </div>
-  <div class="org-arrow" aria-hidden="true"><svg viewBox="0 0 24 30"><path d="M12 2v20m-6-6 6 6 6-6"/></svg></div>
-  <div class="org-node org-interlock"><strong>Pumpe &amp; Richtungswechsel</strong><span>Bei Fehler eines Regelungsfühlers stoppt die Automatik. Vor einem Richtungswechsel pausiert die Pumpe 2 Sekunden.</span></div>
+  <div class="org-branches">
+    <article class="org-branch org-charge">
+      <div class="org-branch-head"><svg class="org-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h16m-4-4 4 4-4 4M21 17H5"/></svg><div><h2>Kombi → Puffer</h2><span>Einlagern</span></div></div>
+      <h3>Start · alle Bedingungen</h3><ul><li>Kombi ≥ <strong id="org-target">— °C</strong></li><li>Kombi − Puffer ≥ <strong class="org-start">— K</strong></li><li>Ölfreigabe aus</li></ul>
+      <p class="org-stop"><strong>Stopp:</strong> Differenz ≤ <strong class="org-stop-value">— K</strong> oder Ölfreigabe an.</p>
+    </article>
+    <article class="org-branch org-return">
+      <div class="org-branch-head"><svg class="org-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 7H5m4-4L5 7l4 4M3 17h16"/></svg><div><h2>Puffer → Kombi</h2><span>Rückladen</span></div></div>
+      <h3>Start</h3><ul><li>Puffer − Kombi ≥ <strong class="org-start">— K</strong></li><li>Keine Mindesttemperatur</li><li>In Sommer und Winter möglich</li></ul>
+      <p class="org-stop"><strong>Stopp:</strong> Differenz ≤ <strong class="org-stop-value">— K</strong>.</p>
+    </article>
+  </div>
+  <div class="org-interlock"><svg class="org-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6v5c0 5 3 8 8 10 5-2 8-5 8-10V6z"/><path d="M12 8v4m0 4h.01"/></svg><div><strong>Pumpe &amp; Richtungswechsel</strong><p>Bei Fehler eines Regelungsfühlers stoppt die Automatik. Vor einem Richtungswechsel pausiert die Pumpe 2 Sekunden.</p></div></div>
 </div>
-<div class="org-io">
-  <div><h3>Sensoren · MAX31865</h3><p class="muted">Chip-Select (CS)</p><table><thead><tr><th scope="col">Fühler</th><th scope="col">GPIO</th></tr></thead><tbody>
-    <tr><th scope="row">Kombispeicher oben <small>Sommer</small></th><td id="org-cs-0">—</td></tr>
-    <tr><th scope="row">Kombispeicher Mitte <small>Winter</small></th><td id="org-cs-1">—</td></tr>
-    <tr><th scope="row">Pufferspeicher oben <small>Vergleich</small></th><td id="org-cs-2">—</td></tr>
-    <tr><th scope="row">Kombispeicher unten <small>Anzeige</small></th><td id="org-cs-3">—</td></tr>
-    <tr><th scope="row">Solarpanel <small>Anzeige</small></th><td id="org-cs-4">—</td></tr>
-  </tbody></table><p class="org-spi muted">Gemeinsamer SPI: CLK <span id="org-spi-clk">—</span> · MOSI <span id="org-spi-mosi">—</span> · MISO <span id="org-spi-miso">—</span></p></div>
-  <div><h3>Relais</h3><p class="muted">Active Low · LOW = AN</p><table><thead><tr><th scope="col">Funktion</th><th scope="col">GPIO</th></tr></thead><tbody>
-    <tr><th scope="row">1 · Pumpe ein / aus</th><td id="org-relay-pump">—</td></tr>
-    <tr><th scope="row">2 · Pumprichtung</th><td id="org-relay-direction">—</td></tr>
-    <tr><th scope="row">3 · Solarpumpe <small>reserviert</small></th><td id="org-relay-solar">—</td></tr>
-    <tr><th scope="row">4 · Ölbrennerfreigabe</th><td id="org-relay-oil">—</td></tr>
-  </tbody></table><p class="org-spi muted">Richtungsrelais AUS: <span id="org-direction-off">—</span> (Zuordnung an der Anlage prüfen).</p></div>
+<div class="org-solar" aria-labelledby="org-solar-heading">
+  <div class="heading"><div class="org-section-title"><svg class="org-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="3"/><path d="M12 1v2M4 7h3m10 0h3M6 2l1.5 1.5M18 2l-1.5 1.5M4 13h16l2 8H2zM5 17h14m-7-4v8"/></svg><h2 id="org-solar-heading">Solarregelung</h2></div><span id="org-solar-state" class="badge">Status wird geladen …</span></div>
+  <p class="muted">Die Solarpumpe an Relais 3 arbeitet unabhängig von der Umladepumpe.</p>
+  <dl class="org-solar-values"><div><dt>Solarpanel</dt><dd id="org-solar-panel">—</dd></div><div><dt>Kombispeicher unten</dt><dd id="org-solar-tank">—</dd></div><div><dt>Aktuelle Differenz</dt><dd id="org-solar-difference">—</dd></div></dl>
+  <p><strong>Start:</strong> Solarpanel − Kombi unten ≥ <strong id="org-solar-start">— K</strong> <span class="muted">(einstellbar: 3–10 K)</span>.</p>
+  <p><strong>Stopp:</strong> Differenz ≤ <strong id="org-solar-stop">— K</strong> oder Fehler eines der beiden Sensoren.</p>
+  <p class="org-solar-note muted">Bei Update oder Neustart ist die Pumpe ausgeschaltet; im Testmodus wird nur der Zustand simuliert.</p>
 </div>
-<p class="org-note muted">Die Ölfreigabe zeigt den Schaltbefehl; eine Rückmeldung über den tatsächlichen Brennerlauf gibt es nicht. GPIO 9 und 10 müssen zur Verdrahtung passen.</p>
+<div class="org-led-guide" id="org-led-guide" aria-labelledby="org-led-heading">
+  <div class="org-section-title"><svg class="org-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M4.9 4.9 7 7m10 10 2.1 2.1m0-14.2L17 7M7 17l-2.1 2.1"/></svg><h2 id="org-led-heading">RGB-Statusanzeige</h2></div>
+  <p class="org-led-intro muted">Beispiele für die Signale der LED am ESP32.</p>
+  <ul class="org-led-examples">
+    <li><span class="org-led-dot org-led-normal" aria-hidden="true"></span><span><strong>Automatik</strong><small>Grün · kurzer Impuls alle 2 Sekunden</small></span></li>
+    <li><span class="org-led-dot org-led-manual" aria-hidden="true"></span><span><strong>Manuelle Steuerung</strong><small>Blau · langsames Blinken</small></span></li>
+    <li><span class="org-led-dot org-led-fault" aria-hidden="true"></span><span><strong>Störung</strong><small>Gelb · kurzer Blitz</small></span></li>
+    <li><span class="org-led-dot org-led-test" aria-hidden="true"></span><span><strong>Testmodus</strong><small>Violett · kurzes Blinken</small></span></li>
+    <li><span class="org-led-dot org-led-update" aria-hidden="true"></span><span><strong>Firmware-Update</strong><small>Weiß · pulsierend</small></span></li>
+  </ul>
+  <p class="org-led-priority muted">Bei mehreren Zuständen gilt: Störung vor Update, manueller Steuerung, Testmodus und Automatik.</p>
+</div>
+<div class="org-hardware">
+  <div class="org-hardware-head"><div class="org-section-title"><svg class="org-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v3m6-3v3M9 19v3m6-3v3M2 9h3m-3 6h3m14-6h3m-3 6h3"/></svg><h2>ESP32-S3 &amp; Anschlüsse</h2></div><p class="muted">Die verwendeten GPIOs und ihre Funktionen. Die Nummern stammen aus der laufenden Firmware.</p></div>
+  <div class="org-pin-layout">
+    <div class="org-pin-group org-sensors"><h3>Temperaturfühler</h3><p class="org-pin-intro">MAX31865 · Chip-Select</p><dl class="org-pin-list">
+      <div><dt>Kombispeicher oben <small>Sommerfühler</small></dt><dd>GPIO <span id="org-cs-0">—</span></dd></div>
+      <div><dt>Kombispeicher Mitte <small>Winterfühler</small></dt><dd>GPIO <span id="org-cs-1">—</span></dd></div>
+      <div><dt>Pufferspeicher oben <small>Vergleichsfühler</small></dt><dd>GPIO <span id="org-cs-2">—</span></dd></div>
+      <div><dt>Kombispeicher unten <small>Solarregelung</small></dt><dd>GPIO <span id="org-cs-3">—</span></dd></div>
+      <div><dt>Solarpanel <small>Solarregelung</small></dt><dd>GPIO <span id="org-cs-4">—</span></dd></div>
+    </dl><h3>Gemeinsamer SPI-Bus</h3><dl class="org-pin-list">
+      <div><dt>CLK <small>Taktsignal</small></dt><dd>GPIO <span id="org-spi-clk">—</span></dd></div>
+      <div><dt>MOSI <small>Daten zu den Fühlern</small></dt><dd>GPIO <span id="org-spi-mosi">—</span></dd></div>
+      <div><dt>MISO <small>Daten von den Fühlern</small></dt><dd>GPIO <span id="org-spi-miso">—</span></dd></div>
+    </dl></div>
+    <figure class="org-board"><div class="org-board-photo"><img src="/assets/esp32-board.jpg" alt="ESP32-S3 N16R8 Entwicklungsboard" width="1376" height="1500" loading="lazy"></div><figcaption><strong>ESP32-S3</strong><span>N16R8 · 16 MB Flash · 8 MB PSRAM</span></figcaption></figure>
+    <div class="org-pin-group org-outputs"><h3>Relaisausgänge</h3><p class="org-pin-intro">Active Low · LOW = AN</p><dl class="org-pin-list">
+      <div><dt>Relais 1 <small>Pumpe ein / aus</small></dt><dd>GPIO <span id="org-relay-pump">—</span></dd></div>
+      <div><dt>Relais 2 <small>Pumprichtung</small></dt><dd>GPIO <span id="org-relay-direction">—</span></dd></div>
+      <div><dt>Relais 3 <small>Solarpumpe</small></dt><dd>GPIO <span id="org-relay-solar">—</span></dd></div>
+      <div><dt>Relais 4 <small>Ölbrennerfreigabe</small></dt><dd>GPIO <span id="org-relay-oil">—</span></dd></div>
+    </dl><p class="org-direction muted">Richtungsrelais AUS: <span id="org-direction-off">—</span>.</p><h3>Weitere Anschlüsse</h3><dl class="org-pin-list">
+      <div><dt>LED <small>Lebenszeichen</small></dt><dd>GPIO <span id="org-led">—</span></dd></div>
+      <div><dt>RGB-LED <small>Betriebsstatus</small></dt><dd>GPIO <span id="org-rgb-led">—</span></dd></div>
+      <div><dt>USB-UART <small>Serielle Ausgabe · TX / RX</small></dt><dd>GPIO 43 / 44</dd></div>
+    </dl></div>
+  </div>
+  <p class="org-layout-note muted">Die Einträge sind nach Funktion gruppiert; ihre Position neben dem Bild entspricht nicht der physischen Pin-Reihenfolge.</p>
+  <p class="org-note muted">Die Ölfreigabe zeigt den Schaltbefehl; eine Rückmeldung über den tatsächlichen Brennerlauf gibt es nicht.</p>
+</div>
 </section>
 <section id="info-section" aria-labelledby="info-heading">
 <h2 id="info-heading">ESP-Informationen</h2><p class="muted">Speicherwerte: Aktualisierung alle 5 Sekunden.</p>
@@ -384,14 +476,6 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <div><h3>Firmware</h3><dl><div><dt>Version</dt><dd id="info-version">—</dd></div><div><dt>ESP32-Core</dt><dd id="info-core">—</dd></div><div><dt>ESP-IDF</dt><dd id="info-idf">—</dd></div><div><dt>Aktiver Firmware-Slot</dt><dd id="info-slot">—</dd></div><div><dt>Update-Slot</dt><dd id="info-update-slot">—</dd></div></dl></div>
 <div><h3>Speicher</h3><dl><div><dt>Flash</dt><dd id="info-flash">—</dd></div><div><dt>Interner RAM nutzbar</dt><dd id="info-heap">—</dd></div><div><dt>Interner RAM frei</dt><dd id="info-heap-free">—</dd></div><div><dt>PSRAM nutzbar</dt><dd id="info-psram">—</dd></div><div><dt>PSRAM frei</dt><dd id="info-psram-free">—</dd></div></dl><p class="muted">Der Temperaturverlauf reserviert PSRAM; die nutzbare Größe kann unter der verbauten Größe liegen.</p></div>
 </div></section>
-<section id="update-section" aria-labelledby="update-heading">
-<h2 id="update-heading">Firmware aktualisieren</h2>
-<p class="muted">Beim Update bleibt die Pumpe aus. Der ESP startet neu und der Temperaturverlauf wird gelöscht.</p>
-<button id="release-check" type="button">GitHub-Releases suchen</button><p id="release-message" class="message" role="status">Noch nicht nach Updates gesucht.</p>
-<form id="github-update-form"><label>Firmware-Version<select name="release" required disabled><option value="">Bitte zuerst Releases suchen</option></select></label><button type="submit" disabled>Ausgewählte Version installieren</button><p id="release-download" hidden><a id="release-download-link" target="_blank" rel="noopener noreferrer">Ausgewählte Firmware herunterladen (.bin)</a></p></form>
-<progress id="update-progress" max="100" value="0" hidden></progress><p id="update-message" class="message" role="status"></p>
-<details><summary>Firmware-Datei manuell hochladen</summary><p>Eine für dieses ESP32-S3-Board kompilierte Datei (.bin) auswählen.</p><form id="update-form"><label>Firmware-Datei<input name="firmware" type="file" accept=".bin,application/octet-stream" required></label><button type="submit">Datei hochladen</button></form></details>
-</section>
 <section id="history-section" aria-labelledby="history-heading">
 <h2 id="history-heading">Temperaturverlauf</h2>
 <p class="muted">Eine Messung pro Minute, bis zu einem Jahr. Beim Neustart wird der Verlauf gelöscht. Lange Zeiträume werden für die Anzeige zusammengefasst.</p>
@@ -401,17 +485,27 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <div class="history-chart"><canvas id="history-chart" role="img" aria-label="Temperaturverlauf der ausgewählten Sensoren"></canvas></div>
 <details><summary>Letzte dargestellte Werte</summary><p id="history-latest" class="muted">Noch keine Messwerte.</p></details>
 </section>
-<section id="simulation-section" aria-labelledby="simulation-heading" hidden>
-<h2 id="simulation-heading">Testwerte für die Sensoren</h2>
-<p class="muted">Temperaturen oder Sensorfehler einstellen und übernehmen. Die automatische Variation lässt Temperaturen schwanken. Werte gelten bis zum Neustart.</p>
-<form id="sim-form"><div id="sim-fields"></div><label class="sim-check"><input type="checkbox" name="variation"> Temperaturen automatisch variieren</label><button type="submit">Testwerte übernehmen</button></form>
-<p id="sim-message" class="message" role="status"></p>
+<header id="settings-intro"><h1>Einstellungen</h1><p class="muted">Darstellung, Zugang, WLAN, Firmware und Testwerte dieser Steuerung.</p></header>
+<section id="appearance-section" aria-labelledby="appearance-heading">
+<h2 id="appearance-heading">Darstellung</h2>
+<p class="muted">Das Design wird in diesem Browser gespeichert.</p>
+<div class="theme-options" role="group" aria-label="Darstellung wählen"><button id="theme-light" type="button" aria-pressed="false">Hell</button><button id="theme-dark" type="button" aria-pressed="false">Dunkel</button></div>
 </section>
-<div id="sensor-grid"><div id="controllers"></div>
-<section id="roof-section" aria-labelledby="roof-heading">
-<div class="heading"><h2 id="roof-heading">Dachsensor</h2><span id="roof-badge" class="badge" role="status">Status wird geladen …</span></div>
-<p id="roof-detail" class="muted">Warte auf ein Lebenszeichen aus dem Heimnetz.</p>
-</section></div>
+<section id="security-section" aria-labelledby="security-heading">
+<h2 id="security-heading">Zugangspasswort</h2>
+<p class="muted">Das Passwort schützt die Steuerung und den Live-Monitor. Die Statusabfrage für das Temperaturarchiv bleibt lesbar.</p>
+<form id="password-form">
+<div class="password-field"><label for="access-password">Neues Passwort</label><div class="password-control"><input id="access-password" type="password" minlength="8" maxlength="128" autocomplete="new-password" required><button class="password-visibility" type="button" aria-label="Neues Passwort anzeigen" aria-pressed="false" aria-controls="access-password" title="Passwort anzeigen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path class="password-eye-slash" d="M3 3l18 18"/></svg></button></div></div>
+<div class="password-field"><label for="access-confirm">Passwort wiederholen</label><div class="password-control"><input id="access-confirm" type="password" minlength="8" maxlength="128" autocomplete="new-password" required><button class="password-visibility" type="button" aria-label="Passwortwiederholung anzeigen" aria-pressed="false" aria-controls="access-confirm" title="Passwort anzeigen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path class="password-eye-slash" d="M3 3l18 18"/></svg></button></div></div>
+<button type="submit">Passwort speichern</button></form>
+<button id="password-remove" class="secondary-button" type="button">Passwortschutz entfernen</button><p id="password-message" class="message" role="status"></p>
+</section>
+<section id="hostname-section" aria-labelledby="hostname-heading">
+<h2 id="hostname-heading">Hostname</h2>
+<form id="hostname-form"><label for="hostname-input">Hostname<input id="hostname-input" name="hostname" minlength="1" maxlength="31" pattern="[A-Za-z0-9](?:[A-Za-z0-9-]{0,29}[A-Za-z0-9])?" autocapitalize="none" spellcheck="false" required></label><button type="submit">Hostname speichern</button></form>
+<p class="muted">1–31 Zeichen: Buchstaben, Zahlen und Bindestriche; kein Bindestrich am Anfang oder Ende. Änderungen gelten nach dem nächsten Neustart.</p>
+<button id="hostname-reset" class="secondary-button" type="button">Standardnamen verwenden</button><p id="hostname-active" class="muted" role="status">Hostname wird geladen …</p><p id="hostname-message" class="message" role="status"></p>
+</section>
 <section id="wifi-section" aria-labelledby="wifi-heading">
 <h2 id="wifi-heading">WLAN einrichten</h2>
 <p id="wifi-ap-description" class="muted">Mit einem 2,4-GHz-WLAN verbinden. Der eigene ESP32-WLAN-Zugang bleibt erreichbar.</p>
@@ -430,11 +524,39 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <p id="wifi-message" class="message" role="status"></p>
 <button id="wifi-reset" type="button">Gespeichertes WLAN vergessen</button>
 </section>
+<section id="update-section" aria-labelledby="update-heading">
+<h2 id="update-heading">Firmware aktualisieren</h2>
+<p class="muted">Beim Update bleibt die Pumpe aus. Der ESP startet neu und der Temperaturverlauf wird gelöscht.</p>
+<button id="release-check" type="button">GitHub-Releases suchen</button><p id="release-message" class="message" role="status">Noch nicht nach Updates gesucht.</p>
+<form id="github-update-form"><label>Firmware-Version<select name="release" required disabled><option value="">Bitte zuerst Releases suchen</option></select></label><button type="submit" disabled>Ausgewählte Version installieren</button><p id="release-download" hidden><a id="release-download-link" target="_blank" rel="noopener noreferrer">Ausgewählte Firmware herunterladen (.bin)</a></p></form>
+<progress id="update-progress" max="100" value="0" hidden></progress><p id="update-message" class="message" role="status"></p>
+<details><summary>Firmware-Datei manuell hochladen</summary><p>Eine für dieses ESP32-S3-Board kompilierte Datei (.bin) auswählen.</p><form id="update-form"><label>Firmware-Datei<input name="firmware" type="file" accept=".bin,application/octet-stream" required></label><button type="submit">Datei hochladen</button></form></details>
+</section>
+<section id="simulation-settings" aria-labelledby="simulation-heading">
+<h2 id="simulation-heading">Testwerte für die Sensoren</h2>
+<p id="test-page-status" class="muted" role="status">Verbindung wird aufgebaut …</p>
+<div id="simulation-section" hidden>
+<p class="muted">Temperaturen oder Sensorfehler einstellen und übernehmen. Die automatische Variation lässt Temperaturen schwanken. Werte gelten bis zum Neustart.</p>
+<form id="sim-form"><div id="sim-fields"></div><label class="sim-check"><input type="checkbox" name="variation"> Temperaturen automatisch variieren</label><button type="submit">Testwerte übernehmen</button></form>
+<p id="sim-message" class="message" role="status"></p>
+</div>
+</section>
+<div id="sensor-grid"><div id="controllers"></div>
+<section id="roof-section" aria-labelledby="roof-heading">
+<div class="heading"><h2 id="roof-heading">Dachsensor</h2><span id="roof-badge" class="badge" role="status">Status wird geladen …</span></div>
+<p id="roof-detail" class="muted">Warte auf ein Lebenszeichen aus dem Heimnetz.</p>
+</section></div>
 <noscript><p>Bitte JavaScript aktivieren, um Messwerte und Einstellungen anzuzeigen.</p></noscript>
 <script>
 const root=document.getElementById('controllers');
 const connection=document.getElementById('connection');
-const themeToggle=document.getElementById('theme-toggle');
+function setConnectionStatus(connected){
+  const text=connected?'Verbunden':'Keine Verbindung';
+  connection.className=connected?'muted':'error';
+  if(connection.textContent!==text)connection.textContent=text;
+  document.getElementById('connection-dot').classList.toggle('online',connected);
+  document.getElementById('connection-dot').classList.toggle('offline',!connected);
+}
 const navToggle=document.getElementById('nav-toggle'),navLinks=document.getElementById('nav-links');
 const compactNav=window.matchMedia('(max-width: 999px)');
 function syncNavigation(){
@@ -455,20 +577,39 @@ navLinks.addEventListener('keydown',event=>{
 });
 if(compactNav.addEventListener)compactNav.addEventListener('change',syncNavigation);else compactNav.addListener(syncNavigation);
 syncNavigation();
-function syncThemeToggle(){
-  const light=document.documentElement.classList.contains('light');
-  themeToggle.textContent=light?'Dunkles Design':'Helles Design';
-  themeToggle.setAttribute('aria-label',light?'Zum dunklen Design wechseln':'Zum hellen Design wechseln');
+const settingsSubnav=document.getElementById('settings-subnav');
+settingsSubnav.addEventListener('click',event=>{
+  if(compactNav.matches&&event.target.closest('a')){navLinks.hidden=true;navToggle.setAttribute('aria-expanded','false');}
+});
+function syncSettingsNavigation(){
+  document.querySelectorAll('#settings-subnav a').forEach(link=>{
+    if(location.hash&&link.getAttribute('href')===location.hash)link.setAttribute('aria-current','location');
+    else link.removeAttribute('aria-current');
+  });
 }
-themeToggle.addEventListener('click',()=>{
-  const light=!document.documentElement.classList.contains('light');
+window.addEventListener('hashchange',syncSettingsNavigation);
+syncSettingsNavigation();
+function markCurrentPage(){
+  const pages={'/':'.dashboard-link','/verlauf':'.history-link','/regelungsuebersicht':'.organigram-link','/info':'.info-link','/einstellungen':'.settings-link','/testwerte':'.settings-link','/sicherheit':'.settings-link'};
+  const selector=pages[location.pathname],link=selector&&document.querySelector(selector);
+  if(link)link.setAttribute('aria-current','page');
+}
+markCurrentPage();
+function syncThemeControls(){
+  const light=document.documentElement.classList.contains('light');
+  document.getElementById('theme-light').setAttribute('aria-pressed',String(light));
+  document.getElementById('theme-dark').setAttribute('aria-pressed',String(!light));
+}
+function setTheme(light){
   document.documentElement.classList.toggle('light',light);
   document.documentElement.classList.toggle('dark',!light);
   try{localStorage.setItem('rd-th',light?'light':'dark');}catch(error){}
-  syncThemeToggle();
+  syncThemeControls();
   if(document.body.classList.contains('history-page'))drawHistory();
-});
-syncThemeToggle();
+}
+document.getElementById('theme-light').addEventListener('click',()=>setTheme(true));
+document.getElementById('theme-dark').addEventListener('click',()=>setTheme(false));
+syncThemeControls();
 const temperatureNumber=new Intl.NumberFormat('de-DE',{minimumFractionDigits:1,maximumFractionDigits:1});
 const setpointNumber=new Intl.NumberFormat('de-DE',{maximumFractionDigits:1});
 const inputNumber=value=>typeof value==='number'&&Number.isFinite(value)?value.toFixed(1):'';
@@ -499,6 +640,8 @@ const pumpBadge=document.getElementById('pump-badge');
 const pumpMessage=document.getElementById('pump-message');
 const autoForm=document.getElementById('auto-form');
 const autoMessage=document.getElementById('auto-message');
+const solarForm=document.getElementById('solar-form'),solarMessage=document.getElementById('solar-message');
+let solarDirty=false,solarBusy=false,solarRevision=0;
 function syncAutoStepperWidth(){
   const target=document.querySelector('#controllers section[data-sensor-id="0"] .stepper');
   if(!target)return;
@@ -519,10 +662,27 @@ function drawBurnerPipes(){
     wires.querySelector('.pipe-'+name).setAttribute('d',mobile?`M${x1} ${y1} H${x1+6} V${lane} H${edge} V${y2} H${x2}`:`M${x1} ${y1} H${mid} V${y2} H${x2}`);
     const label=wires.querySelector('.pipe-'+name+'-label');label.setAttribute('x',mobile?x1+9:mid+2);label.setAttribute('y',mobile?lane:y2-3);
   }
+  const solar=box.querySelector('.solar-icon').getBoundingClientRect();
+  if(!solar.width||!solar.height)return;
+  const tx=t.left-a.left+t.width*96/440,ty=t.top-a.top+t.height*260/280,lane=t.bottom-a.top+14;
+  const sx=solar.left-a.left+solar.width*36/128,sy=solar.top-a.top+solar.height*81/110,bend=solar.left-a.left-8;
+  wires.querySelector('.solar-link').setAttribute('d',`M${sx} ${sy} H${bend} V${lane} H${tx} V${ty}`);
 }
 window.addEventListener('resize',drawBurnerPipes);
 if(typeof ResizeObserver!=='undefined')new ResizeObserver(drawBurnerPipes).observe(document.querySelector('.storage-overview'));
 requestAnimationFrame(drawBurnerPipes);
+// Die dekorative Drehung ruht außerhalb des sichtbaren Bereichs und in Hintergrund-Tabs.
+function setupPumpMotion(){
+  const overview=document.querySelector('.storage-overview');
+  let visible=false;
+  const sync=()=>overview.classList.toggle('motion-visible',visible&&!document.hidden);
+  if('IntersectionObserver' in window){
+    const observer=new IntersectionObserver(entries=>{visible=entries.some(entry=>entry.isIntersecting);sync();});
+    observer.observe(overview);
+  }else{visible=true;sync();}
+  document.addEventListener('visibilitychange',sync);
+}
+setupPumpMotion();
 const heatingMessage=document.getElementById('heating-message');
 let heatingState=null,heatingBusy=false,heatingRevision=0;
 const simForm=document.getElementById('sim-form');
@@ -560,21 +720,21 @@ function updatePump(state){
   manualSwitch.setAttribute('data-state',state.manual?'on':'off');
   pumpSwitch.setAttribute('aria-checked',String(state.requestedOn));
   directionSwitch.setAttribute('aria-checked',String(state.requestedDirection===1));
-  pumpBadge.textContent='Pumpe: '+(state.on?'AN':'AUS')+(state.switching?' · Richtungswechsel':'');
+  pumpBadge.textContent='Umladepumpe: '+(state.on?'AN':'AUS')+(state.switching?' · Richtungswechsel':'');
   pumpBadge.className='badge'+(state.on?' on':'');
   document.getElementById('pump-direction-state').textContent='Förderrichtung: '+directionName(state.direction)+(state.direction!==state.requestedDirection?' · Angefordert: '+directionName(state.requestedDirection):'');
   document.getElementById('pump-flow-title').textContent='Förderrichtung: '+directionName(state.direction)+', Pumpe '+(state.on?'an':'aus');
   document.getElementById('pump-flow-arrow').setAttribute('d',state.direction===0?'M187 154H253':'M253 154H187');
   document.getElementById('pump-flow-arrow').style.visibility='visible';
   document.querySelector('.pump-flow').classList.toggle('stopped',!state.on);
-  document.getElementById('pump-mode-detail').textContent=state.manual?'Handbetrieb aktiv · Ölbrennersperre gilt.':state.automaticConfigured?'Automatik aktiv · Bei Fehler eines Regelungsfühlers bleibt die Pumpe aus.':'Automatik gesperrt · Pumpe aus.';
+  document.getElementById('pump-mode-detail').textContent=state.manual?'Manuelle Steuerung aktiv · Ölbrennersperre gilt.':state.automaticConfigured?'Automatik aktiv · Bei Fehler eines Regelungsfühlers bleibt die Pumpe aus.':'Automatik gesperrt · Pumpe aus.';
   document.getElementById('pump-progress').textContent=state.phase==='stopping'?'Pumpe aus · Richtungswechsel nach 2 Sekunden.':state.phase==='settling'?'Richtung umgeschaltet · Relais schaltet.':'';
   updatePumpControls();
 }
 function unknownPump(){
   pumpState=null;
   manualSwitch.setAttribute('data-state','unknown');
-  pumpBadge.textContent='Pumpe: Status unbekannt';pumpBadge.className='badge';
+  pumpBadge.textContent='Umladepumpe: Status unbekannt';pumpBadge.className='badge';
   document.getElementById('pump-direction-state').textContent='Keine aktuelle Förderrichtung. Verbindung zum ESP32 prüfen.';
   document.getElementById('pump-flow-title').textContent='Förderrichtung unbekannt';
   document.getElementById('pump-flow-arrow').style.visibility='hidden';
@@ -598,6 +758,22 @@ function updateStorageDiagram(controllers){
   }
   document.getElementById('pump-flow-desc').textContent=descriptions.join('; ')+'.';
 }
+function updateSolarDiagram(state,simulation,controllers){
+  const diagram=document.getElementById('solar-pump-diagram'),wires=document.querySelector('.burner-pipes');
+  const sensor=Array.isArray(controllers)?controllers.find(c=>c.id===4):null;
+  const validSensor=!!state&&state.sensorsValid&&sensor&&sensor.valid===true&&typeof sensor.temperature==='number'&&Number.isFinite(sensor.temperature);
+  const panel=validSensor?'Solarpanel: '+temperatureNumber.format(sensor.temperature)+' °C':sensor&&!sensor.valid?'Solarpanel: Sensorfehler':'Solarpanel: keine aktuellen Daten';
+  const issue=state&&(!state.configValid?'Einstellung ungültig':!state.sensorsValid?'Sensorfehler':state.paused?'Pausiert':null);
+  const active=!!(state&&!issue&&state.on);
+  const label=!state?'Status unbekannt':issue?issue+' · AUS':active?(simulation?'EIN (simuliert)':'EIN'):(simulation?'AUS (simuliert)':'AUS');
+  const detail=!state?'Keine aktuellen Daten':simulation?'Relais 3: AUS · Testmodus':'Relais 3: '+(state.relayOn?'AN':'AUS');
+  diagram.classList.toggle('running',active);
+  wires.classList.toggle('solar-active',active);
+  document.getElementById('solar-diagram-state').textContent=label;
+  document.getElementById('solar-diagram-panel').textContent=panel;
+  document.getElementById('solar-diagram-detail').textContent=detail;
+  diagram.setAttribute('aria-label','Solarpumpe: '+label+'. '+panel+'. '+detail+'.');
+}
 async function changePump(action){
   if(pumpBusy||pumpState===null||(action!=='manual'&&!pumpState.manual))return;
   const value=action==='manual'?!pumpState.manual:action==='power'?!pumpState.requestedOn:pumpState.requestedDirection===0;
@@ -606,7 +782,7 @@ async function changePump(action){
   try{
     const state=await request('/api/pump',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'HeatingUI'},body:new URLSearchParams({action,value:value?'1':'0'})});
     updatePump(state);
-    pumpMessage.textContent=action==='manual'?(state.manual?'Handbetrieb eingeschaltet. Pumpe ist zunächst AUS.':'Handbetrieb ausgeschaltet.'):'Pumpenbefehl übernommen.';
+    pumpMessage.textContent=action==='manual'?(state.manual?'Manuelle Steuerung eingeschaltet. Pumpe ist zunächst AUS.':'Manuelle Steuerung ausgeschaltet.'):'Pumpenbefehl übernommen.';
   }catch(error){
     // Eine HTTP-Ablehnung ist kein Verbindungsabbruch. Auch bei verlorener
     // Antwort ausschließlich lesen: einen Schaltauftrag niemals blind wiederholen.
@@ -701,7 +877,7 @@ function automaticRuleText(state,controllers,pump){
   const targetValid=settings.configValid&&Number.isFinite(settings.target)&&settings.target>=68&&settings.target<=72;
   return {
     sensor:'Fühler: '+combi.name+' und Pufferspeicher oben. Starttemperatur: '+(targetValid?temp(settings.target):'ungültig')+'.',
-    status:pump&&pump.manual?'Handbetrieb aktiv · Ölbrennersperre gilt.':
+    status:pump&&pump.manual?'Manuelle Steuerung aktiv · Ölbrennersperre gilt.':
       !combi.valid||!buffer.valid?'Sensorfehler · Automatik hält die Pumpe aus.':'Gespeicherte Einstellungen.',
     chargeStart:!state.allowCharging?'Einlagerung durch Sommer-/Winterumschaltung gesperrt.':!targetValid?'Einlagerung gesperrt: Starttemperatur muss 68–72 °C betragen.':
       'Ölbrennerfreigabe AUS UND Kombi ≥ '+temp(settings.target)+' UND Kombi − Puffer ≥ '+delta(state.differenceStart)+'.',
@@ -723,20 +899,18 @@ function updateSimulation(data){
   simulationEnabled=data.simulation===true;
   document.getElementById('sim-banner').hidden=!simulationEnabled;
   document.getElementById('test-link').hidden=simulationEnabled;
-  document.querySelector('.test-values-link').hidden=!simulationEnabled;
   document.getElementById('simulation-section').hidden=!simulationEnabled;
   document.getElementById('test-page-status').textContent=simulationEnabled?'Testmodus aktiv · Echte Relais aus.':'Testwerte nur im Testmodus verfügbar.';
   document.querySelector('.dashboard-link').href=simulationEnabled?'/?test=on':'/';
-  document.querySelector('.wifi-link').href=simulationEnabled?'/wlan?test=on':'/wlan';
   document.querySelector('.history-link').href=simulationEnabled?'/verlauf?test=on':'/verlauf';
-  document.querySelector('.update-link').href=simulationEnabled?'/update?test=on':'/update';
   document.querySelector('.info-link').href=simulationEnabled?'/info?test=on':'/info';
-  document.querySelector('.organigram-link').href=simulationEnabled?'/organigramm?test=on':'/organigramm';
+  document.querySelector('.organigram-link').href=simulationEnabled?'/regelungsuebersicht?test=on':'/regelungsuebersicht';
+  document.querySelector('.settings-link').href=simulationEnabled?'/einstellungen?test=on':'/einstellungen';
   if(!testParameterHandled){
     testParameterHandled=true;
     const url=new URL(location.href),wanted=url.searchParams.get('test');
     if(wanted==='on'&&!simulationEnabled)changeTestMode(true);
-    else if(simulationEnabled&&(wanted==='off'||(url.pathname==='/'&&wanted!=='on')))changeTestMode(false);
+    else if(simulationEnabled&&wanted==='off')changeTestMode(false);
     else reflectTestModeInUrl(simulationEnabled);
   }
   if(!simulationEnabled)return;
@@ -799,6 +973,35 @@ autoForm.addEventListener('submit',async event=>{
   }catch(error){autoMessage.className='message error';autoMessage.textContent='Speichern nicht bestätigt: '+error.message;}
   finally{autoBusy=false;autoForm.querySelectorAll('input,select,button').forEach(e=>e.disabled=false);}
 });
+solarForm.addEventListener('input',()=>{solarDirty=true;solarMessage.className='message';solarMessage.textContent='Noch nicht gespeichert.';});
+solarForm.addEventListener('click',event=>{
+  const button=event.target.closest('.stepper button');
+  if(!button||button.disabled)return;
+  const input=solarForm.elements.start,old=Number(input.value);
+  input.value=String(Math.max(3,Math.min(10,(Number.isFinite(old)&&input.value!==''?old:5)+Number(button.dataset.direction))));
+  input.dispatchEvent(new Event('input',{bubbles:true}));
+});
+function updateSolar(state,simulation){
+  const badge=document.getElementById('solar-badge'),detail=document.getElementById('solar-detail');
+  if(!state){badge.className='badge';badge.textContent='Status unbekannt';detail.textContent='Keine aktuellen Daten.';return;}
+  const issue=!state.configValid?'Einstellung ungültig':!state.sensorsValid?'Sensorfehler':state.paused?'Pausiert':null;
+  badge.className='badge'+(issue?' waiting':state.on?' on':'');
+  badge.textContent=issue?issue+' · AUS':state.on?(simulation?'EIN · simuliert':'EIN'):(simulation?'AUS · simuliert':'AUS');
+  detail.textContent=(Number.isFinite(state.difference)?'Aktuelle Differenz: '+setpointNumber.format(state.difference)+' K. ':'Differenz nicht verfügbar. ')+
+    (!state.configValid?'Bitte Einschaltdifferenz erneut speichern.':!state.sensorsValid?'Solarpanel und Kombispeicher unten prüfen.':state.paused?'Update oder Neustart läuft.':'');
+  if(!solarDirty&&!solarBusy&&!solarForm.contains(document.activeElement)&&Number.isFinite(state.differenceStart))solarForm.elements.start.value=inputNumber(state.differenceStart);
+}
+solarForm.addEventListener('submit',async event=>{
+  event.preventDefault();if(solarBusy)return;
+  const input=solarForm.elements.start.value,number=Number(input);
+  if(!input.trim()||!Number.isFinite(number)||number<3||number>10||Math.abs(number*10-Math.round(number*10))>0.0001){solarMessage.className='message error';solarMessage.textContent='Einschaltdifferenz von 3 bis 10 K in 0,1-K-Schritten eingeben.';return;}
+  solarBusy=true;solarRevision++;solarForm.querySelectorAll('input,button').forEach(e=>e.disabled=true);solarMessage.className='message';solarMessage.textContent='Wird gespeichert …';
+  try{
+    const state=await request('/api/solar',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'HeatingUI'},body:new URLSearchParams({start:input})});
+    solarDirty=false;updateSolar(state,simulationEnabled);solarMessage.textContent='Solarregelung gespeichert.';
+  }catch(error){solarMessage.className='message error';solarMessage.textContent='Speichern nicht bestätigt: '+error.message;}
+  finally{solarBusy=false;solarForm.querySelectorAll('input,button').forEach(e=>e.disabled=false);}
+});
 let wifiBusy=false,wifiDirty=false,wifiScanning=false,wifiRevision=0,wifiPending=null;
 wifiForm.addEventListener('input',()=>{wifiDirty=true;wifiRevision++;});
 wifiNetworks.addEventListener('change',()=>{
@@ -835,7 +1038,15 @@ wifiScanButton.addEventListener('click',async()=>{
   }catch(error){wifiScanMessage.className='error';wifiScanMessage.textContent='Suche nicht abgeschlossen: '+error.message;}
   finally{wifiScanning=false;wifiScanButton.disabled=false;wifiForm.querySelector('button').disabled=false;wifiReset.disabled=false;}
 });
+function updateWifiSignalBars(wifi){
+  const connected=wifi&&wifi.state==='connected'&&Number.isFinite(wifi.rssi);
+  const bars=connected?(wifi.rssi>=-60?5:wifi.rssi>=-67?4:wifi.rssi>=-75?3:wifi.rssi>=-85?2:1):0;
+  const icon=document.getElementById('wifi-signal-bars');
+  icon.querySelectorAll('rect').forEach((bar,index)=>bar.classList.toggle('active',index<bars));
+  icon.setAttribute('aria-label',connected?'WLAN-Signalstärke: '+bars+' von 5 Balken':'WLAN-Signalstärke nicht verfügbar');
+}
 function updateWifi(wifi){
+  updateWifiSignalBars(wifi);
   const states={unconfigured:'Noch kein WLAN gespeichert.',queued:'WLAN-Wechsel wird vorbereitet …',starting:'Verbindung wird vorbereitet …',connecting:'Verbindungsaufbau mit '+wifi.ssid+' …',connected:'Verbunden mit '+wifi.ssid,retry:'Keine WLAN-Verbindung. Name, Passwort und Empfang prüfen. Automatischer Wiederholungsversuch nach 30 Sekunden.'};
   const status=document.getElementById('wifi-status');
   const signal=wifi.state==='connected'&&Number.isFinite(wifi.rssi)?wifi.rssi+' dBm':null;
@@ -893,6 +1104,63 @@ async function changeWifi(reset){
 }
 wifiForm.addEventListener('submit',event=>{event.preventDefault();changeWifi(false);});
 wifiReset.addEventListener('click',()=>changeWifi(true));
+const passwordForm=document.getElementById('password-form'),passwordMessage=document.getElementById('password-message');
+function setupAccessPasswordVisibility(){
+  passwordForm.querySelectorAll('.password-visibility').forEach(button=>{
+    const input=document.getElementById(button.getAttribute('aria-controls'));
+    button.addEventListener('click',()=>{
+      const visible=input.type==='password';
+      input.type=visible?'text':'password';
+      button.setAttribute('aria-pressed',String(visible));
+      button.title=visible?'Passwort verbergen':'Passwort anzeigen';
+    });
+  });
+}
+setupAccessPasswordVisibility();
+async function saveAccessPassword(password){
+  passwordMessage.className='message';passwordMessage.textContent='Einstellung wird gespeichert …';
+  passwordForm.querySelectorAll('input,button').forEach(e=>e.disabled=true);
+  document.getElementById('password-remove').disabled=true;
+  try{
+    await request('/auth/password',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'HeatingUI'},body:new URLSearchParams({password})});
+    // A change invalidates sessions. The next request shows the login if needed.
+    location.replace('/einstellungen'+(simulationEnabled?'?test=on':''));
+  }catch(error){passwordMessage.className='message error';passwordMessage.textContent='Nicht gespeichert: '+error.message;}
+  finally{passwordForm.querySelectorAll('input,button').forEach(e=>e.disabled=false);document.getElementById('password-remove').disabled=false;}
+}
+passwordForm.addEventListener('submit',event=>{
+  event.preventDefault();
+  const password=document.getElementById('access-password'),confirmation=document.getElementById('access-confirm');
+  if(password.value!==confirmation.value){passwordMessage.className='message error';passwordMessage.textContent='Die Passwörter stimmen nicht überein.';return;}
+  const value=password.value;password.value='';confirmation.value='';saveAccessPassword(value);
+});
+document.getElementById('password-remove').addEventListener('click',()=>{if(confirm('Passwortschutz wirklich entfernen?'))saveAccessPassword('');});
+const hostnameForm=document.getElementById('hostname-form'),hostnameInput=document.getElementById('hostname-input');
+const hostnameMessage=document.getElementById('hostname-message'),hostnameReset=document.getElementById('hostname-reset');
+let hostnameDirty=false,hostnameBusy=false;
+hostnameInput.addEventListener('input',()=>{hostnameDirty=true;hostnameMessage.textContent='';});
+function updateHostname(wifi){
+  if(!wifi||typeof wifi.hostname!=='string'||typeof wifi.activeHostname!=='string')return;
+  if(!hostnameDirty&&!hostnameBusy&&document.activeElement!==hostnameInput)hostnameInput.value=wifi.hostname;
+  const pending=wifi.hostname!==wifi.activeHostname;
+  document.getElementById('hostname-active').textContent='Aktiv: '+wifi.activeHostname+
+    (wifi.mdnsReady?' · mDNS: '+wifi.activeHostname+'.local':' · mDNS nicht verfügbar')+
+    (pending?' · Neuer Name nach Neustart: '+wifi.hostname:'');
+}
+async function saveHostnameSetting(reset){
+  if(hostnameBusy)return;
+  const value=reset?'':hostnameInput.value.toLowerCase();
+  hostnameBusy=true;hostnameInput.disabled=true;hostnameForm.querySelector('button').disabled=true;hostnameReset.disabled=true;
+  hostnameMessage.className='message';hostnameMessage.textContent='Hostname wird gespeichert …';
+  try{
+    const result=await request('/api/hostname',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'HeatingUI'},body:new URLSearchParams({hostname:value})});
+    hostnameInput.value=result.hostname;hostnameDirty=false;
+    hostnameMessage.textContent=result.restartRequired?'Gespeichert. Der neue Name gilt nach dem nächsten Neustart.':'Hostname gespeichert und bereits aktiv.';
+  }catch(error){hostnameMessage.className='message error';hostnameMessage.textContent='Nicht gespeichert: '+error.message;}
+  finally{hostnameBusy=false;hostnameInput.disabled=false;hostnameForm.querySelector('button').disabled=false;hostnameReset.disabled=false;}
+}
+hostnameForm.addEventListener('submit',event=>{event.preventDefault();saveHostnameSetting(false);});
+hostnameReset.addEventListener('click',()=>saveHostnameSetting(true));
 let saving=false;
 async function request(url,options={}){
   const abort=new AbortController();
@@ -916,7 +1184,7 @@ function updateReleaseDownload(){
 }
 githubForm.elements.release.addEventListener('change',updateReleaseDownload);
 function compareVersions(a,b){
-  const parse=s=>/^v?(\d+)\.(\d+)\.(\d+)$/.exec(s||'');
+  const parse=s=>/^v?(\d+)\.(\d+)\.(\d+)(?:-(?:mit|ohne)-ap)?$/i.exec(s||'');
   const x=parse(a),y=parse(b);if(!x||!y)return null;
   for(let i=1;i<=3;i++){const d=Number(x[i])-Number(y[i]);if(d)return Math.sign(d);}return 0;
 }
@@ -928,25 +1196,25 @@ document.getElementById('release-check').addEventListener('click',async event=>{
     const response=await fetch('https://api.github.com/repos/NemoN/Solarsystemsteuerung_ESP32/releases?per_page=100',{cache:'no-store',headers:{Accept:'application/vnd.github+json'}});
     if(!response.ok)throw new Error('GitHub meldet HTTP '+response.status);
     const releases=await response.json();if(!Array.isArray(releases))throw new Error('Ungültige GitHub-Antwort');
-    githubReleases=releases.filter(r=>!r.draft&&Array.isArray(r.assets)&&typeof r.tag_name==='string'&&/^[A-Za-z0-9._-]+$/.test(r.tag_name)).map(r=>{
+    const matchingReleases=releases.filter(r=>!r.draft&&Array.isArray(r.assets)&&typeof r.tag_name==='string'&&/^[A-Za-z0-9._-]+$/.test(r.tag_name)).map(r=>{
       const asset=r.assets.find(a=>a.name==='Backload.ino.bin'&&typeof a.digest==='string'&&/^sha256:[0-9a-f]{64}$/.test(a.digest)&&a.size>=1024&&a.size<=3145728);
       const downloadAsset=asset&&r.assets.find(a=>a.name==='Backload-'+r.tag_name.replace(/^v/,'')+'.bin'&&a.digest===asset.digest&&a.size===asset.size);
       return {tag:r.tag_name,name:r.name||r.tag_name,date:r.published_at||'',prerelease:r.prerelease,asset,downloadAsset};
     }).filter(r=>r.asset).sort((a,b)=>b.date.localeCompare(a.date));
+    githubReleases=matchingReleases.slice(0,8);
     select.replaceChildren(new Option(githubReleases.length?'Version auswählen …':'Keine passenden Releases',''));
     githubReleases.forEach((r,i)=>select.add(new Option(r.name+(r.prerelease?' · Vorabversion':'')+(r.tag.replace(/^v/,'')===currentFirmwareVersion?' · installiert':''),String(i))));
     updateReleaseDownload();
     select.disabled=!githubReleases.length;githubForm.querySelector('button').disabled=!githubReleases.length;
     if(!githubReleases.length)releaseMessage.textContent='Keine Releases mit passender Firmware und SHA-256-Prüfsumme gefunden.';
     else{
-      const latest=githubReleases.find(r=>!r.prerelease)||githubReleases[0],comparison=compareVersions(latest.tag,currentFirmwareVersion);
+      const latest=matchingReleases.find(r=>!r.prerelease)||matchingReleases[0],comparison=compareVersions(latest.tag,currentFirmwareVersion);
       const availability=comparison===null?'':comparison>0?'Neue Version verfügbar. ':comparison===0?'Firmware ist aktuell. ':'Installierte Version ist neuer. ';
       releaseMessage.textContent=availability+'Neueste Version: '+latest.tag+' · Installiert: '+(currentFirmwareVersion||'unbekannt')+'.'+(githubReleases.length>1?' Ältere Versionen sind ebenfalls auswählbar.':'');
     }
   }catch(error){githubReleases=[];select.replaceChildren(new Option('Suche fehlgeschlagen',''));releaseMessage.className='message error';releaseMessage.textContent='GitHub nicht erreichbar: '+error.message+'. Internetverbindung dieses Geräts prüfen.';}
   finally{button.disabled=false;}
 });
-if(document.body.classList.contains('update-page'))document.getElementById('release-check').click();
 // Ein Netzwerkfehler bei der Statusabfrage beendet den Download auf dem ESP
 // nicht. Nur Statusabfragen wiederholen, niemals den Update-Start erneut senden.
 async function pollGithubUpdate(post,token,progress,message){
@@ -1134,6 +1402,17 @@ async function loadSparklines(){
   }catch(error){sparkData=null;sparkMessage='Verlauf nicht erreichbar. Neuer Versuch erfolgt automatisch.';}
   finally{sparkLoading=false;panels.forEach((p,id)=>drawSparkline(p.sparkline,id,p.section.querySelector('h2').textContent));}
 }
+// Die Beispiele animieren nur, solange sie sichtbar sind; ohne JS bleiben sie lesbar.
+if(document.body.classList.contains('organigram-page')){
+  const guide=document.getElementById('org-led-guide');
+  let guideVisible=false;
+  const syncLedExamples=()=>guide.classList.toggle('is-visible',guideVisible&&!document.hidden);
+  if('IntersectionObserver' in window){
+    const observer=new IntersectionObserver(entries=>{guideVisible=entries.some(entry=>entry.isIntersecting);syncLedExamples();});
+    observer.observe(guide);
+  }else{guideVisible=true;syncLedExamples();}
+  document.addEventListener('visibilitychange',syncLedExamples);
+}
 function updateOrganigram(data){
   const status=document.getElementById('org-status');
   const controllers=data&&Array.isArray(data.controllers)?data.controllers:[];
@@ -1143,6 +1422,12 @@ function updateOrganigram(data){
     (data.simulation?'Testmodus · ':'')+(heating.winter?'Winter · Kombi Mitte':'Sommer · Kombi oben');
   if(status.textContent!==summary)status.textContent=summary;
   status.className='badge'+(!data||!valid?' waiting':'');
+  const modeKnown=!!(heating&&heating.configValid&&typeof heating.winter==='boolean');
+  const summerActive=modeKnown&&!heating.winter,winterActive=modeKnown&&heating.winter;
+  document.getElementById('org-mode-summer').className='org-season'+(summerActive?' is-active':'');
+  document.getElementById('org-mode-winter').className='org-season'+(winterActive?' is-active':'');
+  document.getElementById('org-mode-summer-state').textContent=summerActive?'Aktiv':'';
+  document.getElementById('org-mode-winter-state').textContent=winterActive?'Aktiv':'';
   const settings=controllers.find(c=>c.id===0);
   document.getElementById('org-target').textContent=settings&&settings.configValid&&Number.isFinite(settings.target)?setpointNumber.format(settings.target)+' °C':'— °C';
   const start=automatic&&Number.isFinite(automatic.differenceStart)?setpointNumber.format(automatic.differenceStart)+' K':'— K';
@@ -1153,9 +1438,21 @@ function updateOrganigram(data){
     const c=controllers.find(item=>item.id===i);
     document.getElementById('org-cs-'+i).textContent=c&&Number.isInteger(c.csPin)?String(c.csPin):'—';
   }
-  for(const [id,key] of [['org-relay-pump','pump'],['org-relay-direction','direction'],['org-relay-solar','solar'],['org-relay-oil','oil'],['org-spi-clk','clk'],['org-spi-mosi','mosi'],['org-spi-miso','miso']]){
+  for(const [id,key] of [['org-relay-pump','pump'],['org-relay-direction','direction'],['org-relay-solar','solar'],['org-relay-oil','oil'],['org-spi-clk','clk'],['org-spi-mosi','mosi'],['org-spi-miso','miso'],['org-led','led'],['org-rgb-led','rgbLed']]){
     const pin=hardware&&hardware[key];
     document.getElementById(id).textContent=Number.isInteger(pin)?String(pin):'—';
+  }
+  const solar=data&&data.solar;
+  const solarBadge=document.getElementById('org-solar-state');
+  const solarIssue=solar&&(!solar.configValid?'Einstellung ungültig':!solar.sensorsValid?'Sensorfehler':solar.paused?'Pausiert':null);
+  solarBadge.className='badge'+(solarIssue?' waiting':solar&&solar.on?' on':'');
+  solarBadge.textContent=!solar?'Status unbekannt':solarIssue?solarIssue+' · AUS':solar.on?(data.simulation?'EIN · simuliert':'EIN'):(data.simulation?'AUS · simuliert':'AUS');
+  for(const [id,index] of [['org-solar-panel',4],['org-solar-tank',3]]){
+    const sensor=controllers.find(c=>c.id===index);
+    document.getElementById(id).textContent=sensor&&sensor.valid&&Number.isFinite(sensor.temperature)?setpointNumber.format(sensor.temperature)+' °C':'—';
+  }
+  for(const [id,value] of [['org-solar-start',solar&&solar.differenceStart],['org-solar-stop',solar&&solar.differenceStop],['org-solar-difference',solar&&solar.difference]]){
+    document.getElementById(id).textContent=Number.isFinite(value)?setpointNumber.format(value)+' K':'— K';
   }
   document.getElementById('org-direction-off').textContent=hardware&&hardware.directionOff===0?'Kombi → Puffer':hardware&&hardware.directionOff===1?'Puffer → Kombi':'—';
 }
@@ -1163,16 +1460,19 @@ async function refresh(){
   const revision=pumpRevision;
   const autoRequestRevision=autoRevision;
   const simRequestRevision=simRevision;
+  const solarRequestRevision=solarRevision;
   const heatingRequestRevision=heatingRevision;
   try{
     if(saving||wifiBusy||wifiScanning)return;
     const data=await request('/api/status');
     if(simRequestRevision===simRevision)updateSimulation(data);
     updateWifi(data.wifi);
+    updateHostname(data.wifi);
     updateRoof(data.roof,data.wifi);
     if(!heatingBusy&&heatingRequestRevision===heatingRevision)updateHeating(data.heating);
     if(autoRequestRevision===autoRevision){updateAutomatic(data.automatic);updateAutomaticRules(data.automatic,data.controllers,data.pump);}
     if(!pumpBusy&&revision===pumpRevision)updatePump(data.pump);
+    if(solarRequestRevision===solarRevision){updateSolar(data.solar,data.simulation);updateSolarDiagram(data.solar,data.simulation,data.controllers);}
     if(document.body.classList.contains('organigram-page')&&!heatingBusy&&heatingRequestRevision===heatingRevision&&autoRequestRevision===autoRevision)updateOrganigram(data);
     updateStorageDiagram(data.controllers);
     drawBurnerPipes();
@@ -1180,7 +1480,7 @@ async function refresh(){
     clock.textContent=data.clock.available
       ?'ESP32-Zeit: '+data.clock.local+' '+data.clock.zone+(data.wifi.ip?'':' · läuft ohne WLAN weiter')
       :'ESP32-Zeit: noch nicht synchronisiert. WLAN mit Internetzugang erforderlich.';
-    document.getElementById('firmware-version').textContent='Firmware-Version '+data.version.replace(/-(?:ohne|mit)-ap$/i,'');
+    document.getElementById('firmware-version').textContent='Version: '+data.version.replace(/-(?:ohne|mit)-ap$/i,'');
     currentFirmwareVersion=data.version;
     for(const c of data.controllers){
       if(!panels.has(c.id))panels.set(c.id,createPanel(c));
@@ -1193,15 +1493,16 @@ async function refresh(){
       configError.textContent=c.configValid?'':'Konfigurationsfehler: Grenzen oder Standardwerte im Sketch prüfen.';
       p.form.querySelectorAll('input,button').forEach(e=>e.disabled=!c.configValid||(e.tagName==='BUTTON'&&saving));
       const badge=p.section.querySelector('.badge');badge.textContent=c.valid?'Sensor: OK':'Sensorfehler';badge.className='badge'+(c.valid?' on':'');
-      p.section.querySelector('.rule').textContent=data.pump.manual?'Handbetrieb: Starttemperatur ohne Wirkung. Ölbrennersperre gilt.':'Starttemperatur für den gewählten Kombifühler.';
+      p.section.querySelector('.rule').textContent=data.pump.manual?'Manuelle Steuerung: Starttemperatur ohne Wirkung. Ölbrennersperre gilt.':'Starttemperatur für den gewählten Kombifühler.';
       p.form.elements.target.dataset.savedValue=c.target;
       p.form.elements.hysteresis.dataset.savedValue=c.hysteresis;
       if(!p.isDirty()&&!p.form.contains(document.activeElement)&&!saving){p.form.elements.target.value=settingNumber(c.target);p.form.elements.hysteresis.value=inputNumber(c.hysteresis);}
     }
     syncAutoStepperWidth();
-    connection.className='muted';connection.textContent='Verbunden · Messwerte werden alle 2 Sekunden aktualisiert';
+    setConnectionStatus(true);
   }catch(error){
     if(document.body.classList.contains('organigram-page'))updateOrganigram(null);
+    if(solarRequestRevision===solarRevision){updateSolar(null,false);updateSolarDiagram(null,false,null);}
     if(!pumpBusy&&revision===pumpRevision)unknownPump();
     if(!heatingBusy&&heatingRequestRevision===heatingRevision)unknownHeating();
     updateStorageDiagram(null);
@@ -1209,10 +1510,11 @@ async function refresh(){
     document.getElementById('test-page-status').textContent='Keine Verbindung zum ESP32. Testmodus und Werte sind nicht aktuell.';
     document.getElementById('device-clock').textContent='ESP32-Zeit: keine aktuellen Daten.';
     document.getElementById('wifi-signal').textContent='Heim-WLAN-Signal: keine aktuellen Daten.';
+    updateWifiSignalBars(null);
     document.getElementById('wifi-status').textContent='WLAN-Status nicht aktuell: Verbindung zum ESP32 unterbrochen.';
     roofBadge.textContent='Status unbekannt';roofBadge.className='badge';
     roofDetail.textContent='Keine aktuellen Daten vom Haupt-ESP.';
-    connection.className='error';connection.textContent='Keine Verbindung. Anzeigen sind nicht aktuell. Neuer Versuch erfolgt automatisch.';
+    setConnectionStatus(false);
     panels.forEach(p=>{showTemperature(p,null);const badge=p.section.querySelector('.badge');if(badge){badge.textContent='Sensor: unbekannt';badge.className='badge';}});
   }finally{setTimeout(refresh,pumpState&&pumpState.switching?250:2000);}
 }
@@ -1298,7 +1600,7 @@ if(document.body.classList.contains('history-page')){
   historyRange.addEventListener('change',loadHistory);window.addEventListener('resize',drawHistory);loadHistory();setInterval(loadHistory,60000);
 }
 if(document.body.classList.contains('info-page')){loadDeviceInfo();setInterval(loadDeviceInfo,5000);}
-if(!document.body.classList.contains('history-page')&&!document.body.classList.contains('wifi-page')&&!document.body.classList.contains('test-page')&&!document.body.classList.contains('update-page')&&!document.body.classList.contains('info-page')&&!document.body.classList.contains('organigram-page')){loadSparklines();setInterval(loadSparklines,60000);}
+if(!document.body.classList.contains('history-page')&&!document.body.classList.contains('settings-page')&&!document.body.classList.contains('info-page')&&!document.body.classList.contains('organigram-page')){loadSparklines();setInterval(loadSparklines,60000);}
 refresh();
 </script></main></body></html>)HTML";
 
@@ -1343,7 +1645,23 @@ bool oilBurnerRelayOn() {
     !modeTransition && !otaActive && !otaVerificationPending;
 }
 
+bool solarSensorsFresh() {
+  return solarMeasurementReady && uint32_t(millis() - lastSolarMeasurement) <= SOLAR_MAX_MEASUREMENT_AGE;
+}
+
+void serviceSolarPump() {
+  const TemperatureController& tank = controllers[3];
+  const TemperatureController& panel = controllers[4];
+  const bool enabled = storageReady && solarSettingsValid && solarSensorsFresh() && !modeTransition && !otaActive && !otaVerificationPending;
+  const bool wasOn = solarControl.on();
+  const bool on = solarControl.update(enabled, panel.valid, panel.currentTemp, tank.valid, tank.currentTemp, solarStartDifference);
+  // Im Testmodus bleibt der echte Active-Low-Ausgang wie beim Start auf HIGH.
+  if (!SIMULATION_MODE) digitalWrite(SOLAR_PUMP_PIN, on ? LOW : HIGH);
+  if (on != wasOn) FirmwareLog.printf("%sSolarpumpe: %s.\n", SIMULATION_MODE ? "[SIMULATION] " : "", on ? "AN" : "AUS");
+}
+
 void servicePump() {
+  serviceSolarPump();
   // Beim Sperren des Brenners zuerst Relais 4 ausschalten, bevor Einlagerung
   // wieder möglich wird. Beim Freigeben gilt unten die umgekehrte Reihenfolge.
   if (!oilBurnerRelayOn()) digitalWrite(OIL_BURNER_PIN, HIGH);
@@ -1456,6 +1774,8 @@ void measureTemperatures() {
     c.fault = reading.fault;
     c.sensorError = reading.error;
     c.valid = reading.valid();
+    // Einen Solarfühlerfehler sofort abschalten, vor der Sensor-Neuinitialisierung.
+    if (!c.valid && (i == 3 || i == 4)) serviceSolarPump();
 
     // Nur die Ausgabe filtern: Messung und Relaisregelung laufen in jeder Stufe.
     if (SENSOR_LOG_LEVEL > 0 || !c.valid || previouslyFailed) {
@@ -1471,8 +1791,9 @@ void measureTemperatures() {
             c.name, c.sensorError, unsigned(c.rawRtd), unsigned(c.fault),
             unsigned(reading.lowerThreshold), unsigned(reading.upperThreshold),
             unsigned(reading.configBefore), unsigned(reading.configWithBias), unsigned(reading.configAfterConversion),
-            manualControl ? " | Handbetrieb aktiv" :
-            (i == (oilBurnerEnabled ? 1 : 0) || i == 2) ? " | Automatik: Pumpe AUS" : " | nur Anzeige");
+            (i == 3 || i == 4) ? " | Solarregelung: Solarpumpe AUS" :
+            manualControl ? " | Manuelle Steuerung der Umladepumpe aktiv" :
+            (i == (oilBurnerEnabled ? 1 : 0) || i == 2) ? " | Automatik: Pumpe AUS" : " | kein Umlade-Regelfühler");
         }
       } else {
         if (i == 0) {
@@ -1490,13 +1811,16 @@ void measureTemperatures() {
       }
     }
     if (!c.valid && !SIMULATION_MODE) {
-      // Nur der Wandler wird neu aufgesetzt; Handbetrieb bleibt unbeeinflusst.
+      // Nur der Wandler wird neu aufgesetzt; die manuelle Steuerung bleibt unbeeinflusst.
       // Die nächste reguläre Messung prüft erneut; keine zusätzliche Warteschleife.
       initializeTemperatureSensor(c);
     }
   }
   // Nur tatsächlich ausgegebene Blöcke mit einer Leerzeile abschließen.
   if (logBlockStarted) FirmwareLog.println();
+  lastSolarMeasurement = millis();
+  solarMeasurementReady = true;
+  serviceSolarPump();
   updateAutomaticPump();
   const time_t now = time(nullptr);
   if (temperatureHistory.available() && now >= 1704067200) {
@@ -1539,6 +1863,49 @@ String jsonString(const String& value) {
     } else result += char(ch);
   }
   return result + '"';
+}
+
+const char* defaultHostname() { return SIMULATION_MODE ? "backload-test" : "esp32-heizung"; }
+
+void loadHostname() {
+  configuredHostname = defaultHostname();
+  hostnameStorageReady = hostnamePreferences.begin("backload-net", false);
+  hostnameUsesDefault = true;
+  if (hostnameStorageReady && hostnamePreferences.isKey("hostname")) {
+    const String saved = hostnamePreferences.getString("hostname", "");
+    if (strlen(saved.c_str()) == saved.length() && Hostname::valid(saved.c_str(), saved.length())) {
+      configuredHostname = saved;
+      hostnameUsesDefault = false;
+    } else FirmwareLog.println("Ungültiger Hostname gespeichert; Standardname wird verwendet.");
+  }
+  if (!hostnameStorageReady) FirmwareLog.println("Hostname-Speicher nicht verfügbar; Standardname wird verwendet.");
+  activeHostname = configuredHostname;
+}
+
+void saveHostname() {
+  if (otaActive || otaVerificationPending || modeTransition) { server.send(409, "text/plain; charset=utf-8", "Update oder Neustart läuft."); return; }
+  if (server.header("X-Requested-With") != "HeatingUI") { server.send(403, "text/plain; charset=utf-8", "Bitte das Webinterface verwenden."); return; }
+  if (!hostnameStorageReady) { server.send(503, "text/plain; charset=utf-8", "Hostname-Speicher nicht verfügbar."); return; }
+  if (server.args() != 1 || !server.hasArg("hostname")) { server.send(400, "text/plain; charset=utf-8", "Ungültige Anfrage."); return; }
+  String next = server.arg("hostname");
+  next.toLowerCase();
+  const bool useDefault = next.length() == 0;
+  if (!useDefault && (strlen(next.c_str()) != next.length() || !Hostname::valid(next.c_str(), next.length()))) {
+    server.send(400, "text/plain; charset=utf-8", "Hostname: 1–31 Buchstaben, Zahlen oder Bindestriche; Anfang und Ende müssen Buchstaben oder Zahlen sein."); return;
+  }
+  bool saved = true;
+  if (useDefault) {
+    if (hostnamePreferences.isKey("hostname")) saved = hostnamePreferences.remove("hostname");
+    next = defaultHostname();
+  } else if (hostnameUsesDefault || next != configuredHostname) {
+    saved = hostnamePreferences.putString("hostname", next) == next.length() && hostnamePreferences.getString("hostname", "") == next;
+  }
+  if (!saved) { server.send(500, "text/plain; charset=utf-8", "Hostname konnte nicht gespeichert werden."); return; }
+  hostnameUsesDefault = useDefault;
+  configuredHostname = next;
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "application/json", "{\"saved\":true,\"hostname\":" + jsonString(configuredHostname) +
+    ",\"restartRequired\":" + String(configuredHostname != activeHostname ? "true" : "false") + "}");
 }
 
 bool validWifiCredentials(const String& ssid, const String& password) {
@@ -1645,6 +2012,10 @@ String wifiStatusJson() {
   bool connected = wifiPhase == WIFI_CONNECTED && WiFi.status() == WL_CONNECTED;
   return "{\"state\":" + jsonString(states[wifiPhase]) +
     ",\"ssid\":" + jsonString(wifiCredentials.ssid) +
+    ",\"hostname\":" + jsonString(configuredHostname) +
+    ",\"activeHostname\":" + jsonString(activeHostname) +
+    ",\"hostnameDefault\":" + String(hostnameUsesDefault ? "true" : "false") +
+    ",\"mdnsReady\":" + String(mdnsReady ? "true" : "false") +
     ",\"changeId\":" + jsonString(wifiChangeId) +
     ",\"rssi\":" + (connected ? String(WiFi.RSSI()) : String("null")) +
     ",\"ip\":" + jsonString(connected ? WiFi.localIP().toString() : String("")) +
@@ -1836,6 +2207,20 @@ String automaticStatusJson() {
     ",\"differenceStop\":" + jsonNumber(AutomaticControl::STOP_DIFFERENCE) + "}";
 }
 
+String solarStatusJson() {
+  const TemperatureController& tank = controllers[3];
+  const TemperatureController& panel = controllers[4];
+  const bool sensorsValid = solarSensorsFresh() && panel.valid && tank.valid && isfinite(panel.currentTemp) && isfinite(tank.currentTemp);
+  return "{\"on\":" + String(solarControl.on() ? "true" : "false") +
+    ",\"relayOn\":" + String(solarControl.on() && !SIMULATION_MODE ? "true" : "false") +
+    ",\"configValid\":" + String(storageReady && solarSettingsValid ? "true" : "false") +
+    ",\"sensorsValid\":" + String(sensorsValid ? "true" : "false") +
+    ",\"paused\":" + String((modeTransition || otaActive || otaVerificationPending) ? "true" : "false") +
+    ",\"differenceStart\":" + (solarSettingsValid ? jsonNumber(solarStartDifference) : String("null")) +
+    ",\"differenceStop\":" + jsonNumber(SolarControl::STOP) +
+    ",\"difference\":" + (sensorsValid ? jsonNumber(panel.currentTemp - tank.currentTemp) : String("null")) + "}";
+}
+
 String heatingStatusJson() {
   return "{\"winter\":" + String(oilBurnerEnabled ? "true" : "false") +
     ",\"configValid\":" + String(heatingModeValid ? "true" : "false") +
@@ -1952,12 +2337,14 @@ void sendStatus() {
   }
   bool roofOnline = roofSeen && WiFi.status() == WL_CONNECTED && millis() - lastRoofHeartbeat < ROOF_TIMEOUT;
   json += "],\"pump\":" + pumpStatusJson() + ",\"automatic\":" + automaticStatusJson() +
-    ",\"heating\":" + heatingStatusJson() +
+    ",\"heating\":" + heatingStatusJson() + ",\"solar\":" + solarStatusJson() +
     ",\"hardware\":{\"clk\":" + String(SPI_CLK) + ",\"mosi\":" + String(SPI_MOSI) +
     ",\"miso\":" + String(SPI_MISO) + ",\"pump\":" + String(unsigned(PUMP_ENABLE_PIN)) +
     ",\"direction\":" + String(unsigned(PUMP_DIRECTION_PIN)) + ",\"solar\":" + String(unsigned(SOLAR_PUMP_PIN)) +
-    ",\"oil\":" + String(unsigned(OIL_BURNER_PIN)) +
+    ",\"oil\":" + String(unsigned(OIL_BURNER_PIN)) + ",\"led\":" + String(LED_PIN) + ",\"rgbLed\":" + String(RGB_STATUS_PIN) +
     ",\"directionOff\":" + String(DIRECTION_RELAY_OFF_DIRECTION == PumpDirection::BufferToCombi ? 1 : 0) + "}" +
+    ",\"statusLed\":{\"state\":" + jsonString(StatusLed::name(statusLed.mode())) +
+    ",\"available\":" + String(statusLedPinSafe ? "true" : "false") + "}" +
     ",\"wifi\":" + wifiStatusJson() + ",\"clock\":" + clockStatusJson() +
     ",\"roof\":{\"seen\":" + String(roofSeen ? "true" : "false") +
     ",\"online\":" + String(roofOnline ? "true" : "false") +
@@ -2033,6 +2420,33 @@ void saveAutomaticSettings() {
   lastMeasurement = millis();
   server.sendHeader("Cache-Control", "no-store");
   server.send(200, "application/json", automaticStatusJson());
+}
+
+void loadSolarSettings() {
+  if (storageReady && preferences.isKey("solar1")) {
+    float saved = NAN;
+    solarSettingsValid = preferences.getBytesLength("solar1") == sizeof(saved) &&
+      preferences.getBytes("solar1", &saved, sizeof(saved)) == sizeof(saved) && SolarControl::validStart(saved);
+    if (solarSettingsValid) solarStartDifference = saved;
+    else FirmwareLog.println("Ungültige Solarregelung: Solarpumpe gesperrt; Startdifferenz erneut speichern.");
+  }
+}
+
+void saveSolarSettings() {
+  if (otaActive || otaVerificationPending || modeTransition) { server.send(409, "text/plain; charset=utf-8", "Update oder Neustart läuft."); return; }
+  if (server.header("X-Requested-With") != "HeatingUI") { server.send(403, "text/plain; charset=utf-8", "Bitte das Webinterface verwenden."); return; }
+  float next;
+  if (server.args() != 1 || !parseNumber(server.arg("start"), next) || !SolarControl::validStart(next)) {
+    server.send(400, "text/plain; charset=utf-8", "Startdifferenz muss zwischen 3 und 10 K in 0,1-K-Schritten liegen."); return;
+  }
+  if (!storageReady || preferences.putBytes("solar1", &next, sizeof(next)) != sizeof(next)) {
+    server.send(500, "text/plain; charset=utf-8", "Speicherfehler. Solarregelung wurde nicht übernommen."); return;
+  }
+  solarStartDifference = next;
+  solarSettingsValid = true;
+  serviceSolarPump();
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "application/json", solarStatusJson());
 }
 
 void applyHeatingMode(bool next) {
@@ -2146,7 +2560,7 @@ void savePumpControl() {
     }
   } else {
     if (!manualControl) {
-      server.send(409, "text/plain; charset=utf-8", "Zuerst Manuelle Steuerung einschalten.");
+      server.send(409, "text/plain; charset=utf-8", "Zuerst die manuelle Steuerung einschalten.");
       return;
     }
     const bool nextOn = action == "power" ? enabled : manualPumpOn;
@@ -2223,7 +2637,7 @@ void cancelOta() {
   if (Update.isRunning()) Update.abort();
   otaActive = false; otaFinished = false; otaToken = "";
   automaticControl.reset();
-  FirmwareLog.println("Firmware-Update abgebrochen. Handbetrieb bleibt ausgeschaltet.\n");
+  FirmwareLog.println("Firmware-Update abgebrochen. Manuelle Steuerung bleibt ausgeschaltet.\n");
 }
 
 void logOtaPartition(const char* name, const esp_partition_t* partition) {
@@ -2496,6 +2910,17 @@ void githubOtaStatus() {
     ",\"maxAttempts\":" + String(GITHUB_DOWNLOAD_ATTEMPTS) + ",\"error\":" + jsonString(state == GH_FAILED ? githubUpdateError : "") + "}");
 }
 
+void serviceStatusLed(uint32_t now) {
+  if (!statusLedPinSafe) return;
+  bool fault = !storageReady || !heatingModeValid || !autoSettingsValid || !solarSettingsValid || !solarSensorsFresh() || !controllers[0].configValid;
+  for (int i = 0; i < numControllers; ++i) fault = fault || controllers[i].sensorError != nullptr;
+  const StatusLedMode mode = StatusLed::select(fault, otaActive || otaVerificationPending, manualControl, SIMULATION_MODE);
+  if (statusLed.update(now, mode)) {
+    const StatusLedColor color = statusLed.color();
+    neopixelWrite(RGB_STATUS_PIN, color.red, color.green, color.blue);
+  }
+}
+
 void setup() {
   // Auch im Testbetrieb die echten Active-Low-Ausgänge auf AUS halten.
   digitalWrite(PUMP_ENABLE_PIN, HIGH);
@@ -2515,6 +2940,9 @@ void setup() {
     mode.end();
   }
   AP_SSID = SIMULATION_MODE ? "ESP32-Backload-Test" : "ESP32-Solarsteuerung";
+  // Keine LED-Ausgabe, falls ein Sensor-Chip-Select auf denselben GPIO gelegt wurde.
+  statusLedPinSafe = true;
+  for (int i = 0; i < numControllers; ++i) if (controllers[i].csPin == RGB_STATUS_PIN) statusLedPinSafe = false;
   if (!SIMULATION_MODE) {
     for (int i = 0; i < numControllers; i++) {
       digitalWrite(controllers[i].csPin, HIGH);
@@ -2560,6 +2988,7 @@ void setup() {
   FirmwareLog.printf("Betriebsart: %s | Ölbrennerfreigabe: %s | Relais 4 GPIO %u.\n",
     heatingModeValid ? (oilBurnerEnabled ? "Winter" : "Sommer") : "unbekannt; Einlagerung gesperrt",
     oilBurnerEnabled ? "AN" : "AUS", unsigned(OIL_BURNER_PIN));
+  loadSolarSettings();
   float autoSaved[5];
   if (storageReady && preferences.isKey("auto1")) {
     autoSettingsValid = false;
@@ -2607,8 +3036,9 @@ void setup() {
   }
   measureTemperatures();
   lastMeasurement = millis();
+  loadHostname();
   WiFi.persistent(false); // Zugangsdaten ausschließlich im eigenen NVS-Blob verwalten.
-  WiFi.setHostname(SIMULATION_MODE ? "backload-test" : "esp32-heizung");
+  WiFi.setHostname(activeHostname.c_str());
   WiFi.mode(WIFI_AP_STA);
   WiFi.setAutoReconnect(false); // Wiederholungen werden in processWifi() gesteuert.
   WiFi.disconnect(false, true);
@@ -2617,6 +3047,9 @@ void setup() {
   } else {
     FirmwareLog.println("WLAN konnte nicht gestartet werden. Temperaturregelung läuft weiter.");
   }
+  mdnsReady = MDNS.begin(activeHostname);
+  if (mdnsReady) { MDNS.addService("http", "tcp", 80); FirmwareLog.printf("mDNS: http://%s.local/\n", activeHostname.c_str()); }
+  else FirmwareLog.println("mDNS konnte nicht gestartet werden; Zugriff über IP bleibt möglich.");
   if (!roofUdp.begin(ROOF_HEARTBEAT_PORT)) {
     FirmwareLog.println("UDP-Empfang für Dachsensor konnte nicht gestartet werden.");
   }
@@ -2633,6 +3066,7 @@ void setup() {
   server.on("/api/settings", HTTP_POST, saveSettings);
   server.on("/api/pump", HTTP_POST, savePumpControl);
   server.on("/api/automatic", HTTP_POST, saveAutomaticSettings);
+  server.on("/api/solar", HTTP_POST, saveSolarSettings);
   server.on("/api/heating", HTTP_POST, saveHeatingMode);
   server.on("/api/test-mode", HTTP_POST, setTestMode);
   server.on("/api/update/prepare", HTTP_POST, prepareOta);
@@ -2642,6 +3076,7 @@ void setup() {
   server.on("/api/update/github", HTTP_POST, startGithubOta);
   server.on("/api/update/github-status", HTTP_POST, githubOtaStatus);
   if (SIMULATION_MODE) server.on("/api/simulation", HTTP_POST, saveSimulationValues);
+  server.on("/api/hostname", HTTP_POST, saveHostname);
   server.on("/api/wifi", HTTP_POST, saveWifi);
   server.on("/api/wifi/reset", HTTP_POST, resetWifi);
   server.on("/api/wifi/scan", HTTP_POST, startWifiScan);
@@ -2697,6 +3132,7 @@ void loop() {
     }
   }
   if (modeTransition && now - modeRestartAt >= 2500) ESP.restart();
+  serviceStatusLed(now);
   if (now - lastHeartbeat >= 500) {
     lastHeartbeat = now;
     ledState = !ledState;

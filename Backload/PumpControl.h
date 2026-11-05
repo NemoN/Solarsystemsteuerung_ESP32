@@ -15,7 +15,7 @@ public:
     : direction_(initialDirection), requestedDirection_(initialDirection) {}
 
   void command(bool on, PumpDirection direction, uint32_t now);
-  // Gilt auch im Handbetrieb: Ölbrennerfreigabe sperrt Kombi -> Puffer.
+  // Gilt auch bei manueller Steuerung: Ölbrennerfreigabe sperrt Kombi -> Puffer.
   // Eine aufgehobene Sperre startet keinen zuvor verworfenen Auftrag erneut.
   void setChargingAllowed(bool allowed, uint32_t now) {
     chargingAllowed_ = allowed;

@@ -1,18 +1,18 @@
-# Backload-Regelung und Ölbrennerfreigabe
+# Backload- und Solarregelung
 
 Die Steuerung überträgt Wärme zwischen Kombi- und Pufferspeicher. Eine Pumpe
 und eine Umpolschaltung bestimmen die Förderrichtung. Relais 4 steuert die
-manuelle Ölbrennerfreigabe; Relais 3 ist für eine spätere Solarpumpe reserviert.
+manuelle Ölbrennerfreigabe; Relais 3 schaltet die Solarpumpe.
 
 ## Sommer und Winter
 
 | Betriebsart | Kombifühler | Ölbrennerfreigabe | Kombi → Puffer | Puffer → Kombi |
 | --- | --- | --- | --- | --- |
 | Sommer | oben, ID 0 | AUS | bei passenden Temperaturen möglich | bei passenden Temperaturen möglich |
-| Winter | Mitte, ID 1 | AN | gesperrt, auch im Handbetrieb | bei passenden Temperaturen möglich |
+| Winter | Mitte, ID 1 | AN | gesperrt, auch bei manueller Steuerung | bei passenden Temperaturen möglich |
 
-Puffer oben (ID 2) ist immer der Vergleichsfühler. Kombi unten und Solarpanel
-sind reine Anzeigefühler. Beim Betriebsartwechsel wird ein laufender
+Puffer oben (ID 2) ist immer der Vergleichsfühler für die Umladepumpe.
+Kombi unten und Solarpanel regeln zusätzlich die Solarpumpe. Beim Betriebsartwechsel wird ein laufender
 Automatikauftrag zurückgesetzt und anhand des neu gewählten Fühlers neu
 bewertet. Bei unbekannter Betriebsart ist die Automatik ausgeschaltet.
 
@@ -55,9 +55,30 @@ Startdifferenzen, unbekannte Betriebsart oder nicht verfügbarer Gerätespeicher
 sperren die Automatik. Ein ungültiger Einlagerungssollwert sperrt den Start der
 Einlagerung; Rückladung bleibt bei gültigen Messungen und Einstellungen möglich.
 
-## Handbetrieb und Richtungswechsel
+## Solarregelung
 
-Im Handbetrieb werden Temperaturregelung und Sensorfehler übergangen, die
+Relais 3 schaltet unabhängig von der Umladepumpe, ihrer manuellen Steuerung und
+Sommer/Winter. Die Einschaltdifferenz ist auf der Startseite von 3 bis 10 K
+in 0,1-K-Schritten konfigurierbar und steht auch in der Regelungsübersicht.
+Vorgabe sind 5 K.
+
+| Bedingung | Verhalten |
+| --- | --- |
+| Solarpanel − Kombi unten ≥ Einschaltdifferenz | Pumpe EIN |
+| Solarpanel − Kombi unten ≤ 1 K | Pumpe AUS |
+| Differenz zwischen den Grenzen | vorheriger Zustand bleibt erhalten |
+| Fehler eines Solarfühlers, Messwerte älter als 10 Sekunden oder ungültige Einstellungen | Pumpe AUS |
+
+Während eines Updates, der Startprüfung und eines angeforderten Neustarts ist
+die Solarpumpe aus. Beim Start bleibt das Relais bis zur ersten gültigen
+Messung ausgeschaltet. Test- und Anlagenwerte werden getrennt gespeichert;
+im Testmodus wird nur der Pumpenzustand simuliert und das Relais bleibt AUS.
+Die Regelung enthält keine Maximaltemperaturbegrenzung. Unabhängige
+Schutzeinrichtungen und die tatsächliche Verdrahtung vor dem Einsatz prüfen.
+
+## Manuelle Steuerung und Richtungswechsel
+
+Bei manueller Steuerung werden Temperaturregelung und Sensorfehler übergangen, die
 Ölsperre gilt weiter. Puffer → Kombi bleibt bedienbar. Beim Richtungswechsel:
 Pumpe AUS, mindestens zwei Sekunden warten, Richtungsrelais schalten, 100 ms
 Schaltzeit abwarten und nur bei bestehendem Einschaltauftrag wieder starten.
@@ -73,7 +94,7 @@ der Startprüfung und eines angeforderten Neustarts bleibt die echte
 | --- | --- | --- |
 | 1 | 3 | Transferpumpe EIN/AUS |
 | 2 | 8 | Pumprichtung |
-| 3 | 9 | Solarpumpe, reserviert und AUS |
+| 3 | 9 | Solarpumpe EIN/AUS |
 | 4 | 10 | Ölbrennerfreigabe |
 
 GPIO 9/10 müssen zur tatsächlichen Verdrahtung passen. Die Relais sind Active
@@ -92,4 +113,7 @@ ignoriert. Ungültige Startabstände sperren die Automatik bis zur Korrektur.
 `automatic.differenceStart`, `automatic.differenceStop` (3) und `heating` mit
 Betriebsart, Konfigurationsgültigkeit und physischem Relaiszustand.
 `POST /api/heating` schaltet mit `winter=0/1` Fühlerwahl und Ölfreigabe.
-`POST /api/automatic` erwartet `start`. Sensor-IDs bleiben unverändert.
+`POST /api/automatic` erwartet `start`. `solar` enthält den Pumpenzustand, die
+Messwert- und Konfigurationsgültigkeit sowie Start-, Stopp- und aktuelle
+Differenz. `POST /api/solar` speichert `start` (3–10 K). Sensor-IDs bleiben
+unverändert.

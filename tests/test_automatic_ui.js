@@ -51,7 +51,7 @@ assert.equal(independent.returnStart,text.returnStart);
 assert.equal(independent.returnStop,text.returnStop);
 const failed = controllers.map(c => ({...c, valid:false}));
 assert.match(context.automaticRuleText(state, failed, {manual:false}).status, /Sensorfehler/);
-assert.match(context.automaticRuleText(state, failed, {manual:true}).status, /Handbetrieb/);
+assert.match(context.automaticRuleText(state, failed, {manual:true}).status, /Manuelle Steuerung/);
 context.updateAutomaticRules(state, controllers, {manual:false});
 assert.equal(node('auto-rules-table').hidden, false);
 context.updateAutomaticRules(null, null, null);
@@ -68,7 +68,7 @@ Object.assign(context, {URLSearchParams, autoMessage:{}, autoRevision:0, pumpRev
   request: async (url, options) => { posted = {url, values:options.body}; },
 });
 const submitStart = sketch.indexOf("autoForm.addEventListener('submit'");
-const submitEnd = sketch.indexOf('let wifiBusy=', submitStart);
+const submitEnd = sketch.indexOf("solarForm.addEventListener('input'", submitStart);
 vm.runInContext(sketch.slice(submitStart, submitEnd), context);
 Object.assign(form.elements.start, {value:'8.0'});
 (async () => {

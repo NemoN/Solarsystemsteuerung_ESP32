@@ -49,6 +49,7 @@ struct MockLog {
   void println() {}
 } FirmwareLog;
 void printMeasurementHeader() {}
+void serviceSolarPump() {}
 const char* pumpDirectionName(PumpDirection) { return "test"; }
 struct TemperatureController { bool valid,configValid; float currentTemp,targetTemp; };
 TemperatureController controllers[5]={{true,true,68,68},{false,false,NAN,0},

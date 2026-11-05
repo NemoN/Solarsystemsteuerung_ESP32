@@ -1,21 +1,21 @@
-Backload 1.14.5 – automatische und manuelle Pumpensteuerung
+Backload 2.0.0 – automatische und manuelle Pumpensteuerung
 
 Sensoren und Relais
 Fünf MAX31865-Sensoren mit gemeinsamer Software-SPI-Verbindung:
   CS GPIO 4: Kombispeicher oben      (API-ID 0)
   CS GPIO 5: Kombispeicher Mitte     (API-ID 1, Winterfühler)
-  CS GPIO 6: Kombispeicher unten     (API-ID 3, nur Anzeige)
+  CS GPIO 6: Kombispeicher unten     (API-ID 3, Solarregelung)
   CS GPIO 7: Pufferspeicher oben     (API-ID 2)
-  CS GPIO 15: Solarpanel            (API-ID 4, nur Anzeige)
+  CS GPIO 15: Solarpanel            (API-ID 4, Solarregelung)
   SPI: CLK GPIO 38, MOSI GPIO 11, MISO GPIO 13.
 Die ursprünglichen drei Sensor-IDs bleiben gleich; das vorhandene
 Temperaturarchiv erfasst weiterhin diese drei Sensoren.
 
   Relais 1: GPIO 3 – Pumpe EIN/AUS, Active Low.
   Relais 2: GPIO 8 – Pumprichtung über externe Umpolschaltung, Active Low.
-  Relais 3: GPIO 9 – Solarpumpe, reserviert und immer AUS.
+  Relais 3: GPIO 9 – Solarpumpe EIN/AUS, Active Low.
   Relais 4: GPIO 10 – manuelle Ölbrennerfreigabe, Active Low.
-GPIO 9/10 sind die vorgesehene Erweiterung und im Sketch anpassbar; sie müssen
+GPIO 9/10 sind im Sketch anpassbar; sie müssen
 zur tatsächlichen Verdrahtung passen.
 
 Vorläufig angenommene Zuordnung: Richtungsrelais AUS = Kombi → Puffer.
@@ -26,17 +26,52 @@ GPIO 3 ist ein ESP32-S3-Strapping-Pin. Das Verhalten des Relais beim
 Einschalten und Reset am realen Aufbau prüfen; die Software übernimmt die
 Steuerung erst nach Beginn von setup().
 
+Solarregelung (Relais 3)
+Solarpanel und Kombispeicher unten bestimmen die Solarpumpe unabhängig von
+Sommer/Winter und der manuellen Steuerung der Umladepumpe. Die
+Einschaltdifferenz ist von
+3 bis 10 K in 0,1-K-Schritten einstellbar (Vorgabe 5 K), getrennt für
+Anlagen- und Testmodus.
+EIN: Solarpanel − Kombi unten >= gespeicherte Einschaltdifferenz.
+AUS: Solarpanel − Kombi unten <= 1 K, Fehler eines Fühlers oder veraltete
+Messwerte (älter als 10 Sekunden).
+Zwischen den Grenzen bleibt der vorherige Pumpenzustand erhalten. Bei
+ungültigen Speicherwerten, während Firmware-Update/Startprüfung und beim
+Betriebsartwechsel bleibt die Pumpe aus. Beim Neustart beginnt die Pumpe aus
+und startet erst nach gültiger Messung und erfüllter Einschaltbedingung.
+Im Testmodus wird der Zustand simuliert; der reale Relaisausgang bleibt AUS.
+Die Regelung enthält keine Maximaltemperaturbegrenzung; anlagenseitige
+Schutzeinrichtungen müssen unabhängig funktionieren. Relaisbelegung und
+Schutzfunktionen vor dem Einsatz an der Anlage prüfen.
+
+RGB-Status-LED
+Die integrierte adressierbare RGB-LED wird über GPIO 48 angesteuert (am
+Testgerät geprüft). GPIO 38 bleibt für den SPI-Takt der Sensoren reserviert.
+- Grün: kurzer Blinkimpuls alle 2 Sekunden im normalen Automatikbetrieb.
+- Blau: langsames Blinken bei manueller Steuerung.
+- Gelb: kurzer Blitz bei Sensorfehler, veralteten Solarwerten oder
+  ungültiger Regelungskonfiguration.
+- Violett: kurzes Blinken im Testmodus, auch bei simulierten Sensorwerten.
+- Weiß: pulsierend während eines Firmware-Updates und seiner Startprüfung.
+Bei gleichzeitigen Zuständen gilt Störung > Update > manuelle Steuerung > Testmodus >
+Normalbetrieb. Auch ein simulierter Sensorfehler wird gelb angezeigt. WLAN-
+Verbindungsverlust allein gilt nicht als Störung der Regelung. Die seitherige
+Heartbeat-Ausgabe auf GPIO 2 bleibt erhalten. Die Status-API meldet unter
+statusLed den gewählten Zustand und ob der GPIO für die Anzeige verfügbar ist.
+GPIO 48 ist boardabhängig; vor dem Einsatz auf einem anderen Board Belegung
+prüfen. Falls ein Sensor-CS auf GPIO 48 gelegt wird, bleibt die RGB-LED aus.
+
 Sommer / Winter und Automatik
 Der manuelle Sommer-/Winterschalter wählt den Kombifühler und steuert Relais 4:
 - Sommer: Kombi oben, Ölbrennerfreigabe AUS, Einlagerung möglich.
 - Winter: Kombi Mitte, Ölbrennerfreigabe AN, Einlagerung gesperrt.
 Puffer oben ist in beiden Betriebsarten der Vergleichsfühler. Die Rückladung
 bleibt bei passenden Temperaturen möglich, auch im Winter. Die Ölsperre gilt
-auch im Handbetrieb. Die Freigabe ist keine Rückmeldung über echten Brennerlauf.
+auch bei manueller Steuerung. Die Freigabe ist keine Rückmeldung über echten Brennerlauf.
 Vor dem Einschalten von Relais 4 wird eine laufende Einlagerung gestoppt.
 Bei Betriebsartwechsel wird ein laufender Automatikauftrag zurückgesetzt;
 der neu gewählte Fühler muss die Startbedingungen erneut erfüllen.
-Kombi unten und Solarpanel dienen nur zur Anzeige.
+Kombi unten und Solarpanel dienen zusätzlich zur Solarregelung.
 
 Zwei Einstellungen:
 - Einlagerung ab: 68 bis 72 °C, Vorgabe 68 °C, beim gewählten Kombifühler.
@@ -73,20 +108,20 @@ Vollständige Beschreibung: Documentation/Backload-Regelung.md.
 POST /api/heating: winter=0/1 wählt den Fühler und die Ölbrennerfreigabe.
 POST /api/automatic: start; alte schreibende Clients müssen angepasst werden.
 GET /api/status meldet controlSensorId=0/1 und differenceStop=3.
-Nach Neustart ist der Handbetrieb aus; gespeicherte Betriebsart und bei gültigen
-Messungen die Automatik werden wieder aktiv. Während Update, Startprüfung,
+Nach Neustart ist die manuelle Steuerung aus; die gespeicherte Betriebsart
+und bei gültigen Messungen die Automatik werden wieder aktiv. Während Update, Startprüfung,
 Moduswechsel und Testbetrieb bleibt das echte Relais 4 AUS.
 
-Handbetrieb
+Manuelle Steuerung
 Manuelle Steuerung einschalten; die Pumpe bleibt zunächst AUS. Danach können
-Pumpe und Richtung über die Schalter bedient werden. Handbetrieb übergeht die
-Temperaturregelung einschließlich Sensorfehlern, jedoch niemals die
+Pumpe und Richtung über die Schalter bedient werden. Die manuelle Steuerung
+übergeht die Temperaturregelung einschließlich Sensorfehlern, jedoch niemals die
 Ölbrennersperre für die Einlagerung. Bei Winter/Ölfreigabe zuerst Richtung EIN
 (Puffer -> Kombi) wählen, dann die Pumpe einschalten. Die Oberfläche sperrt den
 Start in Gegenrichtung und nennt den Grund; die Ausschaltfunktion bleibt
 verfügbar. Ein abgelehnter Befehl wird durch eine lesende Statusabfrage geprüft
-und nicht als Verbindungsabbruch angezeigt. Beim Verlassen des
-Handbetriebs wird anhand einer neuen Messung wieder automatisch geregelt.
+und nicht als Verbindungsabbruch angezeigt. Beim Verlassen der manuellen
+Steuerung wird anhand einer neuen Messung wieder automatisch geregelt.
 Für beide Betriebsarten gilt beim Richtungswechsel: Pumpe AUS, mindestens
 2 Sekunden warten, Richtung schalten, 100 ms Relais-Schaltzeit abwarten und
 nur bei weiter bestehendem EIN-Auftrag wieder einschalten. Der animierte Pfeil
@@ -110,12 +145,12 @@ Partition Scheme: 16M Flash (3MB APP/9.9MB FATFS).
 ESP Async WebServer 3.6.0, Async TCP 3.3.2; RisalDash 0.13.0 und
 AsyncWebConsole 0.3.2 sind mit ihren Lizenztexten im Sketch enthalten.
 Webinterface: http://<ESP32-IP>/
-WLAN-Einstellungen: http://<ESP32-IP>/wlan
+Einstellungen mit WLAN und Firmware: http://<ESP32-IP>/einstellungen
 ESP-Informationen: http://<ESP32-IP>/info
-Organigramm und GPIO-Zuordnung: http://<ESP32-IP>/organigramm
+Regelungsübersicht und GPIO-Zuordnung: http://<ESP32-IP>/regelungsuebersicht
 Live-Monitor: http://<ESP32-IP>:81/ (oder Link in der Oberfläche).
 Die Oberfläche und Steuerungs-API verwenden Port 80, der Monitor Port 81.
-Varianten 1.14.5-mit-ap und 1.14.5-ohne-ap: Beide starten zunächst
+Varianten 2.0.0-mit-ap und 2.0.0-ohne-ap: Beide starten zunächst
 mit ESP32-Zugang. In der Ohne-AP-Version wird dieser nach 30 Sekunden stabiler
 Heimnetzverbindung und abgeschlossener Update-Startprüfung ausgeschaltet. Bei
 30 Sekunden Verbindungsausfall, fehlenden Zugangsdaten oder einer WLAN-
@@ -127,13 +162,25 @@ Verbindungsabbrüchen ist damit nicht automatisch behoben. Einstellungen und
 Temperaturregelung sind in beiden Versionen gleich. Der Quellcode verwendet
 ohne zusätzlichen Compiler-Schalter die Variante mit AP; für die andere beim
 Kompilieren BACKLOAD_AP_COMPARISON_NO_AP definieren.
-Das helle oder dunkle Design kann in der Navigation umgeschaltet werden; die
+Das helle oder dunkle Design kann in den Einstellungen umgeschaltet werden; die
 Auswahl bleibt im jeweiligen Browser gespeichert.
 Die Infoseite zeigt Chipmodell, Revision, CPU, Firmware, Slots und nutzbaren
 sowie freien RAM und PSRAM. Die angezeigte PSRAM-Gesamtgröße ist der für die
 Software nutzbare Speicher und kann unter der physisch verbauten Größe liegen.
 Das Dashboard und die WLAN-Seite zeigen die Signalstärke der Heimnetzverbindung
 des ESP in dBm. Ohne Heimnetzverbindung ist dieser Wert nicht verfügbar.
+Auf dem Dashboard veranschaulichen fünf Balken zusätzlich die Signalstärke;
+ohne aktuelle Verbindung bleiben alle Balken grau.
+Unter „Einstellungen“ im Bereich „Hostname“ kann der Hostname für den
+Router und mDNS geändert werden. Er darf 1–31 Buchstaben, Zahlen und
+Bindestriche enthalten; Anfang und Ende müssen Buchstaben oder Zahlen sein.
+Großbuchstaben werden in Kleinbuchstaben umgewandelt. Die Änderung wird nach
+dem nächsten Neustart aktiv; ein Speichern löst keinen Neustart aus. Die
+Einstellung gilt geräteweit auch nach einem Wechsel des Testmodus. Über
+„Standardnamen verwenden“ gelten wieder esp32-heizung im Normalbetrieb und
+backload-test im Testbetrieb. Bei verfügbarem mDNS kann die Steuerung unter
+http://<Hostname>.local/ erreichbar sein; Router und getrennte Netze können
+die Namensauflösung einschränken. Der Zugriff über die IP-Adresse bleibt möglich.
 
 Temperaturverlauf im PSRAM
 Unter /verlauf zeigt die Oberfläche alle fünf Sensoren als Temperaturkurven.
@@ -156,12 +203,13 @@ der Arduino IDE aufspielen. Kein vollständiges Löschen des Flashs auswählen:
 die WLAN- und Regelungseinstellungen liegen im NVS. Die erste USB-Installation
 enthält noch keine ältere OTA-Version für einen Rückfall.
 
-Die Update-Seite unter /update prüft beim Öffnen veröffentlichte GitHub-Releases
+Der Firmware-Bereich in den Einstellungen bietet die Suche nach GitHub-Releases
 und kann die neueste oder eine ältere Version über das Internet installieren.
 Sowohl das Gerät, auf
 dem die Webseite geöffnet ist, als auch der ESP benötigen Internetzugang. Der
 ESP prüft die HTTPS-Zertifikate und die SHA-256-Prüfsumme der Release-Datei.
 Nur Releases mit der Datei Backload.ino.bin und GitHub-SHA-256 sind auswählbar.
+Die Auswahl zeigt höchstens die acht neuesten passenden Releases.
 Nach Auswahl einer Version kann die zugehörige .bin-Datei auch über den
 Downloadlink direkt von GitHub auf den PC oder das Tablet gespeichert werden.
 Wenn verfügbar, enthält der Dateiname die Versionsnummer; die zusätzliche
@@ -208,11 +256,20 @@ Update-Funktion bereits installierter Versionen erforderlich. Kein separates
 Quellcode-Archiv als Release-Datei hochladen; der Quellcode liegt im Repository.
 In der Arduino IDE die Binärdatei über „Sketch → Kompilierte Binärdatei
 exportieren“ erstellen. Die normale .ino.bin verwenden, keine .merged.bin.
-Der Zugriff auf das lokale Webinterface ist nicht durch ein Update-Passwort
-geschützt: ausschließlich in einem vertrauenswürdigen Netz verwenden und nicht
-im Internet freigeben.
+Zugangspasswort: Unter „Einstellungen“ in der Navigation kann der
+Passwortschutz eingerichtet, geändert oder entfernt werden. Bis ein Passwort
+eingerichtet wird, ist die Oberfläche wie bisher ohne Anmeldung erreichbar.
+Das Passwort gilt für Heimnetz und ESP32-WLAN sowie für den Live-Monitor und
+bleibt beim Wechsel zwischen Test- und Normalbetrieb erhalten. Eine Änderung
+beendet alle angemeldeten Sitzungen; danach erneut anmelden. Die Statusabfrage
+GET /api/status bleibt für das Temperaturarchiv ohne Anmeldung lesbar, der
+UDP-Empfang des Dachsensors bleibt unverändert.
+HTTP verschlüsselt das Passwort und die Sitzung nicht. Für einen Fernzugriff
+ein VPN oder einen vertrauenswürdigen HTTPS-Reverse-Proxy verwenden; den ESP32
+nicht direkt per HTTP ins Internet freigeben. Geht das Passwort verloren, ist
+eine Anmeldung nicht mehr möglich; Zugangsdaten nicht im Quellcode speichern.
 Während der Übertragung ist die Pumpe gesperrt und ausgeschaltet. Bei Abbruch
-läuft die Automatik nach der nächsten Messung wieder; Handbetrieb bleibt aus.
+läuft die Automatik nach der nächsten Messung wieder; die manuelle Steuerung bleibt aus.
 Nach Erfolg startet der ESP neu, wodurch der flüchtige PSRAM-Verlauf verloren
 geht. Ein OTA-Image wird nach erfolgreichem Start und verfügbarer Konfiguration
 bestätigt; vor dieser Bestätigung führt ein Neustart zum Rückfall auf das vorige
@@ -227,21 +284,22 @@ stattdessen die Testwerte; der Betriebszustand ist sichtbar gekennzeichnet.
 „Testmodus beenden“ (oder /?test=off) startet nach Bestätigung wieder die
 Anlagensteuerung. Dabei kann die Automatik die echte Pumpe einschalten.
 Die zuletzt gewählte Betriebsart bleibt über Neustarts erhalten.
-Wird bei aktivem Testmodus die Hauptseite ohne ?test=on geöffnet, fragt sie,
-ob wieder in den Anlagenbetrieb gewechselt werden soll. Wird abgebrochen,
-bleibt der Testmodus aktiv und die Adresse erhält wieder ?test=on.
+Der Testmodus bleibt auch beim Öffnen der Hauptseite und der Einstellungen
+aktiv. Ein Wechsel in den Anlagenbetrieb erfolgt nur nach ausdrücklicher
+Bestätigung über „Testmodus beenden“ oder /?test=off.
 
 Der Test-ESP32 öffnet das WLAN ESP32-Backload-Test (Passwort Solar2026).
 Mit diesem verbinden und http://192.168.4.1 öffnen; alternativ im Webinterface
-mit dem eigenen Heimnetz verbinden. Unter „WLAN einrichten“ sucht „WLANs suchen“
+mit dem eigenen Heimnetz verbinden. Unter „Einstellungen“ im Bereich „WLAN einrichten“ sucht „WLANs suchen“
 nach sichtbaren 2,4-GHz-Netzen. Netz auswählen, Passwort eingeben und speichern;
 versteckte WLAN-Namen können weiterhin von Hand eingetragen werden. Während der
 Suche kann die Verbindung zum ESP32 kurz aussetzen.
-Über „Testwerte bearbeiten“ die eigene Seite /testwerte?test=on öffnen und fünf
+Unter „Einstellungen“ im Testmodus fünf
 Temperaturen einstellen oder Sensorfehler simulieren und übernehmen. Die
 Testwerte gelten bis zum nächsten Neustart. Standardmäßig schwanken die
 Temperaturen automatisch um die eingestellten Werte; die Option lässt sich
-auf der Testwerteseite für feste Werte ausschalten. Nach der Zeitsynchronisierung
+in den Einstellungen für feste Werte ausschalten. Die bisherige Adresse
+/testwerte bleibt als Einstieg zu den Einstellungen erhalten. Nach der Zeitsynchronisierung
 wird einmalig ein künstlicher Verlauf für die vorherigen sechs Stunden erzeugt,
 damit die Diagramme sofort etwas zeigen. Dieser Verlauf ist frei erfunden und
 nicht für die Anlage gemessen. Die Bereiche zur manuellen und

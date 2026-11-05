@@ -5,7 +5,9 @@
 #include "src/RisalDash/src/RisalUI.h"
 #include "src/AsyncWebConsole/src/AsyncWebConsole.h"
 #include "DashboardStyles.h"
+#include "Esp32BoardPhoto.h"
 #include "WebSerialMonitor.h"
+#include "WebAccess.h"
 #include <atomic>
 
 extern const char INDEX_HTML[];
@@ -229,14 +231,25 @@ Print& FirmwareLog = mirroredLog;
 void beginWebSerialMonitor() {
   if (started) return;
   monitor = new AsyncWebConsole("/konsole-ws", 0, monitorConfig());
+  beginWebAccess([]() {
+    dashboard.closeWebSockets();
+    if (monitor) monitor->closeWebSockets();
+  });
+  attachWebAccess(dashboard.server(), true);
+  attachWebAccess(consoleServer, false);
   monitor->attachTo(consoleServer, "/");
   consoleServer.begin();
-  dashboard.server().on("/wlan", HTTP_GET, [](AsyncWebServerRequest* req) { dashboard.servePage(req); });
+  dashboard.server().on("/einstellungen", HTTP_GET, [](AsyncWebServerRequest* req) { dashboard.servePage(req); });
+  dashboard.server().on("/sicherheit", HTTP_GET, [](AsyncWebServerRequest* req) { dashboard.servePage(req); });
   dashboard.server().on("/testwerte", HTTP_GET, [](AsyncWebServerRequest* req) { dashboard.servePage(req); });
   dashboard.server().on("/verlauf", HTTP_GET, [](AsyncWebServerRequest* req) { dashboard.servePage(req); });
-  dashboard.server().on("/update", HTTP_GET, [](AsyncWebServerRequest* req) { dashboard.servePage(req); });
   dashboard.server().on("/info", HTTP_GET, [](AsyncWebServerRequest* req) { dashboard.servePage(req); });
-  dashboard.server().on("/organigramm", HTTP_GET, [](AsyncWebServerRequest* req) { dashboard.servePage(req); });
+  dashboard.server().on("/regelungsuebersicht", HTTP_GET, [](AsyncWebServerRequest* req) { dashboard.servePage(req); });
+  dashboard.server().on("/assets/esp32-board.jpg", HTTP_GET, [](AsyncWebServerRequest* req) {
+    AsyncWebServerResponse* response = req->beginResponse_P(200, "image/jpeg", ESP32_BOARD_PHOTO, sizeof(ESP32_BOARD_PHOTO));
+    response->addHeader("Cache-Control", "no-store");
+    req->send(response);
+  });
   dashboard.server().on("/webserial", HTTP_GET, [](AsyncWebServerRequest* req) {
     req->redirect(String("http://") + req->client()->localIP().toString() + ":81/");
   });
@@ -246,9 +259,11 @@ void beginWebSerialMonitor() {
   dashboard.server().on("/api/settings", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/pump", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/automatic", HTTP_POST, proxyRequest);
+  dashboard.server().on("/api/solar", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/heating", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/test-mode", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/simulation", HTTP_POST, proxyRequest);
+  dashboard.server().on("/api/hostname", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/wifi", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/wifi/reset", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/wifi/scan", HTTP_GET | HTTP_POST, proxyRequest);
@@ -258,6 +273,7 @@ void beginWebSerialMonitor() {
   dashboard.server().on("/api/update/abort", HTTP_POST, proxyUpdateRequest);
   dashboard.server().on("/api/update/github", HTTP_POST, proxyUpdateRequest);
   dashboard.server().on("/api/update/github-status", HTTP_POST, proxyUpdateRequest);
+  dashboard.server().onNotFound([](AsyncWebServerRequest* req) { req->send(404, "text/plain; charset=utf-8", "Nicht gefunden."); });
   dashboard.brand("Solarsteuerung").theme(RisalUI::DARK).effects(false);
   dashboard.addExternalWidget(controlWidget);
   dashboard.beginOnExistingWiFi();
@@ -265,6 +281,7 @@ void beginWebSerialMonitor() {
 }
 
 void processWebSerialMonitor() {
+  processWebAccess();
   static uint32_t requests = 0, connections = 0, complete = 0, failed = 0;
   const uint32_t newRequests = otaProxyRequests.load(), newConnections = otaProxyConnections.load();
   const uint32_t newComplete = otaProxyComplete.load(), newFailed = otaProxyFailed.load();

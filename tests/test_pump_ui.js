@@ -59,13 +59,13 @@ function commandResponse(result) {
   commandResponse(onReturn);
   await context.changePump('power');
   assert.equal(calls.at(-1).options.body.get('value'), '1');
-  assert.equal(node('pump-badge').textContent, 'Pumpe: AN');
+  assert.equal(node('pump-badge').textContent, 'Umladepumpe: AN');
   assert.equal(node('pump-switch').disabled, false);
   assert.equal(node('direction-switch').disabled, true);
   commandResponse(offReturn);
   await context.changePump('power');
   assert.equal(calls.at(-1).options.body.get('value'), '0');
-  assert.equal(node('pump-badge').textContent, 'Pumpe: AUS');
+  assert.equal(node('pump-badge').textContent, 'Umladepumpe: AUS');
   assert.equal(node('direction-switch').disabled, false);
 
   // Im Sommer ist auch der Vorwärtsstart erlaubt.
@@ -74,7 +74,7 @@ function commandResponse(result) {
   assert.equal(node('pump-switch').disabled, false);
   commandResponse(state({on:true, requestedOn:true}));
   await context.changePump('power');
-  assert.equal(node('pump-badge').textContent, 'Pumpe: AN');
+  assert.equal(node('pump-badge').textContent, 'Umladepumpe: AN');
 
   // Ein anderer Client kann inzwischen Winter einschalten: HTTP 409 ist kein WLAN-Ausfall.
   context.updateHeating(summer);context.updatePump(offForward);calls=[];
@@ -87,7 +87,7 @@ function commandResponse(result) {
   assert.deepEqual(calls.map(c=>c.url), ['/api/pump', '/api/status']);
   assert.match(node('pump-message').textContent, /Befehl abgelehnt:.*Ölbrenner/);
   assert.match(node('pump-direction-state').textContent, /^Förderrichtung:/);
-  assert.equal(node('pump-badge').textContent, 'Pumpe: AUS');
+  assert.equal(node('pump-badge').textContent, 'Umladepumpe: AUS');
   assert.equal(node('pump-switch').disabled, true);
   assert.equal(node('direction-switch').disabled, false);
 
@@ -100,7 +100,7 @@ function commandResponse(result) {
   };
   await context.changePump('power');
   assert.deepEqual(calls.map(c=>c.url), ['/api/pump', '/api/status']);
-  assert.equal(node('pump-badge').textContent, 'Pumpe: AN');
+  assert.equal(node('pump-badge').textContent, 'Umladepumpe: AN');
   assert.match(node('pump-direction-state').textContent, /^Förderrichtung:/);
   assert.match(node('pump-message').textContent, /Schalten nicht bestätigt:.*neu abgefragt/);
 
@@ -112,5 +112,5 @@ function commandResponse(result) {
   assert.equal(node('pump-switch').disabled, true);
   assert.equal(node('direction-switch').disabled, true);
   assert.match(node('pump-message').textContent, /Pumpenstatus konnte nicht geladen werden/);
-  console.log('PASS: Winter-Handbetrieb, Rückladung starten/stoppen, Sommer, HTTP-Ablehnung, verlorene Antwort und echter Verbindungsabbruch.');
+  console.log('PASS: Manuelle Steuerung im Winter, Rückladung starten/stoppen, Sommer, HTTP-Ablehnung, verlorene Antwort und echter Verbindungsabbruch.');
 })().catch(error => { console.error(error); process.exitCode=1; });

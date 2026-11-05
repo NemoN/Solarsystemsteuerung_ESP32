@@ -76,6 +76,7 @@ class RisalUI {
   // The underlying async web server — register your own routes on it (add them before begin()):
   //   dash.server().on("/api/logs", HTTP_GET, [](AsyncWebServerRequest* r){ ... });
   AsyncWebServer& server() { return _server; }
+  void closeWebSockets() { _ws.closeAll(1008, "Anmeldung erforderlich"); }
   RisalUI& theme(Theme t);
   RisalUI& apName(const char* name) { _apSsid = name; return *this; }  // portal AP name
   RisalUI& apPass(const char* pass) { _apPass = pass; return *this; }  // portal AP password

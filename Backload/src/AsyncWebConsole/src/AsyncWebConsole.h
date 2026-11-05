@@ -51,6 +51,7 @@ public:
   void print(const String &s);
   
   void sendBacklog(AsyncWebSocketClient* client);
+  void closeWebSockets() { _ws.closeAll(1008, "Anmeldung erforderlich"); }
   void setIndexHtml(const char* htmlProgmem);
 
   // IDF log bridge (async, background task)

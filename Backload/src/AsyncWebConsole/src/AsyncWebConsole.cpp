@@ -117,6 +117,7 @@ void AsyncWebConsole::attachTo(AsyncWebServer& server, const char* routePath) {
   _server = &server;
   _server->on(routePath, HTTP_GET, [this](AsyncWebServerRequest* r){
     AsyncResponseStream* response = r->beginResponseStream("text/html; charset=utf-8");
+    response->addHeader("Cache-Control", "no-store");
     // Inject wsPath so the HTML client connects to the correct WebSocket endpoint
     response->printf("<script>window.__AWC_WS_PATH='%s';</script>", _wsPath);
     // Stream PROGMEM HTML in chunks to avoid copying entire page into RAM

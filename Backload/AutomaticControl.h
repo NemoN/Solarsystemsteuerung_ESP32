@@ -11,7 +11,7 @@ struct AutomaticThresholds {
 
 // Zustandsbehaftete Temperaturregelung; keine GPIO- oder Zeitabhängigkeit.
 // allowCharging sperrt ausschließlich die Einlagerung. Die Rückladung bleibt
-// unabhängig davon aktiv. Relais 4 sperrt die Einlagerung zusätzlich im Handbetrieb.
+// unabhängig davon aktiv. Relais 4 sperrt die Einlagerung zusätzlich bei manueller Steuerung.
 class AutomaticControl {
 public:
   static constexpr float MIN_CHARGE_TARGET = 68.0f;
