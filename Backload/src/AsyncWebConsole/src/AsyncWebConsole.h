@@ -1,7 +1,7 @@
 #pragma once
 #include <Arduino.h>
-#include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
+#include "../../AsyncTCP/src/AsyncTCP.h"
+#include "../../ESPAsyncWebServer/src/ESPAsyncWebServer.h"
 #include <functional>
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"

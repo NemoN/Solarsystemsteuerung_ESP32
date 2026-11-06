@@ -1,9 +1,8 @@
 // Arduino IDE: Backload.ino im gleichnamigen Ordner Backload öffnen.
 // ESP32S3 Dev Module (N16R8), ESP32-Core 2.0.13, Flash Size: 16MB,
 // PSRAM: OPI PSRAM, Partition Scheme: 16M Flash (3MB APP/9.9MB FATFS).
-// Bibliotheken: ESP Async WebServer 3.6.0, Async TCP 3.3.2.
-// RisalDash und AsyncWebConsole liegen mit Lizenzinformationen im Sketchordner.
-#include <Adafruit_MAX31865.h>
+// Die zusätzlich benötigten Bibliotheken liegen mit Lizenzinformationen im Sketchordner src.
+#include "src/Adafruit_MAX31865/Adafruit_MAX31865.h"
 #include <WiFi.h>
 #include <WiFiUdp.h>
 #include <ESPmDNS.h>
@@ -12,6 +11,7 @@
 #include "WebSerialMonitor.h"
 #include "SensorReading.h"
 #include "PumpControl.h"
+#include "PumpRuntime.h"
 #include "AutomaticControl.h"
 #include "SolarControl.h"
 #include "TemperatureHistory.h"
@@ -38,10 +38,10 @@
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
 #ifdef BACKLOAD_AP_COMPARISON_NO_AP
-const char* FIRMWARE_VERSION = "2.0.0-ohne-ap";
+const char* FIRMWARE_VERSION = "2.1.4-ohne-ap";
 constexpr bool AP_RECOVERY_ONLY = true;
 #else
-const char* FIRMWARE_VERSION = "2.0.0-mit-ap";
+const char* FIRMWARE_VERSION = "2.1.4-mit-ap";
 constexpr bool AP_RECOVERY_ONLY = false;
 #endif
 
@@ -160,6 +160,12 @@ bool storageReady = false;
 WebServer server(IPAddress(127, 0, 0, 1), 8080);
 Preferences preferences;
 Preferences hostnamePreferences;
+Preferences runtimePreferences;
+PumpRuntime pumpRuntime;
+bool runtimeReady = false, runtimeStorageHealthy = false;
+bool runtimeSolarOn = false, runtimePumpOn = false;
+PumpDirection runtimePumpDirection = PumpDirection::CombiToBuffer;
+uint32_t runtimeLastUpdate = 0, runtimeLastSave = 0;
 bool hostnameStorageReady = false, hostnameUsesDefault = true, mdnsReady = false;
 String configuredHostname, activeHostname;
 WiFiUDP roofUdp;
@@ -249,6 +255,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 .switch-track::after{content:'';display:block;width:22px;height:22px;border-radius:50%;background:white}
 .relay-switch[aria-checked="true"] .switch-track{background:#17636b}.relay-switch[aria-checked="true"] .switch-track::after{transform:translateX(22px)}
 .pump-flow{display:block;width:100%;max-width:600px;margin:24px auto 8px;color:#17636b}.pump-flow rect{fill:none;stroke:#8c9fa3}.pump-flow text{fill:#192f35;font:24px system-ui,sans-serif}.pump-flow>path{fill:none;stroke:currentColor;stroke-width:3}.pump-flow.stopped{color:#4e6268}.pump-flow:not(.stopped)>path{stroke-dasharray:12 8;animation:flow 1s linear infinite}@keyframes flow{to{stroke-dashoffset:-20}}@media(prefers-reduced-motion:reduce){.pump-flow:not(.stopped)>path{animation:none}}
+.transfer-pump-body{fill:var(--bg2,#fff);stroke:currentColor;stroke-width:2}.transfer-pump-rotor{fill:currentColor;transform-box:fill-box;transform-origin:center}.storage-overview.motion-visible .pump-flow:not(.stopped) .transfer-pump-rotor{animation:transfer-pump-spin 3s linear infinite}.storage-overview.motion-visible .pump-flow[data-direction="ccw"]:not(.stopped) .transfer-pump-rotor{animation-direction:reverse}@keyframes transfer-pump-spin{to{transform:rotate(360deg)}}@media(prefers-reduced-motion:reduce){.storage-overview.motion-visible .pump-flow:not(.stopped) .transfer-pump-rotor{animation:none}}
 .storage-overview{display:grid;grid-template-columns:160px minmax(0,1fr);align-items:center;gap:24px;max-width:784px;margin:22px auto 8px}.storage-overview .pump-flow{width:100%;max-width:none;margin:0}.burner-diagram{display:grid;gap:4px;text-align:center;color:var(--ink2,#4e6268);line-height:1.4}.burner-icon{display:block;width:128px;max-width:100%;margin:0 auto}.burner-body{fill:var(--bg2,#fff)}.burner-indicator{fill:currentColor}.burner-diagram strong{color:var(--ink1,#192f35);font-size:1rem}.burner-diagram output{font-size:.88rem;font-weight:700}.burner-diagram>span{font-size:.78rem;color:var(--ink2,#4e6268)}.burner-diagram.released{color:#ffb454}html.light .burner-diagram.released{color:#9c4b0b}
 @media(max-width:700px){.storage-overview{grid-template-columns:minmax(0,1fr);gap:12px}.storage-overview .pump-flow{grid-row:1;grid-column:1}.burner-diagram{grid-template-columns:88px minmax(0,1fr);text-align:left;gap:2px 14px;justify-self:start}.burner-icon{width:88px;grid-row:1/span 3;grid-column:1}.burner-diagram>:not(svg){grid-column:2}}
 .pump-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;margin-top:24px}.pump-controls>div{min-width:0}.pump-controls .relay-switch{width:100%;text-align:left;min-height:58px}.pump-controls .switch-track{flex-shrink:0}.pump-controls p{margin:10px 0 0;font-size:.9rem}.relay-switch:active{background:#c9e9d9}
@@ -269,6 +276,10 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 #sim-banner{padding:12px 16px;background:#e6eaee;color:#25313b;border:1px solid #c7cfd5;border-radius:6px}#sim-banner button{background:#f6f8fa;color:#25313b;border:1px solid #aab5bd}#sim-banner button:hover{background:#dce2e7}#sim-form{display:block}#sim-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.sim-item{padding:0}.sim-check{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.9rem}.sim-check input{width:20px;min-height:20px;margin:0;accent-color:#17636b}#sim-form button{margin-top:20px}
 @media(max-width:560px){#sim-fields{grid-template-columns:1fr}}
 @media(max-width:560px){.rule-table-hint{display:block;font-size:.8rem}main{padding:26px 18px}form{grid-template-columns:1fr 1fr}#controllers form,#auto-form{grid-template-columns:1fr}button{grid-column:1/-1}.stepper button{grid-column:auto}.heading{align-items:flex-start}}
+#pump-runtime-section{display:none}body.history-page #pump-runtime-section{display:block}
+.runtime-controls{display:flex;gap:12px;flex-wrap:wrap}.runtime-controls label{flex:1 1 180px;max-width:260px}.runtime-controls select{width:100%;min-height:46px;margin-top:8px;padding:8px;border:1px solid #8c9fa3;border-radius:6px;font:inherit;color:var(--ink1,#192f35);background:var(--bg2,#fff)}
+.runtime-values{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:20px 0 0}.runtime-values div{padding:12px;border:1px solid var(--line,#b9c8c9);border-radius:6px}.runtime-values dt{font-size:.85rem;color:var(--ink2,#4e6268)}.runtime-values dd{margin:6px 0 0;font-size:1.25rem;font-weight:700;font-variant-numeric:tabular-nums}.runtime-note{margin-top:14px}
+@media(max-width:600px){.runtime-controls label{max-width:none}.runtime-values{grid-template-columns:1fr}.runtime-values div{display:flex;align-items:center;justify-content:space-between;gap:12px}.runtime-values dd{margin:0}}
 </style>
 </head>
 <body><main>
@@ -278,7 +289,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
   <button id="nav-toggle" type="button" aria-controls="nav-links" aria-expanded="false" hidden><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Menü</button>
   <div id="nav-links" class="nav-links">
   <a class="dashboard-link" href="/"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21v-7h6v7"/></svg><span>Steuerung</span></a>
-  <a class="history-link" href="/verlauf"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 4v16h16"/><path d="M7 15l4-4 3 2 5-7"/></svg><span>Temperaturverlauf</span></a>
+  <a class="history-link" href="/verlauf"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 4v16h16"/><path d="M7 15l4-4 3 2 5-7"/></svg><span>Verlauf</span></a>
   <a class="organigram-link" href="/regelungsuebersicht"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="8" y="2" width="8" height="5" rx="1"/><rect x="2" y="17" width="8" height="5" rx="1"/><rect x="14" y="17" width="8" height="5" rx="1"/><path d="M12 7v5M6 17v-5h12v5"/></svg><span>Regelungsübersicht</span></a>
   <a class="info-link" href="/info"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5h.01"/></svg><span>ESP-Info</span></a>
   <a href="/webserial" id="console-link" target="_blank" rel="noopener"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg><span>Live-Monitor öffnen</span></a>
@@ -308,7 +319,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <p id="heating-message" class="message" role="status"></p>
 </section>
 <section aria-labelledby="pump-heading">
-<div class="heading"><h2 id="pump-heading">Pumpensteuerung</h2><span id="pump-badge" class="badge" role="status">Status wird geladen …</span></div>
+<div class="heading"><h2 id="pump-heading">Backloadpumpe</h2><span id="pump-badge" class="badge" role="status">Status wird geladen …</span></div>
 <div class="storage-overview">
 <svg class="burner-pipes" aria-hidden="true"><path class="pipe-vl"/><path class="pipe-rl"/><path class="solar-link"/><text class="pipe-vl-label">VL</text><text class="pipe-rl-label">RL</text></svg>
 <div id="oil-burner-diagram" class="burner-diagram" role="img" aria-label="Ölbrennerfreigabe: Status unbekannt">
@@ -337,6 +348,10 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <text class="sensor-label" x="28" y="198">Unten</text><text class="sensor-value" id="diagram-temp-3" x="163" y="218" text-anchor="end">—</text>
 <text class="sensor-label" x="276" y="98">Oben</text><text class="sensor-value" id="diagram-temp-2" x="411" y="118" text-anchor="end">—</text>
 </g>
+<g class="transfer-pump" transform="translate(220 111)" aria-hidden="true">
+<circle class="transfer-pump-body" r="19"/>
+<g class="transfer-pump-rotor"><circle r="13" fill="none" stroke="none"/><path d="M0 0 C-3 -5 -3 -11 2 -13 C5 -9 4 -3 0 0Z"/><path d="M0 0 C-3 -5 -3 -11 2 -13 C5 -9 4 -3 0 0Z" transform="rotate(120)"/><path d="M0 0 C-3 -5 -3 -11 2 -13 C5 -9 4 -3 0 0Z" transform="rotate(240)"/><circle r="2.5"/></g>
+</g>
 <path id="pump-flow-arrow" d="M187 154H253" marker-end="url(#flow-arrowhead)"/>
 </svg>
 <div id="solar-pump-diagram" class="solar-diagram" role="img" aria-label="Solarpumpe: Status unbekannt">
@@ -352,14 +367,14 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 </div>
 <p id="pump-direction-state" class="muted">Förderrichtung wird geladen …</p>
 <div class="pump-controls">
-<div><button id="manual-switch" class="relay-switch" type="button" role="switch" aria-checked="false" aria-describedby="manual-help" disabled><span class="switch-track" aria-hidden="true"></span><span>Manuelle Steuerung</span></button><p id="manual-help" class="muted">Die manuelle Steuerung gilt nur für die Umladepumpe und übergeht dort die Temperaturregelung und Sensorfehler. Nach einem Neustart ist sie ausgeschaltet.</p></div>
-<div><button id="pump-switch" class="relay-switch" type="button" role="switch" aria-checked="false" aria-describedby="pump-help" disabled><span class="switch-track" aria-hidden="true"></span><span>Umladepumpe ein / aus</span></button><p id="pump-help" class="muted">Zuerst die manuelle Steuerung einschalten.</p></div>
+<div><button id="manual-switch" class="relay-switch" type="button" role="switch" aria-checked="false" aria-describedby="manual-help" disabled><span class="switch-track" aria-hidden="true"></span><span>Manuelle Steuerung</span></button><p id="manual-help" class="muted">Die manuelle Steuerung gilt nur für die Backloadpumpe und übergeht dort die Temperaturregelung und Sensorfehler. Nach einem Neustart ist sie ausgeschaltet.</p></div>
+<div><button id="pump-switch" class="relay-switch" type="button" role="switch" aria-checked="false" aria-describedby="pump-help" disabled><span class="switch-track" aria-hidden="true"></span><span>Backloadpumpe ein / aus</span></button><p id="pump-help" class="muted">Zuerst die manuelle Steuerung einschalten.</p></div>
 <div><button id="direction-switch" class="relay-switch" type="button" role="switch" aria-checked="false" aria-describedby="direction-help" disabled><span class="switch-track" aria-hidden="true"></span><span>Pumprichtung · Relais 2</span></button><p id="direction-help" class="muted">Aus: Kombi → Puffer. Ein: Puffer → Kombi.</p></div>
 </div>
 <p id="pump-mode-detail" class="muted">Steuerungsmodus wird geladen …</p>
 <p id="pump-progress" class="message" role="status"></p>
 <p id="pump-message" class="message" role="status"></p>
-<p class="muted">Richtungswechsel: Die Pumpe pausiert 2 Sekunden, auch bei manueller Steuerung.</p>
+<p class="muted">Richtungswechsel: Die Backloadpumpe pausiert 2 Sekunden, auch bei manueller Steuerung.</p>
 </section>
 <section aria-labelledby="auto-heading">
 <h2 id="auto-heading">Automatische Regelung</h2>
@@ -383,7 +398,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 </section>
 <section id="solar-section" aria-labelledby="solar-heading">
 <div class="heading"><h2 id="solar-heading">Solarpumpe</h2><span id="solar-badge" class="badge" role="status">Status wird geladen …</span></div>
-<p class="muted">Relais 3 regelt unabhängig von der Umladepumpe anhand von Solarpanel und Kombispeicher unten.</p>
+<p class="muted">Relais 3 regelt unabhängig von der Backloadpumpe anhand von Solarpanel und Kombispeicher unten.</p>
 <p id="solar-detail" class="muted">Werte werden geladen …</p>
 <form id="solar-form">
 <div><label for="solar-start">Einschaltdifferenz (3–10 K)</label><div class="stepper"><button type="button" data-direction="-1" aria-label="Solar-Einschaltdifferenz senken">−</button><input id="solar-start" type="number" name="start" min="3" max="10" step="0.1" inputmode="decimal" required><button type="button" data-direction="1" aria-label="Solar-Einschaltdifferenz erhöhen">+</button></div></div>
@@ -392,6 +407,8 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <p class="muted">Einschalten ab eingestellter Differenz; Ausschalten bei höchstens 1 K oder Sensorfehler.</p>
 <p id="solar-message" class="message" role="status"></p>
 </section>
+
+
 
 <section id="organigram-section" aria-labelledby="organigram-heading">
 <header class="org-header"><div><h1 id="organigram-heading">Regelungsübersicht</h1><p class="muted">So entscheidet die Steuerung über Betriebsart und Förderrichtung.</p></div><span id="org-status" class="badge" role="status">Status wird geladen …</span></header>
@@ -416,11 +433,11 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
       <p class="org-stop"><strong>Stopp:</strong> Differenz ≤ <strong class="org-stop-value">— K</strong>.</p>
     </article>
   </div>
-  <div class="org-interlock"><svg class="org-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6v5c0 5 3 8 8 10 5-2 8-5 8-10V6z"/><path d="M12 8v4m0 4h.01"/></svg><div><strong>Pumpe &amp; Richtungswechsel</strong><p>Bei Fehler eines Regelungsfühlers stoppt die Automatik. Vor einem Richtungswechsel pausiert die Pumpe 2 Sekunden.</p></div></div>
+  <div class="org-interlock"><svg class="org-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6v5c0 5 3 8 8 10 5-2 8-5 8-10V6z"/><path d="M12 8v4m0 4h.01"/></svg><div><strong>Backloadpumpe &amp; Richtungswechsel</strong><p>Bei Fehler eines Regelungsfühlers stoppt die Automatik. Vor einem Richtungswechsel pausiert die Backloadpumpe 2 Sekunden.</p></div></div>
 </div>
 <div class="org-solar" aria-labelledby="org-solar-heading">
   <div class="heading"><div class="org-section-title"><svg class="org-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="3"/><path d="M12 1v2M4 7h3m10 0h3M6 2l1.5 1.5M18 2l-1.5 1.5M4 13h16l2 8H2zM5 17h14m-7-4v8"/></svg><h2 id="org-solar-heading">Solarregelung</h2></div><span id="org-solar-state" class="badge">Status wird geladen …</span></div>
-  <p class="muted">Die Solarpumpe an Relais 3 arbeitet unabhängig von der Umladepumpe.</p>
+  <p class="muted">Die Solarpumpe an Relais 3 arbeitet unabhängig von der Backloadpumpe.</p>
   <dl class="org-solar-values"><div><dt>Solarpanel</dt><dd id="org-solar-panel">—</dd></div><div><dt>Kombispeicher unten</dt><dd id="org-solar-tank">—</dd></div><div><dt>Aktuelle Differenz</dt><dd id="org-solar-difference">—</dd></div></dl>
   <p><strong>Start:</strong> Solarpanel − Kombi unten ≥ <strong id="org-solar-start">— K</strong> <span class="muted">(einstellbar: 3–10 K)</span>.</p>
   <p><strong>Stopp:</strong> Differenz ≤ <strong id="org-solar-stop">— K</strong> oder Fehler eines der beiden Sensoren.</p>
@@ -454,7 +471,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
     </dl></div>
     <figure class="org-board"><div class="org-board-photo"><img src="/assets/esp32-board.jpg" alt="ESP32-S3 N16R8 Entwicklungsboard" width="1376" height="1500" loading="lazy"></div><figcaption><strong>ESP32-S3</strong><span>N16R8 · 16 MB Flash · 8 MB PSRAM</span></figcaption></figure>
     <div class="org-pin-group org-outputs"><h3>Relaisausgänge</h3><p class="org-pin-intro">Active Low · LOW = AN</p><dl class="org-pin-list">
-      <div><dt>Relais 1 <small>Pumpe ein / aus</small></dt><dd>GPIO <span id="org-relay-pump">—</span></dd></div>
+      <div><dt>Relais 1 <small>Backloadpumpe ein / aus</small></dt><dd>GPIO <span id="org-relay-pump">—</span></dd></div>
       <div><dt>Relais 2 <small>Pumprichtung</small></dt><dd>GPIO <span id="org-relay-direction">—</span></dd></div>
       <div><dt>Relais 3 <small>Solarpumpe</small></dt><dd>GPIO <span id="org-relay-solar">—</span></dd></div>
       <div><dt>Relais 4 <small>Ölbrennerfreigabe</small></dt><dd>GPIO <span id="org-relay-oil">—</span></dd></div>
@@ -484,6 +501,17 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <p id="history-status" class="muted" role="status">Verlauf wird geladen …</p>
 <div class="history-chart"><canvas id="history-chart" role="img" aria-label="Temperaturverlauf der ausgewählten Sensoren"></canvas></div>
 <details><summary>Letzte dargestellte Werte</summary><p id="history-latest" class="muted">Noch keine Messwerte.</p></details>
+</section>
+<section id="pump-runtime-section" aria-labelledby="runtime-heading">
+<h2 id="runtime-heading">Pumpenlaufzeiten</h2>
+<p class="muted">Gezählt wird nur, wenn das jeweilige Relais eingeschaltet ist.</p>
+<div class="runtime-controls">
+<label>Zeitraum<select id="runtime-kind"><option value="days">Tag</option><option value="months">Monat</option><option value="years">Jahr</option></select></label>
+<label>Auswahl<select id="runtime-period" disabled><option>Wird geladen …</option></select></label>
+</div>
+<dl class="runtime-values"><div><dt>Solarpumpe</dt><dd id="runtime-solar">—</dd></div><div><dt>Kombi → Puffer</dt><dd id="runtime-charge">—</dd></div><div><dt>Puffer → Kombi</dt><dd id="runtime-return">—</dd></div></dl>
+<p id="runtime-note" class="muted runtime-note" role="status">Laufzeiten werden geladen …</p>
+<p class="muted">Auf dem ESP32: letzte 32 Tage, 24 Monate und 12 Jahre mit Daten. Der History-Server archiviert die abgeholten Werte dauerhaft.</p>
 </section>
 <header id="settings-intro"><h1>Einstellungen</h1><p class="muted">Darstellung, Zugang, WLAN, Firmware und Testwerte dieser Steuerung.</p></header>
 <section id="appearance-section" aria-labelledby="appearance-heading">
@@ -720,27 +748,30 @@ function updatePump(state){
   manualSwitch.setAttribute('data-state',state.manual?'on':'off');
   pumpSwitch.setAttribute('aria-checked',String(state.requestedOn));
   directionSwitch.setAttribute('aria-checked',String(state.requestedDirection===1));
-  pumpBadge.textContent='Umladepumpe: '+(state.on?'AN':'AUS')+(state.switching?' · Richtungswechsel':'');
+  pumpBadge.textContent='Backloadpumpe: '+(state.on?'AN':'AUS')+(state.switching?' · Richtungswechsel':'');
   pumpBadge.className='badge'+(state.on?' on':'');
   document.getElementById('pump-direction-state').textContent='Förderrichtung: '+directionName(state.direction)+(state.direction!==state.requestedDirection?' · Angefordert: '+directionName(state.requestedDirection):'');
-  document.getElementById('pump-flow-title').textContent='Förderrichtung: '+directionName(state.direction)+', Pumpe '+(state.on?'an':'aus');
+  document.getElementById('pump-flow-title').textContent='Förderrichtung: '+directionName(state.direction)+', Backloadpumpe '+(state.on?'an · Fördersymbol: '+(state.direction===0?'Linkslauf':'Rechtslauf'):'aus');
   document.getElementById('pump-flow-arrow').setAttribute('d',state.direction===0?'M187 154H253':'M253 154H187');
   document.getElementById('pump-flow-arrow').style.visibility='visible';
-  document.querySelector('.pump-flow').classList.toggle('stopped',!state.on);
-  document.getElementById('pump-mode-detail').textContent=state.manual?'Manuelle Steuerung aktiv · Ölbrennersperre gilt.':state.automaticConfigured?'Automatik aktiv · Bei Fehler eines Regelungsfühlers bleibt die Pumpe aus.':'Automatik gesperrt · Pumpe aus.';
-  document.getElementById('pump-progress').textContent=state.phase==='stopping'?'Pumpe aus · Richtungswechsel nach 2 Sekunden.':state.phase==='settling'?'Richtung umgeschaltet · Relais schaltet.':'';
+  const diagram=document.querySelector('.pump-flow');
+  diagram.setAttribute('data-direction',state.direction===0?'ccw':'cw');
+  diagram.classList.toggle('stopped',!state.on);
+  document.getElementById('pump-mode-detail').textContent=state.manual?'Manuelle Steuerung aktiv · Ölbrennersperre gilt.':state.automaticConfigured?'Automatik aktiv · Bei Fehler eines Regelungsfühlers bleibt die Backloadpumpe aus.':'Automatik gesperrt · Backloadpumpe aus.';
+  document.getElementById('pump-progress').textContent=state.phase==='stopping'?'Backloadpumpe aus · Richtungswechsel nach 2 Sekunden.':state.phase==='settling'?'Richtung umgeschaltet · Relais schaltet.':'';
   updatePumpControls();
 }
 function unknownPump(){
   pumpState=null;
   manualSwitch.setAttribute('data-state','unknown');
-  pumpBadge.textContent='Umladepumpe: Status unbekannt';pumpBadge.className='badge';
+  pumpBadge.textContent='Backloadpumpe: Status unbekannt';pumpBadge.className='badge';
   document.getElementById('pump-direction-state').textContent='Keine aktuelle Förderrichtung. Verbindung zum ESP32 prüfen.';
   document.getElementById('pump-flow-title').textContent='Förderrichtung unbekannt';
   document.getElementById('pump-flow-arrow').style.visibility='hidden';
   document.getElementById('pump-help').textContent='Pumpenstatus unbekannt. Warte auf eine bestätigte Verbindung.';
   document.getElementById('pump-mode-detail').textContent='Steuerungsmodus unbekannt. Die Schalter werden nach erneuter Statusabfrage freigegeben.';
   document.getElementById('pump-progress').textContent='';
+  document.querySelector('.pump-flow').setAttribute('data-direction','unknown');
   document.querySelector('.pump-flow').classList.add('stopped');
   updatePumpControls();
 }
@@ -782,7 +813,7 @@ async function changePump(action){
   try{
     const state=await request('/api/pump',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'HeatingUI'},body:new URLSearchParams({action,value:value?'1':'0'})});
     updatePump(state);
-    pumpMessage.textContent=action==='manual'?(state.manual?'Manuelle Steuerung eingeschaltet. Pumpe ist zunächst AUS.':'Manuelle Steuerung ausgeschaltet.'):'Pumpenbefehl übernommen.';
+    pumpMessage.textContent=action==='manual'?(state.manual?'Manuelle Steuerung eingeschaltet. Backloadpumpe ist zunächst AUS.':'Manuelle Steuerung ausgeschaltet.'):'Pumpenbefehl übernommen.';
   }catch(error){
     // Eine HTTP-Ablehnung ist kein Verbindungsabbruch. Auch bei verlorener
     // Antwort ausschließlich lesen: einen Schaltauftrag niemals blind wiederholen.
@@ -878,7 +909,7 @@ function automaticRuleText(state,controllers,pump){
   return {
     sensor:'Fühler: '+combi.name+' und Pufferspeicher oben. Starttemperatur: '+(targetValid?temp(settings.target):'ungültig')+'.',
     status:pump&&pump.manual?'Manuelle Steuerung aktiv · Ölbrennersperre gilt.':
-      !combi.valid||!buffer.valid?'Sensorfehler · Automatik hält die Pumpe aus.':'Gespeicherte Einstellungen.',
+      !combi.valid||!buffer.valid?'Sensorfehler · Automatik hält die Backloadpumpe aus.':'Gespeicherte Einstellungen.',
     chargeStart:!state.allowCharging?'Einlagerung durch Sommer-/Winterumschaltung gesperrt.':!targetValid?'Einlagerung gesperrt: Starttemperatur muss 68–72 °C betragen.':
       'Ölbrennerfreigabe AUS UND Kombi ≥ '+temp(settings.target)+' UND Kombi − Puffer ≥ '+delta(state.differenceStart)+'.',
     chargeStop:'Kombi − Puffer ≤ 3 K ODER Ölbrenner freigegeben / Betriebsart unbekannt.',
@@ -1402,6 +1433,48 @@ async function loadSparklines(){
   }catch(error){sparkData=null;sparkMessage='Verlauf nicht erreichbar. Neuer Versuch erfolgt automatisch.';}
   finally{sparkLoading=false;panels.forEach((p,id)=>drawSparkline(p.sparkline,id,p.section.querySelector('h2').textContent));}
 }
+let runtimeData=null,runtimePeriodSelected=false;
+const runtimeKind=document.getElementById('runtime-kind'),runtimePeriod=document.getElementById('runtime-period');
+function runtimeDuration(value){
+  const seconds=Number(value);
+  if(!Number.isFinite(seconds)||seconds<0)return '—';
+  const hours=Math.floor(seconds/3600),minutes=Math.floor(seconds%3600/60),remaining=seconds%60;
+  return hours+' h '+String(minutes).padStart(2,'0')+' min '+String(remaining).padStart(2,'0')+' s';
+}
+function runtimePeriodLabel(kind,key){
+  const text=String(key);
+  if(kind==='days')return text.slice(6,8)+'.'+text.slice(4,6)+'.'+text.slice(0,4);
+  if(kind==='months')return text.slice(4,6)+'.'+text.slice(0,4);
+  return text;
+}
+function updateRuntime(data, simulation){
+  runtimeData=data;
+  const fields=['runtime-solar','runtime-charge','runtime-return'];
+  const note=document.getElementById('runtime-note');
+  if(!data||!data.available){
+    runtimePeriod.replaceChildren(new Option('Keine Daten',''));runtimePeriod.disabled=true;
+    fields.forEach(id=>document.getElementById(id).textContent='—');
+    note.textContent=data?'Laufzeitspeicher nicht verfügbar.':'Keine Verbindung oder noch keine Laufzeiterfassung.';
+    return;
+  }
+  const kind=runtimeKind.value,rows=Array.isArray(data[kind])?[...data[kind]].sort((a,b)=>b.period-a.period):[];
+  const previous=runtimePeriod.value;
+  runtimePeriod.replaceChildren(...rows.map(row=>new Option(runtimePeriodLabel(kind,row.period),String(row.period))));
+  if(runtimePeriodSelected&&rows.some(row=>String(row.period)===previous))runtimePeriod.value=previous;
+  runtimePeriod.disabled=!rows.length;
+  const selected=rows.find(row=>String(row.period)===runtimePeriod.value);
+  for(const [id,key] of [['runtime-solar','solar'],['runtime-charge','combiToBuffer'],['runtime-return','bufferToCombi']])
+    document.getElementById(id).textContent=selected?runtimeDuration(selected[key]):'—';
+  const notices=[];
+  if(!data.clockValid)notices.push('ESP32-Uhr noch nicht synchronisiert; neue Laufzeiten sind keinem Datum zugeordnet.');
+  if(!data.storageHealthy)notices.push('Speichern im Flash fehlgeschlagen; die Werte können bei Neustart verloren gehen.');
+  if(simulation)notices.push('Testmodus: simulierte Pumpenläufe werden nicht gezählt.');
+  if(data.undated?.some(value=>value>0))notices.push('Laufzeiten ohne gültige Uhr sind nicht in den Zeiträumen enthalten.');
+  if(!rows.length&&data.clockValid)notices.push('Für diesen Zeitraum liegen noch keine Daten vor.');
+  note.textContent=notices.join(' ')||'Erfassung seit Installation dieser Funktion · Speicherung etwa alle 15 Minuten.';
+}
+runtimeKind.addEventListener('change',()=>{runtimePeriodSelected=false;runtimePeriod.value='';updateRuntime(runtimeData,simulationEnabled);});
+runtimePeriod.addEventListener('change',()=>{runtimePeriodSelected=true;updateRuntime(runtimeData,simulationEnabled);});
 // Die Beispiele animieren nur, solange sie sichtbar sind; ohne JS bleiben sie lesbar.
 if(document.body.classList.contains('organigram-page')){
   const guide=document.getElementById('org-led-guide');
@@ -1465,6 +1538,7 @@ async function refresh(){
   try{
     if(saving||wifiBusy||wifiScanning)return;
     const data=await request('/api/status');
+    updateRuntime(data.pumpRuntime,data.simulation);
     if(simRequestRevision===simRevision)updateSimulation(data);
     updateWifi(data.wifi);
     updateHostname(data.wifi);
@@ -1501,6 +1575,7 @@ async function refresh(){
     syncAutoStepperWidth();
     setConnectionStatus(true);
   }catch(error){
+    updateRuntime(null,false);
     if(document.body.classList.contains('organigram-page'))updateOrganigram(null);
     if(solarRequestRevision===solarRevision){updateSolar(null,false);updateSolarDiagram(null,false,null);}
     if(!pumpBusy&&revision===pumpRevision)unknownPump();
@@ -1649,6 +1724,30 @@ bool solarSensorsFresh() {
   return solarMeasurementReady && uint32_t(millis() - lastSolarMeasurement) <= SOLAR_MAX_MEASUREMENT_AGE;
 }
 
+void trackPumpRuntime(bool force = false) {
+  if (!runtimeReady) return;
+  const uint32_t now = millis();
+  if (!force && uint32_t(now - runtimeLastUpdate) < 1000) return;
+  pumpRuntime.update(now, time(nullptr), runtimeSolarOn,
+    runtimePumpOn && runtimePumpDirection == PumpDirection::CombiToBuffer,
+    runtimePumpOn && runtimePumpDirection == PumpDirection::BufferToCombi);
+  runtimeLastUpdate = now;
+}
+
+void savePumpRuntime(bool force = false) {
+  if (!runtimeReady) return;
+  const uint32_t now = millis();
+  if (!force && uint32_t(now - runtimeLastSave) < 15UL * 60 * 1000) return;
+  runtimeLastSave = now;
+  trackPumpRuntime(true);
+  if (!pumpRuntime.dirty()) return;
+  const PumpRuntime::State snapshot = pumpRuntime.snapshot();
+  const bool ok = runtimePreferences.putBytes("periods1", &snapshot, sizeof(snapshot)) == sizeof(snapshot);
+  if (ok) pumpRuntime.saved();
+  if (ok != runtimeStorageHealthy) FirmwareLog.println(ok ? "Pumpenlaufzeiten: Flash-Speicherung wieder möglich." : "Pumpenlaufzeiten: Flash-Speicherung fehlgeschlagen; erneuter Versuch folgt.");
+  runtimeStorageHealthy = ok;
+}
+
 void serviceSolarPump() {
   const TemperatureController& tank = controllers[3];
   const TemperatureController& panel = controllers[4];
@@ -1657,6 +1756,8 @@ void serviceSolarPump() {
   const bool on = solarControl.update(enabled, panel.valid, panel.currentTemp, tank.valid, tank.currentTemp, solarStartDifference);
   // Im Testmodus bleibt der echte Active-Low-Ausgang wie beim Start auf HIGH.
   if (!SIMULATION_MODE) digitalWrite(SOLAR_PUMP_PIN, on ? LOW : HIGH);
+  const bool physicalOn = on && !SIMULATION_MODE;
+  if (physicalOn != runtimeSolarOn) { runtimeSolarOn = physicalOn; trackPumpRuntime(true); }
   if (on != wasOn) FirmwareLog.printf("%sSolarpumpe: %s.\n", SIMULATION_MODE ? "[SIMULATION] " : "", on ? "AN" : "AUS");
 }
 
@@ -1675,6 +1776,10 @@ void servicePump() {
     digitalWrite(PUMP_DIRECTION_PIN, pump.direction() == DIRECTION_RELAY_OFF_DIRECTION ? HIGH : LOW);
     if (pump.on()) digitalWrite(PUMP_ENABLE_PIN, LOW);
   }
+  const bool physicalOn = pump.on() && !SIMULATION_MODE;
+  if (physicalOn != runtimePumpOn || (physicalOn && pump.direction() != runtimePumpDirection)) {
+    runtimePumpOn = physicalOn; runtimePumpDirection = pump.direction(); trackPumpRuntime(true);
+  } else trackPumpRuntime();
   // Ein Vorladeauftrag ist bereits gestoppt, bevor Relais 4 einschalten kann.
   if (oilBurnerRelayOn()) digitalWrite(OIL_BURNER_PIN, LOW);
 
@@ -1683,7 +1788,7 @@ void servicePump() {
   static PumpPhase lastPhase = PumpPhase::Ready;
   if (lastOn != pump.on() || lastDirection != pump.direction() || lastPhase != pump.phase()) {
     printMeasurementHeader();
-    FirmwareLog.printf("%sPumpe: %s | Richtung: %s | Steuerung: %s",
+    FirmwareLog.printf("%sBackloadpumpe: %s | Richtung: %s | Steuerung: %s",
       SIMULATION_MODE ? "[SIMULATION] " : "", pump.on() ? "AN" : "AUS", pumpDirectionName(pump.direction()), manualControl ? "Manuell" : "Automatik");
     if (pump.phase() == PumpPhase::Stopping) FirmwareLog.print(" | Richtungswechsel: 2 Sekunden Ausschaltpause");
     if (pump.phase() == PumpPhase::Settling) FirmwareLog.print(" | Richtung geschaltet, Relais schwingt aus");
@@ -1792,8 +1897,8 @@ void measureTemperatures() {
             unsigned(reading.lowerThreshold), unsigned(reading.upperThreshold),
             unsigned(reading.configBefore), unsigned(reading.configWithBias), unsigned(reading.configAfterConversion),
             (i == 3 || i == 4) ? " | Solarregelung: Solarpumpe AUS" :
-            manualControl ? " | Manuelle Steuerung der Umladepumpe aktiv" :
-            (i == (oilBurnerEnabled ? 1 : 0) || i == 2) ? " | Automatik: Pumpe AUS" : " | kein Umlade-Regelfühler");
+            manualControl ? " | Manuelle Steuerung der Backloadpumpe aktiv" :
+            (i == (oilBurnerEnabled ? 1 : 0) || i == 2) ? " | Automatik: Backloadpumpe AUS" : " | kein Backload-Regelfühler");
         }
       } else {
         if (i == 0) {
@@ -2302,6 +2407,32 @@ void sendDeviceInfo() {
   server.send(200, "application/json; charset=utf-8", json);
 }
 
+String runtimePeriodsJson(const PumpRuntime::Period* periods, size_t count) {
+  String result = "[";
+  bool first = true;
+  for (size_t i = 0; i < count; ++i) {
+    const auto& period = periods[i];
+    if (!period.key) continue;
+    if (!first) result += ',';
+    first = false;
+    result += "{\"period\":" + String(period.key) + ",\"solar\":" + String(period.seconds[0]) +
+      ",\"combiToBuffer\":" + String(period.seconds[1]) + ",\"bufferToCombi\":" + String(period.seconds[2]) + "}";
+  }
+  return result + "]";
+}
+
+String pumpRuntimeJson() {
+  trackPumpRuntime(true);
+  if (!runtimeReady) return "{\"available\":false}";
+  const auto& s = pumpRuntime.state();
+  return "{\"available\":true,\"storageHealthy\":" + String(runtimeStorageHealthy ? "true" : "false") +
+    ",\"clockValid\":" + String(pumpRuntime.clockValid() ? "true" : "false") +
+    ",\"days\":" + runtimePeriodsJson(s.days, PumpRuntime::DAYS) +
+    ",\"months\":" + runtimePeriodsJson(s.months, PumpRuntime::MONTHS) +
+    ",\"years\":" + runtimePeriodsJson(s.years, PumpRuntime::YEARS) +
+    ",\"undated\":[" + String(s.undated[0]) + "," + String(s.undated[1]) + "," + String(s.undated[2]) + "]}";
+}
+
 void sendStatus() {
   String json;
   json.reserve(1400);
@@ -2337,7 +2468,7 @@ void sendStatus() {
   }
   bool roofOnline = roofSeen && WiFi.status() == WL_CONNECTED && millis() - lastRoofHeartbeat < ROOF_TIMEOUT;
   json += "],\"pump\":" + pumpStatusJson() + ",\"automatic\":" + automaticStatusJson() +
-    ",\"heating\":" + heatingStatusJson() + ",\"solar\":" + solarStatusJson() +
+    ",\"heating\":" + heatingStatusJson() + ",\"solar\":" + solarStatusJson() + ",\"pumpRuntime\":" + pumpRuntimeJson() +
     ",\"hardware\":{\"clk\":" + String(SPI_CLK) + ",\"mosi\":" + String(SPI_MOSI) +
     ",\"miso\":" + String(SPI_MISO) + ",\"pump\":" + String(unsigned(PUMP_ENABLE_PIN)) +
     ",\"direction\":" + String(unsigned(PUMP_DIRECTION_PIN)) + ",\"solar\":" + String(unsigned(SOLAR_PUMP_PIN)) +
@@ -2977,6 +3108,16 @@ void setup() {
   if (temperatureHistory.available()) FirmwareLog.printf("Temperaturverlauf: %u Minuten im PSRAM reserviert.\n", unsigned(HISTORY_CAPACITY));
   else FirmwareLog.println("Temperaturverlauf nicht verfügbar: PSRAM fehlt oder ist zu klein. Regelung läuft weiter.");
   if (SIMULATION_MODE) FirmwareLog.println("[SIMULATION] Aktiv: simulierte Sensoren, Pumpe und Ölfreigabe; alle realen Relais bleiben AUS.");
+  runtimeReady = runtimePreferences.begin("pump-runtime", false);
+  if (runtimeReady && runtimePreferences.isKey("periods1")) {
+    PumpRuntime::State saved{};
+    runtimeReady = runtimePreferences.getBytesLength("periods1") == sizeof(saved) &&
+      runtimePreferences.getBytes("periods1", &saved, sizeof(saved)) == sizeof(saved) &&
+      pumpRuntime.restore(&saved, sizeof(saved));
+  }
+  runtimeStorageHealthy = runtimeReady;
+  if (!runtimeReady) FirmwareLog.println("Pumpenlaufzeiten nicht verfügbar: Flash-Daten unlesbar oder Speicher nicht erreichbar; Daten werden nicht überschrieben.");
+  trackPumpRuntime(true);
   storageReady = preferences.begin(SIMULATION_MODE ? "heating-test" : "heating", false);
   if (!storageReady) FirmwareLog.println("NVS nicht verfügbar: Speichern nicht möglich.");
   heatingModeValid = storageReady;
@@ -3089,7 +3230,7 @@ void setup() {
 void loop() {
   servicePump();
   unsigned long now = millis();
-  if (otaActive && otaFinished && now - otaLastActivity >= 2500 && now - otaStoppedAt >= 2500) ESP.restart();
+  if (otaActive && otaFinished && now - otaLastActivity >= 2500 && now - otaStoppedAt >= 2500) { savePumpRuntime(true); ESP.restart(); }
   if (otaActive && !otaFinished && !githubUpdateActive && now - otaLastActivity >= 30000) {
     FirmwareLog.println("OTA-Diagnose: Seit 30 Sekunden kein Datenblock; Zeitlimit erreicht.");
     cancelOta();
@@ -3131,7 +3272,7 @@ void loop() {
       esp_ota_mark_app_invalid_rollback_and_reboot();
     }
   }
-  if (modeTransition && now - modeRestartAt >= 2500) ESP.restart();
+  if (modeTransition && now - modeRestartAt >= 2500) { savePumpRuntime(true); ESP.restart(); }
   serviceStatusLed(now);
   if (now - lastHeartbeat >= 500) {
     lastHeartbeat = now;
@@ -3149,5 +3290,6 @@ void loop() {
   processRoofHeartbeat();
   processWebSerialMonitor();
   servicePump();
+  savePumpRuntime();
   delay(1);
 }

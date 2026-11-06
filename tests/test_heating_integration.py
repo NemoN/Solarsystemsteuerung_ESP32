@@ -33,6 +33,9 @@ bool modeTransition=false, otaActive=false, otaVerificationPending=false;
 bool manualControl=false, manualPumpOn=false, storageReady=true, autoSettingsValid=true;
 constexpr bool AUTOMATIC_PUMP_CONFIGURED=true;
 PumpDirection manualDirection=PumpDirection::CombiToBuffer;
+bool runtimePumpOn=false;
+PumpDirection runtimePumpDirection=PumpDirection::CombiToBuffer;
+void trackPumpRuntime(bool = false) {}
 uint32_t now=0;
 uint32_t millis() { return now; }
 int pins[16];
@@ -63,7 +66,7 @@ int main() {
   for (int& pin:pins) pin=HIGH;
   // Sommer: oben und Puffer regeln; Mitte/unten/Solar dürfen fehlen.
   updateAutomaticPump();
-  assert(pump.on() && pins[PUMP_ENABLE_PIN]==LOW);
+  assert(pump.on() && pins[PUMP_ENABLE_PIN]==LOW && runtimePumpOn && runtimePumpDirection==PumpDirection::CombiToBuffer);
   controllers[1]={true,false,800,0};
   controllers[3]={true,false,-150,0};
   controllers[4]={true,false,800,0};
@@ -95,7 +98,7 @@ int main() {
   now=100;updateAutomaticPump();assert(!pump.on());
   now=2099;servicePump();assert(!pump.on());
   now=2100;servicePump();assert(!pump.on());
-  now=2200;servicePump();assert(pump.on());
+  now=2200;servicePump();assert(pump.on() && runtimePumpOn && runtimePumpDirection==PumpDirection::BufferToCombi);
   assert(pump.direction()==PumpDirection::BufferToCombi && pins[OIL_BURNER_PIN]==LOW);
   manualControl=true;manualDirection=PumpDirection::BufferToCombi;manualPumpOn=true;
   servicePump();assert(pump.on() && manualPumpOn);
@@ -132,7 +135,7 @@ int main() {
   SIMULATION_MODE=true;
   controllers[1].currentTemp=37;
   updateAutomaticPump();now+=2200;servicePump();now+=100;servicePump();
-  assert(pump.on() && pins[PUMP_ENABLE_PIN]==HIGH && pins[PUMP_DIRECTION_PIN]==HIGH &&
+  assert(pump.on() && !runtimePumpOn && pins[PUMP_ENABLE_PIN]==HIGH && pins[PUMP_DIRECTION_PIN]==HIGH &&
     pins[OIL_BURNER_PIN]==HIGH);
   puts("PASS: Sommer-/Winterfühler, 3K-Stopp, Sensorfehler, Ölsperre, GPIO-Schaltreihenfolge und Simulation.");
 }

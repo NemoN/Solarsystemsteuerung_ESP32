@@ -6,7 +6,7 @@ const nodes = new Map();
 function node(id) {
   if (!nodes.has(id)) {
     const classes = new Set();
-    nodes.set(id, {style:{}, attributes:{},
+    nodes.set(id, {style:{}, attributes:{}, classes,
       setAttribute(key, value) { this.attributes[key] = value; },
       classList:{add:key=>classes.add(key), toggle:(key,on)=>on?classes.add(key):classes.delete(key)},
     });
@@ -47,6 +47,8 @@ function commandResponse(result) {
 (async () => {
   context.updateHeating(winter);
   context.updatePump(offForward);
+  assert.equal(node('.pump-flow').attributes['data-direction'], 'ccw');
+  assert(node('.pump-flow').classes.has('stopped'));
   assert.equal(node('pump-switch').disabled, true);
   assert.equal(node('direction-switch').disabled, false);
   assert.match(node('pump-help').textContent, /Ölbrenner freigegeben.*Richtung EIN.*Puffer → Kombi/);
@@ -59,13 +61,16 @@ function commandResponse(result) {
   commandResponse(onReturn);
   await context.changePump('power');
   assert.equal(calls.at(-1).options.body.get('value'), '1');
-  assert.equal(node('pump-badge').textContent, 'Umladepumpe: AN');
+  assert.equal(node('pump-badge').textContent, 'Backloadpumpe: AN');
+  assert.equal(node('.pump-flow').attributes['data-direction'], 'cw');
+  assert(!node('.pump-flow').classes.has('stopped'));
+  assert.match(node('pump-flow-title').textContent, /Rechtslauf/);
   assert.equal(node('pump-switch').disabled, false);
   assert.equal(node('direction-switch').disabled, true);
   commandResponse(offReturn);
   await context.changePump('power');
   assert.equal(calls.at(-1).options.body.get('value'), '0');
-  assert.equal(node('pump-badge').textContent, 'Umladepumpe: AUS');
+  assert.equal(node('pump-badge').textContent, 'Backloadpumpe: AUS');
   assert.equal(node('direction-switch').disabled, false);
 
   // Im Sommer ist auch der Vorwärtsstart erlaubt.
@@ -74,7 +79,13 @@ function commandResponse(result) {
   assert.equal(node('pump-switch').disabled, false);
   commandResponse(state({on:true, requestedOn:true}));
   await context.changePump('power');
-  assert.equal(node('pump-badge').textContent, 'Umladepumpe: AN');
+  assert.equal(node('pump-badge').textContent, 'Backloadpumpe: AN');
+  assert.equal(node('.pump-flow').attributes['data-direction'], 'ccw');
+  assert(!node('.pump-flow').classes.has('stopped'));
+  assert.match(node('pump-flow-title').textContent, /Linkslauf/);
+  context.updatePump(state({switching:true,phase:'stopping',direction:0,requestedDirection:1,requestedOn:true}));
+  assert(node('.pump-flow').classes.has('stopped'));
+  assert.equal(node('.pump-flow').attributes['data-direction'], 'ccw');
 
   // Ein anderer Client kann inzwischen Winter einschalten: HTTP 409 ist kein WLAN-Ausfall.
   context.updateHeating(summer);context.updatePump(offForward);calls=[];
@@ -87,7 +98,7 @@ function commandResponse(result) {
   assert.deepEqual(calls.map(c=>c.url), ['/api/pump', '/api/status']);
   assert.match(node('pump-message').textContent, /Befehl abgelehnt:.*Ölbrenner/);
   assert.match(node('pump-direction-state').textContent, /^Förderrichtung:/);
-  assert.equal(node('pump-badge').textContent, 'Umladepumpe: AUS');
+  assert.equal(node('pump-badge').textContent, 'Backloadpumpe: AUS');
   assert.equal(node('pump-switch').disabled, true);
   assert.equal(node('direction-switch').disabled, false);
 
@@ -100,7 +111,7 @@ function commandResponse(result) {
   };
   await context.changePump('power');
   assert.deepEqual(calls.map(c=>c.url), ['/api/pump', '/api/status']);
-  assert.equal(node('pump-badge').textContent, 'Umladepumpe: AN');
+  assert.equal(node('pump-badge').textContent, 'Backloadpumpe: AN');
   assert.match(node('pump-direction-state').textContent, /^Förderrichtung:/);
   assert.match(node('pump-message').textContent, /Schalten nicht bestätigt:.*neu abgefragt/);
 
@@ -108,6 +119,8 @@ function commandResponse(result) {
   context.request = async () => { throw new Error('Verbindung unterbrochen'); };
   await context.changePump('power');
   assert.equal(context.pumpState, null);
+  assert(node('.pump-flow').classes.has('stopped'));
+  assert.equal(node('.pump-flow').attributes['data-direction'], 'unknown');
   assert.match(node('pump-direction-state').textContent, /Keine aktuelle Förderrichtung/);
   assert.equal(node('pump-switch').disabled, true);
   assert.equal(node('direction-switch').disabled, true);

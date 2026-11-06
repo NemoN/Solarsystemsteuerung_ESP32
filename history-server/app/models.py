@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from datetime import date
 import math
 
 SENSOR_MESSAGES = {
@@ -24,11 +25,51 @@ RESULT_MESSAGES = {
 
 
 @dataclass(frozen=True)
+class RuntimePeriod:
+    kind: str
+    period: int
+    solar: int
+    combi_to_buffer: int
+    buffer_to_combi: int
+
+
+def parse_runtime(payload) -> tuple[RuntimePeriod, ...]:
+    if not isinstance(payload, dict) or payload.get("available") is not True:
+        return ()
+    records = []
+    for kind, key, maximum in (("day", "days", 32), ("month", "months", 24), ("year", "years", 12)):
+        rows = payload.get(key)
+        if not isinstance(rows, list) or len(rows) > maximum:
+            continue
+        seen = set()
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            period = row.get("period")
+            values = [row.get(name) for name in ("solar", "combiToBuffer", "bufferToCombi")]
+            if type(period) is not int or period in seen or any(type(v) is not int or not 0 <= v <= 0xffffffff for v in values):
+                continue
+            try:
+                if kind == "day":
+                    date(period // 10000, (period // 100) % 100, period % 100)
+                elif kind == "month":
+                    date(period // 100, period % 100, 1)
+                else:
+                    date(period, 1, 1)
+            except ValueError:
+                continue
+            seen.add(period)
+            records.append(RuntimePeriod(kind, period, *values))
+    return tuple(records)
+
+
+@dataclass(frozen=True)
 class Reading:
     temperatures: tuple[float | None, ...]
     sensor_status: tuple[str, ...]
     result: str
     detail: str = ""
+    runtime: tuple[RuntimePeriod, ...] = ()
 
     @classmethod
     def failure(cls, result: str, detail: str = ""):
@@ -71,4 +112,4 @@ def parse_reading(payload) -> Reading:
         values.append(value)
         states.append(state)
     count = states.count("ok")
-    return Reading(tuple(values), tuple(states), "ok" if count == 3 else "partial" if count else "sensor_error")
+    return Reading(tuple(values), tuple(states), "ok" if count == 3 else "partial" if count else "sensor_error", runtime=parse_runtime(payload.get("pumpRuntime")))

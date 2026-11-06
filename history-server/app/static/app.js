@@ -12,6 +12,7 @@ let revision = 0;
 let request;
 let chart;
 let lastData;
+let runtimeKind = "day", runtimeRevision = 0;
 
 function localDay(value) {
   const parts = new Intl.DateTimeFormat("en-CA", {timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit"}).formatToParts(value);
@@ -139,6 +140,45 @@ async function loadStatus() {
   }
 }
 
+function runtimeDuration(seconds) {
+  return `${Math.floor(seconds / 3600)} h ${String(Math.floor(seconds % 3600 / 60)).padStart(2, "0")} min`;
+}
+
+function runtimePeriodLabel(kind, value) {
+  const text = String(value);
+  if (kind === "day") return `${text.slice(6, 8)}.${text.slice(4, 6)}.${text.slice(0, 4)}`;
+  if (kind === "month") return `${text.slice(4, 6)}.${text.slice(0, 4)}`;
+  return text;
+}
+
+async function loadRuntime() {
+  const current = ++runtimeRevision, kind = runtimeKind;
+  try {
+    const data = await json(`/api/pump-runtime?kind=${kind}`, AbortSignal.timeout(10000));
+    if (current !== runtimeRevision) return;
+    const rows = data.periods.map((period) => {
+      const tr = document.createElement("tr");
+      const heading = document.createElement("th"); heading.scope = "row";
+      heading.textContent = runtimePeriodLabel(kind, period.period); tr.appendChild(heading);
+      for (const value of [runtimeDuration(period.solar), runtimeDuration(period.combi_to_buffer), runtimeDuration(period.buffer_to_combi), fullDate.format(new Date(period.observed_at_utc * 1000))]) {
+        const td = document.createElement("td"); td.textContent = value; tr.appendChild(td);
+      }
+      return tr;
+    });
+    $("runtime-rows").replaceChildren(...rows);
+    $("runtime-status").textContent = rows.length ? `${rows.length} Zeiträume · angezeigte Laufzeiten auf Minuten abgerundet` : "Noch keine Pumpenlaufzeiten archiviert. Die Erfassung beginnt mit der nächsten Abfrage des aktualisierten ESP32.";
+  } catch {
+    if (current !== runtimeRevision) return;
+    $("runtime-status").textContent = "Pumpenlaufzeiten konnten nicht geladen werden. Automatischer Neuversuch in einer Minute.";
+  }
+}
+
+document.querySelectorAll("[data-runtime]").forEach((button) => button.addEventListener("click", () => {
+  runtimeKind = button.dataset.runtime;
+  document.querySelectorAll("[data-runtime]").forEach((item) => item.setAttribute("aria-pressed", String(item === button)));
+  loadRuntime();
+}));
+
 document.querySelectorAll("[data-days]").forEach((button) => {
   button.addEventListener("click", () => {
     selectedDays = Number(button.dataset.days);
@@ -175,10 +215,11 @@ document.querySelectorAll("[data-sensor]").forEach((input) => input.addEventList
   }
   showVisibilityMessage();
 }));
-$("refresh").addEventListener("click", () => {loadHistory(); loadStatus();});
+$("refresh").addEventListener("click", () => {loadHistory(); loadStatus(); loadRuntime();});
 $("retry").addEventListener("click", loadHistory);
 $("date-from").value = localDay(new Date(Date.now() - 7 * 86400000));
 $("date-to").value = localDay(new Date());
 loadHistory();
 loadStatus();
-setInterval(() => {loadStatus(); loadHistory();}, 60000);
+loadRuntime();
+setInterval(() => {loadStatus(); loadHistory(); loadRuntime();}, 60000);

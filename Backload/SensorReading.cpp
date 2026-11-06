@@ -1,5 +1,10 @@
+#ifdef BACKLOAD_HOST_TEST
 #include <Adafruit_MAX31865.h>
 #include <Adafruit_SPIDevice.h>
+#else
+#include "src/Adafruit_MAX31865/Adafruit_MAX31865.h"
+#include "src/Adafruit_BusIO/Adafruit_SPIDevice.h"
+#endif
 #include <math.h>
 
 #include "SensorReading.h"

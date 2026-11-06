@@ -69,6 +69,15 @@ input[type=date] { min-height: 44px; min-width: 166px; max-width: 100%; padding:
 .text-button { color: var(--teal); border: 0; background: transparent; padding: 10px 0; text-decoration: underline; text-underline-offset: .2em; }
 .text-button:hover { background: transparent; color: var(--teal-hover); }
 .hint { font-size: .8rem; color: var(--muted); margin-top: 4px; }
+.runtime-history { margin-top: 40px; border-top: 1px solid var(--border); padding-top: 28px; }
+.runtime-history .section-header { margin-bottom: 8px; }
+.runtime-periods { margin-top: 18px; }
+.runtime-table-wrap { overflow-x: auto; max-height: 420px; overflow-y: auto; margin-top: 12px; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); }
+.runtime-table { width: 100%; border-collapse: collapse; font-size: .875rem; white-space: nowrap; }
+.runtime-table th, .runtime-table td { padding: 10px 14px; text-align: right; border-bottom: 1px solid #e4eae9; }
+.runtime-table th:first-child { text-align: left; }
+.runtime-table thead th { position: sticky; top: 0; background: var(--surface); color: var(--muted); font-size: .8rem; }
+.runtime-table tbody tr:last-child th, .runtime-table tbody tr:last-child td { border-bottom: 0; }
 footer { border-top: 1px solid var(--border); margin-top: 32px; padding-top: 18px; font-size: .75rem; color: var(--muted); }
 footer p + p { margin-top: 4px; }
 .notice { margin-top: 12px; font-size: .875rem; }

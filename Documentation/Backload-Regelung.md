@@ -1,6 +1,6 @@
 # Backload- und Solarregelung
 
-Die Steuerung überträgt Wärme zwischen Kombi- und Pufferspeicher. Eine Pumpe
+Die Steuerung überträgt Wärme zwischen Kombi- und Pufferspeicher. Die Backloadpumpe
 und eine Umpolschaltung bestimmen die Förderrichtung. Relais 4 steuert die
 manuelle Ölbrennerfreigabe; Relais 3 schaltet die Solarpumpe.
 
@@ -11,7 +11,7 @@ manuelle Ölbrennerfreigabe; Relais 3 schaltet die Solarpumpe.
 | Sommer | oben, ID 0 | AUS | bei passenden Temperaturen möglich | bei passenden Temperaturen möglich |
 | Winter | Mitte, ID 1 | AN | gesperrt, auch bei manueller Steuerung | bei passenden Temperaturen möglich |
 
-Puffer oben (ID 2) ist immer der Vergleichsfühler für die Umladepumpe.
+Puffer oben (ID 2) ist immer der Vergleichsfühler für die Backloadpumpe.
 Kombi unten und Solarpanel regeln zusätzlich die Solarpumpe. Beim Betriebsartwechsel wird ein laufender
 Automatikauftrag zurückgesetzt und anhand des neu gewählten Fühlers neu
 bewertet. Bei unbekannter Betriebsart ist die Automatik ausgeschaltet.
@@ -57,7 +57,7 @@ Einlagerung; Rückladung bleibt bei gültigen Messungen und Einstellungen mögli
 
 ## Solarregelung
 
-Relais 3 schaltet unabhängig von der Umladepumpe, ihrer manuellen Steuerung und
+Relais 3 schaltet unabhängig von der Backloadpumpe, ihrer manuellen Steuerung und
 Sommer/Winter. Die Einschaltdifferenz ist auf der Startseite von 3 bis 10 K
 in 0,1-K-Schritten konfigurierbar und steht auch in der Regelungsübersicht.
 Vorgabe sind 5 K.
@@ -92,7 +92,7 @@ der Startprüfung und eines angeforderten Neustarts bleibt die echte
 
 | Relais | GPIO | Aufgabe |
 | --- | --- | --- |
-| 1 | 3 | Transferpumpe EIN/AUS |
+| 1 | 3 | Backloadpumpe EIN/AUS |
 | 2 | 8 | Pumprichtung |
 | 3 | 9 | Solarpumpe EIN/AUS |
 | 4 | 10 | Ölbrennerfreigabe |

@@ -69,4 +69,9 @@ const styles=fs.readFileSync(require('node:path').join(__dirname,'../Backload/Da
 assert(sketch.includes('class="solar-pump-rotor"'));
 assert(styles.includes('.solar-diagram.running .solar-pump-rotor{animation:pump-rotor-spin 5s linear infinite}'));
 assert(styles.includes('@media(prefers-reduced-motion:reduce){.backload .storage-overview.motion-visible .solar-diagram.running .solar-pump-rotor{animation:none}}'));
+// Die zusätzliche Backloadpumpe folgt denselben Sichtbarkeits- und Bewegungseinstellungen.
+assert(sketch.includes('class="transfer-pump-rotor"'));
+assert(styles.includes('.pump-flow:not(.stopped) .transfer-pump-rotor{animation:transfer-pump-spin 3s linear infinite}'));
+assert(styles.includes('.pump-flow[data-direction="ccw"]:not(.stopped) .transfer-pump-rotor{animation-direction:reverse}'));
+assert(styles.includes('@media(prefers-reduced-motion:reduce){.backload .storage-overview.motion-visible .pump-flow:not(.stopped) .transfer-pump-rotor{animation:none}}'));
 console.log('PASS: Solarübersicht bei Betrieb, Testmodus, Sensorfehler, Pause und Verbindungsabbruch.');

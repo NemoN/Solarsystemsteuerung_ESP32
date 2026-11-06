@@ -1,4 +1,4 @@
-Backload 2.0.0 – automatische und manuelle Pumpensteuerung
+Backload 2.1.4 – automatische und manuelle Pumpensteuerung
 
 Sensoren und Relais
 Fünf MAX31865-Sensoren mit gemeinsamer Software-SPI-Verbindung:
@@ -11,7 +11,7 @@ Fünf MAX31865-Sensoren mit gemeinsamer Software-SPI-Verbindung:
 Die ursprünglichen drei Sensor-IDs bleiben gleich; das vorhandene
 Temperaturarchiv erfasst weiterhin diese drei Sensoren.
 
-  Relais 1: GPIO 3 – Pumpe EIN/AUS, Active Low.
+  Relais 1: GPIO 3 – Backloadpumpe EIN/AUS, Active Low.
   Relais 2: GPIO 8 – Pumprichtung über externe Umpolschaltung, Active Low.
   Relais 3: GPIO 9 – Solarpumpe EIN/AUS, Active Low.
   Relais 4: GPIO 10 – manuelle Ölbrennerfreigabe, Active Low.
@@ -28,7 +28,7 @@ Steuerung erst nach Beginn von setup().
 
 Solarregelung (Relais 3)
 Solarpanel und Kombispeicher unten bestimmen die Solarpumpe unabhängig von
-Sommer/Winter und der manuellen Steuerung der Umladepumpe. Die
+Sommer/Winter und der manuellen Steuerung der Backloadpumpe. Die
 Einschaltdifferenz ist von
 3 bis 10 K in 0,1-K-Schritten einstellbar (Vorgabe 5 K), getrennt für
 Anlagen- und Testmodus.
@@ -139,11 +139,37 @@ auf den dargestellten Zeitraum; die Skala passt sich an die Werte an.
 
 Arduino IDE
 Den vollständigen Ordner Backload verwenden und darin Backload.ino öffnen.
-Der Unterordner src enthält RisalDash und AsyncWebConsole und muss mitkopiert werden.
+Der Unterordner src enthält die benötigten zusätzlichen Bibliotheken und muss
+vollständig mitkopiert werden. Sie müssen nicht über die Bibliotheksverwaltung
+installiert werden; deren Update-Hinweise ändern die mitgelieferten Kopien nicht.
 ESP32S3 Dev Module, ESP32-Core 2.0.13, 16 MB Flash, OPI PSRAM,
 Partition Scheme: 16M Flash (3MB APP/9.9MB FATFS).
-ESP Async WebServer 3.6.0, Async TCP 3.3.2; RisalDash 0.13.0 und
-AsyncWebConsole 0.3.2 sind mit ihren Lizenztexten im Sketch enthalten.
+Den ESP32-Core 2.0.13 separat über die Boardverwaltung installieren. Nach einem
+Update der Arduino IDE den Build mit diesem Core prüfen. Versionen und Quellen
+der mitgelieferten Bibliotheken stehen in src/README.md.
+
+Pumpenlaufzeiten
+Die Oberfläche zeigt unter „Verlauf“ für Solarpumpe sowie Backloadpumpe in beiden Richtungen
+die tatsächlichen Relaislaufzeiten. Im Testmodus werden keine simulierten
+Läufe gezählt. Die Erfassung beginnt erst mit dieser Firmware; frühere Zeiten
+sind nicht nachträglich bekannt. Ein Tag, Monat oder Jahr kann daher anfangs
+unvollständig sein. Die Zeiträume folgen der ESP32-Ortszeit (MEZ/MESZ).
+
+Im Flash bleiben die letzten 32 Tage, 24 Monate und 12 Jahre mit erfassten
+Daten erhalten. Zur Schonung des Flashs speichert die Firmware etwa alle
+15 Minuten bei Änderungen sowie vor geplanten Neustarts. Bei Stromausfall oder
+ungeplantem Neustart können bis zu ungefähr 15 Minuten seit dem letzten
+erfolgreichen Speichern verloren gehen. Eine Speicherstörung zeigt die
+Oberfläche an; die Regelung läuft unabhängig von den Zählern weiter.
+
+Nach einem Kaltstart benötigt der ESP32 eine gültige Uhr über WLAN/NTP.
+Laufzeiten vor der Synchronisierung werden getrennt als undatiert gezählt und
+keinem Kalenderzeitraum zugeordnet. Bestehende Kalenderwerte bleiben sichtbar.
+Ohne gültige Uhr können folglich Tages-, Monats- und Jahreswerte unvollständig
+sein. Nach erfolgter Synchronisierung läuft die Uhr bei WLAN-Ausfall weiter.
+Der History-Server holt die vorhandenen Zeiträume mit den normalen Abfragen ab;
+siehe history-server/README.md. Sein Archiv kann Lücken aufweisen, wenn er
+länger als die jeweilige Aufbewahrungszeit des ESP32 nicht abfragt.
 Webinterface: http://<ESP32-IP>/
 Einstellungen mit WLAN und Firmware: http://<ESP32-IP>/einstellungen
 ESP-Informationen: http://<ESP32-IP>/info

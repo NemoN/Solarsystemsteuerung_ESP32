@@ -15,7 +15,7 @@
     <header class="page-header">
       <div>
         <h1>Temperaturarchiv</h1>
-        <p>Kombispeicher und Pufferspeicher im Verlauf.</p>
+        <p>Temperaturen und Pumpen im Überblick.</p>
       </div>
       <span class="product-name">Backload</span>
     </header>
@@ -62,6 +62,21 @@
         <button type="button" id="refresh" class="text-button">Aktualisieren</button>
       </div>
       <p class="hint">Sensorfehler und Ausfälle bleiben als Lücken sichtbar. Der CSV-Download enthält alle gespeicherten Werte des gewählten Zeitraums.</p>
+    </section>
+
+    <section class="runtime-history" aria-labelledby="runtime-heading">
+      <div class="section-header"><h2 id="runtime-heading">Pumpenlaufzeiten</h2></div>
+      <p class="hint">Vom ESP32 gezählte tatsächliche Relaislaufzeiten. Kombi → Puffer und Puffer → Kombi sind die beiden Förderrichtungen der Backloadpumpe.</p>
+      <div class="periods runtime-periods" role="group" aria-label="Zeitraum der Pumpenlaufzeiten">
+        <button type="button" data-runtime="day" aria-pressed="true">Täglich</button>
+        <button type="button" data-runtime="month" aria-pressed="false">Monatlich</button>
+        <button type="button" data-runtime="year" aria-pressed="false">Jährlich</button>
+      </div>
+      <p id="runtime-status" class="hint" role="status">Laufzeiten werden geladen …</p>
+      <div class="runtime-table-wrap" role="region" aria-label="Pumpenlaufzeiten" tabindex="0">
+        <table class="runtime-table"><thead><tr><th scope="col">Zeitraum</th><th scope="col">Solarpumpe</th><th scope="col">Kombi → Puffer</th><th scope="col">Puffer → Kombi</th><th scope="col">Zuletzt abgeholt</th></tr></thead><tbody id="runtime-rows"></tbody></table>
+      </div>
+      <p class="hint">Angezeigt werden bis zu 365 Zeiträume. Fehlende Zeiträume wurden nicht erfasst; simulierte Pumpenläufe werden nicht gezählt.</p>
     </section>
 
     <footer>

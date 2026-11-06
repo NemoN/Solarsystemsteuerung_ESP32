@@ -1,7 +1,8 @@
 # Backload Temperaturarchiv
 
 Dieser Dienst liest die vorhandene ESP32-Schnittstelle und speichert alle
-15 Minuten die drei Temperaturen in SQLite. Die ESP32-Firmware bleibt unverändert.
+15 Minuten die drei Temperaturen und, wenn von der Firmware unterstützt, die
+Pumpenlaufzeiten in SQLite.
 Ein Container enthält Sammler, API und Webseite; ein benanntes Docker-Volume
 enthält die Datenbank. Ein geöffnetes Browserfenster ist für die Erfassung nicht nötig.
 
@@ -43,6 +44,29 @@ sofern Docker selbst automatisch startet. Nach einem absichtlichen
 `docker compose stop` erneut mit `docker compose up -d` starten.
 
 ## Was gespeichert wird
+
+Die neuere ESP32-Firmware liefert zusätzlich Laufzeiten für die Solarpumpe und
+beide Förderrichtungen der Backloadpumpe. Bei jeder regulären Abfrage übernimmt
+der Server alle auf dem ESP32 vorhandenen Tages-, Monats- und Jahreswerte und
+zeigt sie im Abschnitt **Pumpenlaufzeiten** an. Die Datenbank behält bereits
+abgeholte Zeiträume dauerhaft. Die Firmware speichert die letzten 32 Tage,
+24 Monate und 12 Jahre mit Daten; bei einem längeren Serverausfall können ältere
+Zeiträume verloren gehen. Das Zeitlimit von fünf Sekunden und der bestehende
+Abfragerhythmus gelten gemeinsam für Temperaturen und Laufzeiten.
+
+Die Zähler beginnen erst nach Installation der Funktion und können während des
+ersten Tages, Monats und Jahres unvollständig sein. Laufzeiten ohne gültige
+ESP32-Uhr sind keinem Zeitraum zugeordnet. Testmodus-Daten werden nicht
+archiviert. Nach Stromausfall kann der Flash-Stand des ESP32 um bis zu etwa
+15 Minuten zurückliegen; bereits im Serverarchiv vorhandene höhere Werte werden
+in diesem Fall beibehalten. Spätere Werte können bis zum Überschreiten des
+archivierten Standes unvollständig bleiben. Die Anzeige zeigt außerdem, wann
+ein Zeitraum zuletzt abgeholt wurde. Werte beschreiben Relaislaufzeiten, keinen
+Nachweis für tatsächlich fließendes Wasser.
+
+Ein vorhandenes Archiv wird beim Start auf das erweiterte Schema aktualisiert;
+die bisherigen Temperaturdaten bleiben erhalten. Auch alte Sicherungen können
+wiederhergestellt und beim nächsten Start aktualisiert werden.
 
 - Zur nächsten Viertelstunde `:00`, `:15`, `:30`, `:45` wird genau eine
   Momentaufnahme abgefragt. Es gibt keine Mittelwertbildung und keinen Sofortwert
@@ -103,6 +127,7 @@ Der Archivdienst ruft den ESP32 weiterhin nur alle 15 Minuten auf.
 | `GET /api/history` | JSON: drei Kurven, Zähler und Anzeigeauflösung |
 | `GET /api/export.csv` | Vollständiger CSV-Export |
 | `GET /api/collector-status` | Letzte gespeicherte Erfassung, letzte Abfrage/Ergebnis, nächster Termin |
+| `GET /api/pump-runtime?kind=day` | Archivierte Pumpenlaufzeiten; `kind` ist `day`, `month` oder `year`, `limit` höchstens 5000 |
 | `GET /healthz` | Dienst erreichbar; ein ESP32-Ausfall macht den Container nicht ungesund |
 
 Verlauf und CSV akzeptieren `from` und `to`. Ohne Zeitraum: letzte sieben Tage.

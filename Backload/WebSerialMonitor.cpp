@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <WiFi.h>
-#include <AsyncTCP.h>
-#include <ESPAsyncWebServer.h>
+#include "src/AsyncTCP/src/AsyncTCP.h"
+#include "src/ESPAsyncWebServer/src/ESPAsyncWebServer.h"
 #include "src/RisalDash/src/RisalUI.h"
 #include "src/AsyncWebConsole/src/AsyncWebConsole.h"
 #include "DashboardStyles.h"

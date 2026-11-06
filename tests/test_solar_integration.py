@@ -22,6 +22,8 @@ harness = r'''
 #include <vector>
 constexpr int HIGH=1,LOW=0,SOLAR_PUMP_PIN=9;
 bool storageReady=true,solarSettingsValid=true,modeTransition=false,otaActive=false,otaVerificationPending=false,SIMULATION_MODE=false;
+bool runtimeSolarOn=false;
+void trackPumpRuntime(bool = false) {}
 float solarStartDifference=SolarControl::DEFAULT_START;
 uint32_t now=0,lastSolarMeasurement=0;bool solarMeasurementReady=true;
 constexpr uint32_t SOLAR_MAX_MEASUREMENT_AGE=10000;
@@ -57,7 +59,7 @@ std::string solarStatusJson(){return "ok";}
 harness += '\n'.join(function(sig) for sig in ('bool solarSensorsFresh()', 'void serviceSolarPump()', 'void loadSolarSettings()', 'void saveSolarSettings()'))
 harness += r'''
 int main(){
-  serviceSolarPump();assert(solarControl.on() && pin==LOW);
+  serviceSolarPump();assert(solarControl.on() && pin==LOW && runtimeSolarOn);
   controllers[4].currentTemp=42;serviceSolarPump();assert(solarControl.on() && pin==LOW);
   controllers[3].valid=false;serviceSolarPump();assert(!solarControl.on() && pin==HIGH);
   controllers[3].valid=true;controllers[4].currentTemp=45;serviceSolarPump();assert(solarControl.on());
@@ -66,7 +68,7 @@ int main(){
   otaVerificationPending=true;serviceSolarPump();assert(!solarControl.on() && pin==HIGH);
   otaVerificationPending=false;modeTransition=true;serviceSolarPump();assert(!solarControl.on() && pin==HIGH);
   modeTransition=false;SIMULATION_MODE=true;pin=HIGH;int before=writes;serviceSolarPump();
-  assert(solarControl.on() && pin==HIGH && writes==before);
+  assert(solarControl.on() && pin==HIGH && writes==before && !runtimeSolarOn);
   controllers[4].valid=false;serviceSolarPump();assert(!solarControl.on() && pin==HIGH && writes==before);
   controllers[4].valid=true;
   server.args_["start"]="7.5";saveSolarSettings();assert(server.status==200 && solarStartDifference==7.5f);

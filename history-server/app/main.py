@@ -70,6 +70,12 @@ def create_app(settings=None, *, start_collector=True, client=None, clock=time.t
     def history(start: str | None = Query(None, alias="from"), end: str | None = Query(None, alias="to")):
         return build_history(database, *bounds(start, end))
 
+    @app.get("/api/pump-runtime")
+    def pump_runtime(kind: str = "day", limit: int = 365):
+        if kind not in ("day", "month", "year") or not 1 <= limit <= 5000:
+            raise HTTPException(status_code=400, detail="Ungültiger Zeitraum oder Limit.")
+        return {"kind": kind, "periods": database.runtime_periods(kind, limit)}
+
     @app.get("/api/export.csv")
     def export(start: str | None = Query(None, alias="from"), end: str | None = Query(None, alias="to")):
         begin, stop = bounds(start, end)

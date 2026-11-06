@@ -27,4 +27,11 @@ Unter Werkzeuge einstellen:
 - Partition Scheme: 16M Flash (3MB APP/9.9MB FATFS)
 - Erase All Flash Before Sketch Upload: Disabled
 
-Den ESP32-Core 2.0.13 sowie die Bibliotheken Adafruit MAX31865 1.6.2, Adafruit BusIO 1.14.4, ESP Async WebServer 3.6.0 und Async TCP 3.3.2 installieren.
+Den ESP32-Core 2.0.13 über die Boardverwaltung installieren. Die zusätzlich
+benötigten Bibliotheken liegen bereits in `Backload/src` und müssen nicht über
+die Bibliotheksverwaltung installiert werden. Hinweise auf Updates global
+installierter Bibliotheken ändern diese Kopien nicht. Die Arduino IDE kann
+aktualisiert werden; danach den Build mit dem angegebenen Core prüfen.
+
+Die mitgelieferten Versionen, Quellen und Anpassungen stehen in
+[Backload/src/README.md](Backload/src/README.md).
