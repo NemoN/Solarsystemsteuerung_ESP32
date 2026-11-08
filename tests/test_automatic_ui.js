@@ -4,7 +4,7 @@ const vm = require('node:vm');
 const sketch = fs.readFileSync(require('node:path').join(__dirname, '../Backload/Backload.ino'), 'utf8');
 const nodes = {};
 const node = id => nodes[id] || (nodes[id] = {});
-const form = {elements: Object.fromEntries(['start'].map(key => [key, {dataset:{}}])), contains: () => false};
+const form = {elements: Object.fromEntries(['start','minimumCombi','minimumBuffer'].map(key => [key, {dataset:{}}])), contains: () => false};
 const context = vm.createContext({
   document: {getElementById: node}, autoForm: form, autoDirty: false, autoBusy: false,
   settingNumber: n => String(n), setpointNumber: new Intl.NumberFormat('de-DE', {maximumFractionDigits:1}),
@@ -13,7 +13,7 @@ const start = sketch.indexOf('function updateAutomatic(state)');
 const end = sketch.indexOf('function updateSimulation(', start);
 assert(start > 0 && end > start);
 vm.runInContext(sketch.slice(start, end), context);
-const state = {configValid:true, winter:false, controlSensorId:0, allowCharging:true, targetOffset:0, differenceStart:8, differenceStop:3};
+const state = {configValid:true, winter:false, controlSensorId:0, allowCharging:true, targetOffset:0, differenceStart:8, minimumCombi:35, minimumBuffer:40, differenceStop:3};
 const controllers = [
   {id:0, name:'Kombispeicher oben', target:68, configValid:true, valid:true},
   {id:1, name:'Kombispeicher Mitte', target:69, configValid:true, valid:true},
@@ -22,6 +22,19 @@ const controllers = [
 let text = context.automaticRuleText(state, controllers, {manual:false});
 assert.match(text.chargeStart, /68 °C.*8 K/);
 assert.match(text.returnStart, /Puffer − Kombi ≥ 8 K/);
+assert.match(text.returnStart, /Puffer ≥ 40 °C/);
+assert.match(text.returnStop, /Puffer < 40 °C/);
+assert.match(text.returnStart, /Kombi ≥ 35 °C/);
+assert.match(text.returnStop, /Kombi < 35 °C/);
+assert.match(text.chargeStart, /Kombi ≥ 35 °C/);
+assert.match(text.chargeStop, /Kombi < 35 °C/);
+assert.match(text.chargeStart, /Puffer ≥ 40 °C/);
+assert.match(text.chargeStop, /Puffer < 40 °C/);
+const cold = controllers.map(c => ({...c,temperature:c.id===0?20:c.id===2?50:40}));
+assert.match(context.automaticRuleText(state,cold,{manual:false}).minimumStatus,/Automatik gesperrt: Kombi 20 °C < 35 °C/);
+assert.match(context.automaticRuleText(state,cold,{manual:true}).minimumStatus,/Handbetrieb/);
+const warm = controllers.map(c => ({...c,temperature:c.id===0?35:c.id===2?43:40}));
+assert.equal(context.automaticRuleText(state,warm,{manual:false}).minimumStatus,'Mindesttemperaturen erreicht.');
 assert.doesNotMatch(text.returnStart, /68/);
 assert.match(text.chargeStop, /Kombi − Puffer ≤ 3 K/);
 assert.doesNotMatch(text.chargeStop, /68,0|2,0 K/);
@@ -39,6 +52,8 @@ assert.match(text.returnStart, /Puffer − Kombi ≥ 8 K/);
 assert.doesNotMatch(text.returnStart, /68/);
 context.updateAutomatic(legacy);
 assert.equal(form.elements.start.value, '8');
+assert.equal(form.elements.minimumCombi.value, '35');
+assert.equal(form.elements.minimumBuffer.value, '40');
 context.updateAutomatic({...legacy,differenceStart:8.5});
 assert.equal(form.elements.start.value, '8.5'); // Altwert unverändert sichtbar.
 assert.match(context.automaticRuleText({...state,differenceStart:8.5},controllers,{}).returnStart,/8,5 K/);
@@ -71,15 +86,19 @@ const submitStart = sketch.indexOf("autoForm.addEventListener('submit'");
 const submitEnd = sketch.indexOf("solarForm.addEventListener('input'", submitStart);
 vm.runInContext(sketch.slice(submitStart, submitEnd), context);
 Object.assign(form.elements.start, {value:'8.0'});
+Object.assign(form.elements.minimumCombi, {value:'35'});
+Object.assign(form.elements.minimumBuffer, {value:'40'});
 (async () => {
   await submit({preventDefault(){}});
   assert.equal(posted.url, '/api/automatic');
-  assert.equal(posted.values.size, 1);
+  assert.equal(posted.values.size, 3);
   assert.equal(posted.values.has('winter'), false);
   assert.equal(posted.values.has('charge'), false);
   assert.equal(posted.values.has('offset'), false);
   assert.equal(posted.values.has('stop'), false);
   assert.equal(posted.values.get('start'), '8.0');
+  assert.equal(posted.values.get('minimumCombi'), '35');
+  assert.equal(posted.values.get('minimumBuffer'), '40');
   const saved=posted;
   form.elements.start.value='4.9';
   await submit({preventDefault(){}});
@@ -88,6 +107,14 @@ Object.assign(form.elements.start, {value:'8.0'});
   form.elements.start.value='8.5';
   await submit({preventDefault(){}});
   assert.equal(posted,saved);
+  form.elements.start.value='8';form.elements.minimumCombi.value='81';
+  await submit({preventDefault(){}});
+  assert.equal(posted,saved);
+  assert.match(context.autoMessage.textContent,/0 bis 80 °C/);
+  form.elements.minimumCombi.value='35';form.elements.minimumBuffer.value='-1';
+  await submit({preventDefault(){}});
+  assert.equal(posted,saved);
+  assert.match(context.autoMessage.textContent,/Pufferspeicher/);
 
   // Die manuelle Brennerfreigabe hat einen eigenen Zustand und API-Endpunkt.
   for(const id of ['heating-switch','heating-badge','heating-detail','heating-switch-label','oil-burner-diagram']){

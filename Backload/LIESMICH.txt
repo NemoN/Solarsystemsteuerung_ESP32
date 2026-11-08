@@ -1,4 +1,4 @@
-Backload 2.1.4 – automatische und manuelle Pumpensteuerung
+Backload 2.2.0 – automatische und manuelle Pumpensteuerung
 
 Sensoren und Relais
 Fünf MAX31865-Sensoren mit gemeinsamer Software-SPI-Verbindung:
@@ -73,19 +73,26 @@ Bei Betriebsartwechsel wird ein laufender Automatikauftrag zurückgesetzt;
 der neu gewählte Fühler muss die Startbedingungen erneut erfüllen.
 Kombi unten und Solarpanel dienen zusätzlich zur Solarregelung.
 
-Zwei Einstellungen:
+Vier Einstellungen:
 - Einlagerung ab: 68 bis 72 °C, Vorgabe 68 °C, beim gewählten Kombifühler.
 - Startdifferenz zwischen den Speichern: 5 bis 10 K, Vorgabe 8 K.
+- Mindesttemperaturen Kombi und Puffer: je 0 bis 80 °C, Vorgabe je 35 °C.
+  In der Automatik müssen beide Fühler ihre jeweilige Grenze erreichen;
+  im Handbetrieb gelten diese Grenzen nicht.
 Im Webinterface erfolgen neue Eingaben in ganzen Zahlen. Bereits gespeicherte
 Dezimalwerte bleiben unverändert und werden weiterhin genau angezeigt.
 
-Kombi -> Puffer: Start bei Kombi >= Einlagerungstemperatur UND
+Kombi -> Puffer: Start bei beiden Mindesttemperaturen UND Kombi >= Einlagerungstemperatur UND
 Kombi - Puffer >= Startdifferenz UND Ölbrenner gesperrt. Stopp bei
-Kombi - Puffer <= 3 K oder bei Ölfreigabe/unbekannter Betriebsart.
-Puffer -> Kombi: Start bei Puffer - Kombi >= Startdifferenz, unabhängig von
-Starttemperatur und Ölfreigabe. Stopp bei Puffer - Kombi <= 3 K.
+Kombi - Puffer <= 3 K, Unterschreiten einer Mindesttemperatur oder bei
+Ölfreigabe/unbekannter Betriebsart. Puffer -> Kombi: Start bei beiden
+Mindesttemperaturen UND Puffer - Kombi >= Startdifferenz, unabhängig von
+Einlagerungs-Starttemperatur und Ölfreigabe. Stopp bei Puffer - Kombi <= 3 K
+oder Unterschreiten einer Mindesttemperatur.
 Die Starttemperatur wird nur beim Start der Einlagerung geprüft. Die 3-K-
-Stoppdifferenz gilt fest für beide Richtungen.
+Stoppdifferenz gilt fest für beide Richtungen. Maßgeblich sind Puffer oben und
+der gewählte Kombifühler (oben im Sommer, Mitte im Winter). Die Mindestgrenzen
+gelten auch für einen laufenden Transfer; genau auf der Grenze bleibt er erlaubt.
 
 Beispiel bei 68 °C / 8 K: Kombi 68 und Puffer 60 starten die Einlagerung,
 Kombi 67 und Puffer 63,5 lassen sie weiterlaufen; bei 67/64 wird gestoppt.
@@ -97,6 +104,8 @@ Ein ungültiger Einlagerungssollwert sperrt nur den Einlagerungsstart.
 Die Betriebsart liegt in oil1; beim ersten Start gilt Sommer/Öl AUS. Frühe
 Fühlerwahl-Felder aus auto1 werden nicht als Brennerfreigabe übernommen.
 Aus auto1 wird eine gültige Startdifferenz im Bereich 5–10 K übernommen.
+Sind noch keine neuen Mindesttemperaturen gespeichert, gelten je 35 °C; alte
+unbenutzte Felder werden nicht als neue Mindestwerte übernommen.
 Ein ungültiger alter Startwert sperrt die Automatik bis zum Speichern.
 Ein gespeicherter Kombi-Sollwert von 68–72 °C bleibt erhalten; andere Werte
 werden beim Lesen durch 68 °C ersetzt, ohne den alten NVS-Datensatz zu ändern.
@@ -106,8 +115,9 @@ Alte c1/c2-Werte sowie der per-Sensor-Hysteresewert bleiben unbenutzt erhalten.
 Unter „Gespeicherte Schaltbedingungen“ stehen die wirksamen Start-/Stoppregeln.
 Vollständige Beschreibung: Documentation/Backload-Regelung.md.
 POST /api/heating: winter=0/1 wählt den Fühler und die Ölbrennerfreigabe.
-POST /api/automatic: start; alte schreibende Clients müssen angepasst werden.
-GET /api/status meldet controlSensorId=0/1 und differenceStop=3.
+POST /api/automatic: start und optional gemeinsam minimumCombi und minimumBuffer;
+ältere Clients, die nur start senden, behalten beide Mindesttemperaturen bei.
+GET /api/status meldet controlSensorId=0/1, minimumCombi, minimumBuffer und differenceStop=3.
 Nach Neustart ist die manuelle Steuerung aus; die gespeicherte Betriebsart
 und bei gültigen Messungen die Automatik werden wieder aktiv. Während Update, Startprüfung,
 Moduswechsel und Testbetrieb bleibt das echte Relais 4 AUS.

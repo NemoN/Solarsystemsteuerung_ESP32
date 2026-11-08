@@ -38,10 +38,10 @@
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
 #ifdef BACKLOAD_AP_COMPARISON_NO_AP
-const char* FIRMWARE_VERSION = "2.1.4-ohne-ap";
+const char* FIRMWARE_VERSION = "2.2.0-ohne-ap";
 constexpr bool AP_RECOVERY_ONLY = true;
 #else
-const char* FIRMWARE_VERSION = "2.1.4-mit-ap";
+const char* FIRMWARE_VERSION = "2.2.0-mit-ap";
 constexpr bool AP_RECOVERY_ONLY = false;
 #endif
 
@@ -272,11 +272,11 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 #wifi-form{grid-template-columns:repeat(2,minmax(0,1fr))}#wifi-form button{grid-column:1/-1;justify-self:start}#wifi-status,#wifi-address{overflow-wrap:anywhere}
 #wifi-networks{display:block;width:100%;min-height:46px;margin:8px 0 16px;padding:10px;border:1px solid #8c9fa3;border-radius:6px;font:inherit;background:white;color:inherit}#wifi-scan-message{margin:10px 0;min-height:1.6em}#wifi-network-label[hidden]{display:none}
 #controllers form{grid-template-columns:minmax(0,1fr) auto}#auto-form{grid-template-columns:minmax(0,var(--setting-stepper-width,1fr)) auto;max-width:640px}#auto-form .full{grid-column:1/-1}#auto-form select{display:block;width:100%;min-height:46px;margin-top:8px;padding:10px;border:1px solid #8c9fa3;border-radius:6px;font:inherit;background:white;color:inherit}#auto-form .check{display:flex;align-items:center;gap:10px;min-height:44px}#auto-form input[type=checkbox]{width:20px;min-height:20px;margin:0;accent-color:#17636b}#auto-form button{justify-self:start}#auto-form .stepper button{justify-self:stretch}
-@media(min-width:761px){#auto-form label{white-space:nowrap}}
 #sim-banner{padding:12px 16px;background:#e6eaee;color:#25313b;border:1px solid #c7cfd5;border-radius:6px}#sim-banner button{background:#f6f8fa;color:#25313b;border:1px solid #aab5bd}#sim-banner button:hover{background:#dce2e7}#sim-form{display:block}#sim-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}.sim-item{padding:0}.sim-check{display:flex;align-items:center;gap:8px;margin-top:10px;font-size:.9rem}.sim-check input{width:20px;min-height:20px;margin:0;accent-color:#17636b}#sim-form button{margin-top:20px}
 @media(max-width:560px){#sim-fields{grid-template-columns:1fr}}
 @media(max-width:560px){.rule-table-hint{display:block;font-size:.8rem}main{padding:26px 18px}form{grid-template-columns:1fr 1fr}#controllers form,#auto-form{grid-template-columns:1fr}button{grid-column:1/-1}.stepper button{grid-column:auto}.heading{align-items:flex-start}}
 #pump-runtime-section{display:none}body.history-page #pump-runtime-section{display:block}
+#auto-form{grid-template-columns:repeat(3,minmax(0,1fr));max-width:880px}#auto-form>button{grid-column:1/-1}#auto-form label{white-space:normal}@media(max-width:850px){#auto-form{grid-template-columns:repeat(2,minmax(0,1fr))}}@media(max-width:560px){#auto-form{grid-template-columns:1fr}}
 .runtime-controls{display:flex;gap:12px;flex-wrap:wrap}.runtime-controls label{flex:1 1 180px;max-width:260px}.runtime-controls select{width:100%;min-height:46px;margin-top:8px;padding:8px;border:1px solid #8c9fa3;border-radius:6px;font:inherit;color:var(--ink1,#192f35);background:var(--bg2,#fff)}
 .runtime-values{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:20px 0 0}.runtime-values div{padding:12px;border:1px solid var(--line,#b9c8c9);border-radius:6px}.runtime-values dt{font-size:.85rem;color:var(--ink2,#4e6268)}.runtime-values dd{margin:6px 0 0;font-size:1.25rem;font-weight:700;font-variant-numeric:tabular-nums}.runtime-note{margin-top:14px}
 @media(max-width:600px){.runtime-controls label{max-width:none}.runtime-values{grid-template-columns:1fr}.runtime-values div{display:flex;align-items:center;justify-content:space-between;gap:12px}.runtime-values dd{margin:0}}
@@ -380,10 +380,13 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <h2 id="auto-heading">Automatische Regelung</h2>
 <p class="muted">Kombi oben im Sommer, Kombi Mitte im Winter; verglichen wird jeweils mit Puffer oben.</p>
 <form id="auto-form">
-<div><label for="auto-start">Startdifferenz zwischen den Speichern (5–10 K)</label><div class="stepper"><button type="button" data-direction="-1" aria-label="Startdifferenz senken">−</button><input id="auto-start" type="number" name="start" min="5" max="10" step="1" inputmode="numeric" required><button type="button" data-direction="1" aria-label="Startdifferenz erhöhen">+</button></div></div>
+<div><label for="auto-start">Startdifferenz zwischen den Speichern (5–10 K)</label><div class="stepper"><button type="button" data-field="start" data-direction="-1" aria-label="Startdifferenz senken">−</button><input id="auto-start" type="number" name="start" min="5" max="10" step="1" inputmode="numeric" required><button type="button" data-field="start" data-direction="1" aria-label="Startdifferenz erhöhen">+</button></div></div>
+<div><label for="auto-min-combi">Mindesttemperatur Kombispeicher (0–80 °C)</label><div class="stepper"><button type="button" data-field="minimumCombi" data-direction="-1" aria-label="Mindesttemperatur Kombispeicher senken">−</button><input id="auto-min-combi" type="number" name="minimumCombi" min="0" max="80" step="1" inputmode="numeric" required><button type="button" data-field="minimumCombi" data-direction="1" aria-label="Mindesttemperatur Kombispeicher erhöhen">+</button></div></div>
+<div><label for="auto-min-buffer">Mindesttemperatur Pufferspeicher (0–80 °C)</label><div class="stepper"><button type="button" data-field="minimumBuffer" data-direction="-1" aria-label="Mindesttemperatur Pufferspeicher senken">−</button><input id="auto-min-buffer" type="number" name="minimumBuffer" min="0" max="80" step="1" inputmode="numeric" required><button type="button" data-field="minimumBuffer" data-direction="1" aria-label="Mindesttemperatur Pufferspeicher erhöhen">+</button></div></div>
 <button type="submit">Regelung speichern</button>
 </form>
-<p class="muted">Start bei eingestellter Differenz, Stopp bei 3 K. Die Starttemperatur gilt nur für Kombi → Puffer.</p>
+<p class="muted">Automatik: Beide Speicher müssen ihre Mindesttemperatur erreichen. Im Handbetrieb gelten diese Grenzen nicht. Die Einlagerungs-Starttemperatur gilt nur für Kombi → Puffer; Stopp bei 3 K Differenz.</p>
+<p id="auto-min-status" class="muted" role="status">Mindesttemperaturen werden geprüft …</p>
 <p id="auto-error" class="error" role="alert" hidden></p>
 <p id="auto-message" class="message" role="status"></p>
 <details class="automatic-rules"><summary>Gespeicherte Schaltbedingungen</summary>
@@ -429,11 +432,11 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
     </article>
     <article class="org-branch org-return">
       <div class="org-branch-head"><svg class="org-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 7H5m4-4L5 7l4 4M3 17h16"/></svg><div><h2>Puffer → Kombi</h2><span>Rückladen</span></div></div>
-      <h3>Start</h3><ul><li>Puffer − Kombi ≥ <strong class="org-start">— K</strong></li><li>Keine Mindesttemperatur</li><li>In Sommer und Winter möglich</li></ul>
+      <h3>Start</h3><ul><li>Puffer − Kombi ≥ <strong class="org-start">— K</strong></li><li>In Sommer und Winter möglich</li></ul>
       <p class="org-stop"><strong>Stopp:</strong> Differenz ≤ <strong class="org-stop-value">— K</strong>.</p>
     </article>
   </div>
-  <div class="org-interlock"><svg class="org-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6v5c0 5 3 8 8 10 5-2 8-5 8-10V6z"/><path d="M12 8v4m0 4h.01"/></svg><div><strong>Backloadpumpe &amp; Richtungswechsel</strong><p>Bei Fehler eines Regelungsfühlers stoppt die Automatik. Vor einem Richtungswechsel pausiert die Backloadpumpe 2 Sekunden.</p></div></div>
+  <div class="org-interlock"><svg class="org-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6v5c0 5 3 8 8 10 5-2 8-5 8-10V6z"/><path d="M12 8v4m0 4h.01"/></svg><div><strong>Backloadpumpe &amp; Richtungswechsel</strong><p>Automatik nur ab Mindesttemperatur: Kombi <strong id="org-min-combi">— °C</strong> und Puffer <strong id="org-min-buffer">— °C</strong>. Im Handbetrieb gelten diese Grenzen nicht.</p><p>Bei Fehler eines Regelungsfühlers stoppt die Automatik. Vor einem Richtungswechsel pausiert die Backloadpumpe 2 Sekunden.</p></div></div>
 </div>
 <div class="org-solar" aria-labelledby="org-solar-heading">
   <div class="heading"><div class="org-section-title"><svg class="org-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="3"/><path d="M12 1v2M4 7h3m10 0h3M6 2l1.5 1.5M18 2l-1.5 1.5M4 13h16l2 8H2zM5 17h14m-7-4v8"/></svg><h2 id="org-solar-heading">Solarregelung</h2></div><span id="org-solar-state" class="badge">Status wird geladen …</span></div>
@@ -670,13 +673,6 @@ const autoForm=document.getElementById('auto-form');
 const autoMessage=document.getElementById('auto-message');
 const solarForm=document.getElementById('solar-form'),solarMessage=document.getElementById('solar-message');
 let solarDirty=false,solarBusy=false,solarRevision=0;
-function syncAutoStepperWidth(){
-  const target=document.querySelector('#controllers section[data-sensor-id="0"] .stepper');
-  if(!target)return;
-  const width=target.getBoundingClientRect().width;
-  if(width>0)autoForm.style.setProperty('--setting-stepper-width',width+'px');
-}
-window.addEventListener('resize',syncAutoStepperWidth);
 const heatingSwitch=document.getElementById('heating-switch');
 function drawBurnerPipes(){
   const box=document.querySelector('.storage-overview'),icon=box.querySelector('.burner-icon'),tank=box.querySelector('.pump-flow'),wires=box.querySelector('.burner-pipes');
@@ -886,15 +882,19 @@ autoForm.addEventListener('input',()=>{autoDirty=true;autoMessage.textContent='N
 autoForm.addEventListener('change',()=>{autoDirty=true;autoMessage.textContent='Noch nicht gespeichert.';autoMessage.className='message';});
 autoForm.addEventListener('click',event=>{
   const button=event.target.closest('.stepper button');
-  if(button&&!button.disabled)stepIntegerInput(autoForm.elements.start,Number(button.dataset.direction));
+  if(button&&!button.disabled&&autoForm.elements[button.dataset.field])stepIntegerInput(autoForm.elements[button.dataset.field],Number(button.dataset.direction));
 });
 function updateAutomatic(state){
   if(!state)return;
   document.getElementById('auto-error').hidden=state.configValid;
   document.getElementById('auto-error').textContent=state.configValid?'':'Automatik gesperrt: Betriebsart und Einstellungen prüfen.';
   autoForm.elements.start.dataset.savedValue=state.differenceStart;
+  autoForm.elements.minimumCombi.dataset.savedValue=state.minimumCombi;
+  autoForm.elements.minimumBuffer.dataset.savedValue=state.minimumBuffer;
   if(autoDirty||autoBusy||autoForm.contains(document.activeElement))return;
   autoForm.elements.start.value=settingNumber(state.differenceStart);
+  autoForm.elements.minimumCombi.value=settingNumber(state.minimumCombi);
+  autoForm.elements.minimumBuffer.value=settingNumber(state.minimumBuffer);
 }
 function automaticSensorId(state){
   return state.controlSensorId === 1 ? 1 : 0;
@@ -903,22 +903,29 @@ function automaticRuleText(state,controllers,pump){
   if(!state||!state.configValid||!Array.isArray(controllers))return null;
   const id=automaticSensorId(state),combi=controllers.find(c=>c.id===id),buffer=controllers.find(c=>c.id===2),settings=controllers.find(c=>c.id===0);
   if(!combi||!buffer||!settings||!Number.isFinite(state.differenceStart)||
-     state.differenceStart<5||state.differenceStart>10)return null;
+     state.differenceStart<5||state.differenceStart>10||!Number.isFinite(state.minimumCombi)||state.minimumCombi<0||state.minimumCombi>80||
+     !Number.isFinite(state.minimumBuffer)||state.minimumBuffer<0||state.minimumBuffer>80)return null;
   const temp=value=>setpointNumber.format(value)+' °C',delta=value=>setpointNumber.format(value)+' K';
   const targetValid=settings.configValid&&Number.isFinite(settings.target)&&settings.target>=68&&settings.target<=72;
+  const valuesValid=combi.valid&&buffer.valid&&Number.isFinite(combi.temperature)&&Number.isFinite(buffer.temperature);
+  const below=[];
+  if(valuesValid&&combi.temperature<state.minimumCombi)below.push('Kombi '+temp(combi.temperature)+' < '+temp(state.minimumCombi));
+  if(valuesValid&&buffer.temperature<state.minimumBuffer)below.push('Puffer '+temp(buffer.temperature)+' < '+temp(state.minimumBuffer));
   return {
     sensor:'Fühler: '+combi.name+' und Pufferspeicher oben. Starttemperatur: '+(targetValid?temp(settings.target):'ungültig')+'.',
+    minimumStatus:pump&&pump.manual?'Handbetrieb: Mindesttemperaturen nicht aktiv.':!valuesValid?'Mindesttemperaturen: keine gültigen Fühlerwerte.':below.length?'Automatik gesperrt: '+below.join(' · ')+'.':'Mindesttemperaturen erreicht.',
     status:pump&&pump.manual?'Manuelle Steuerung aktiv · Ölbrennersperre gilt.':
       !combi.valid||!buffer.valid?'Sensorfehler · Automatik hält die Backloadpumpe aus.':'Gespeicherte Einstellungen.',
     chargeStart:!state.allowCharging?'Einlagerung durch Sommer-/Winterumschaltung gesperrt.':!targetValid?'Einlagerung gesperrt: Starttemperatur muss 68–72 °C betragen.':
-      'Ölbrennerfreigabe AUS UND Kombi ≥ '+temp(settings.target)+' UND Kombi − Puffer ≥ '+delta(state.differenceStart)+'.',
-    chargeStop:'Kombi − Puffer ≤ 3 K ODER Ölbrenner freigegeben / Betriebsart unbekannt.',
-    returnStart:'Puffer − Kombi ≥ '+delta(state.differenceStart)+'. Ohne Mindesttemperatur oder Ölsperre.',
-    returnStop:'Puffer − Kombi ≤ 3 K.'
+      'Ölbrennerfreigabe AUS UND Kombi ≥ '+temp(settings.target)+' UND Kombi ≥ '+temp(state.minimumCombi)+' UND Puffer ≥ '+temp(state.minimumBuffer)+' UND Kombi − Puffer ≥ '+delta(state.differenceStart)+'.',
+    chargeStop:'Kombi < '+temp(state.minimumCombi)+' ODER Puffer < '+temp(state.minimumBuffer)+' ODER Kombi − Puffer ≤ 3 K ODER Ölbrenner freigegeben / Betriebsart unbekannt.',
+    returnStart:'Kombi ≥ '+temp(state.minimumCombi)+' UND Puffer ≥ '+temp(state.minimumBuffer)+' UND Puffer − Kombi ≥ '+delta(state.differenceStart)+'. Ohne Ölsperre.',
+    returnStop:'Kombi < '+temp(state.minimumCombi)+' ODER Puffer < '+temp(state.minimumBuffer)+' ODER Puffer − Kombi ≤ 3 K.'
   };
 }
 function updateAutomaticRules(state,controllers,pump){
   const rules=automaticRuleText(state,controllers,pump);
+  document.getElementById('auto-min-status').textContent=rules?rules.minimumStatus:'Mindesttemperaturen: keine gültigen Regelungseinstellungen.';
   document.getElementById('auto-rules-table').hidden=!rules;
   document.getElementById('auto-rules-sensor').textContent=rules?rules.sensor:'Keine aktuellen, gültigen Regelungseinstellungen verfügbar.';
   document.getElementById('auto-rules-state').textContent=rules?rules.status:'';
@@ -996,7 +1003,13 @@ autoForm.addEventListener('submit',async event=>{
   if(!Number.isInteger(Number(autoForm.elements.start.value))||autoForm.elements.start.value.trim()===''||Number(autoForm.elements.start.value)<5||Number(autoForm.elements.start.value)>10){
     autoMessage.className='message error';autoMessage.textContent='Startdifferenz: ganze Zahl von 5 bis 10 K eingeben.';return;
   }
-  const values=new URLSearchParams({start:autoForm.elements.start.value});
+  for(const [field,label] of [['minimumCombi','Kombispeicher'],['minimumBuffer','Pufferspeicher']]){
+    const value=autoForm.elements[field].value;
+    if(!Number.isInteger(Number(value))||value.trim()===''||Number(value)<0||Number(value)>80){
+      autoMessage.className='message error';autoMessage.textContent='Mindesttemperatur '+label+': ganze Zahl von 0 bis 80 °C eingeben.';return;
+    }
+  }
+  const values=new URLSearchParams({start:autoForm.elements.start.value,minimumCombi:autoForm.elements.minimumCombi.value,minimumBuffer:autoForm.elements.minimumBuffer.value});
   autoBusy=true;autoRevision++;pumpRevision++;autoForm.querySelectorAll('input,select,button').forEach(e=>e.disabled=true);autoMessage.textContent='Wird gespeichert …';autoMessage.className='message';
   try{
     await request('/api/automatic',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'HeatingUI'},body:values});
@@ -1505,6 +1518,8 @@ function updateOrganigram(data){
   document.getElementById('org-target').textContent=settings&&settings.configValid&&Number.isFinite(settings.target)?setpointNumber.format(settings.target)+' °C':'— °C';
   const start=automatic&&Number.isFinite(automatic.differenceStart)?setpointNumber.format(automatic.differenceStart)+' K':'— K';
   const stop=automatic&&Number.isFinite(automatic.differenceStop)?setpointNumber.format(automatic.differenceStop)+' K':'— K';
+  document.getElementById('org-min-combi').textContent=automatic&&Number.isFinite(automatic.minimumCombi)?setpointNumber.format(automatic.minimumCombi)+' °C':'— °C';
+  document.getElementById('org-min-buffer').textContent=automatic&&Number.isFinite(automatic.minimumBuffer)?setpointNumber.format(automatic.minimumBuffer)+' °C':'— °C';
   document.querySelectorAll('.org-start').forEach(e=>e.textContent=start);
   document.querySelectorAll('.org-stop-value').forEach(e=>e.textContent=stop);
   for(let i=0;i<5;i++){
@@ -1572,7 +1587,6 @@ async function refresh(){
       p.form.elements.hysteresis.dataset.savedValue=c.hysteresis;
       if(!p.isDirty()&&!p.form.contains(document.activeElement)&&!saving){p.form.elements.target.value=settingNumber(c.target);p.form.elements.hysteresis.value=inputNumber(c.hysteresis);}
     }
-    syncAutoStepperWidth();
     setConnectionStatus(true);
   }catch(error){
     updateRuntime(null,false);
@@ -2309,6 +2323,8 @@ String automaticStatusJson() {
     ",\"configValid\":" + String(storageReady && autoSettingsValid && heatingModeValid ? "true" : "false") +
     ",\"targetOffset\":0" +
     ",\"differenceStart\":" + jsonNumber(automaticThresholds.differenceStart) +
+    ",\"minimumCombi\":" + jsonNumber(automaticThresholds.minimumCombi) +
+    ",\"minimumBuffer\":" + jsonNumber(automaticThresholds.minimumBuffer) +
     ",\"differenceStop\":" + jsonNumber(AutomaticControl::STOP_DIFFERENCE) + "}";
 }
 
@@ -2532,19 +2548,25 @@ void saveAutomaticSettings() {
     server.send(403, "text/plain; charset=utf-8", "Bitte das Webinterface verwenden.");
     return;
   }
-  AutomaticThresholds next;
-  if (server.args() != 1 || !parseNumber(server.arg("start"), next.differenceStart) || !AutomaticControl::validThresholds(next)) {
-    server.send(400, "text/plain; charset=utf-8", "Startdifferenz muss 5–10 K betragen. Bitte die Seite neu laden und nur die Startdifferenz speichern.");
+  AutomaticThresholds next = automaticThresholds;
+  if ((server.args() != 1 && server.args() != 3) || !server.hasArg("start") ||
+      (server.args() == 3 && (!server.hasArg("minimumCombi") || !server.hasArg("minimumBuffer"))) ||
+      !parseNumber(server.arg("start"), next.differenceStart) ||
+      (server.hasArg("minimumCombi") && (!parseNumber(server.arg("minimumCombi"), next.minimumCombi) || floorf(next.minimumCombi) != next.minimumCombi)) ||
+      (server.hasArg("minimumBuffer") && (!parseNumber(server.arg("minimumBuffer"), next.minimumBuffer) || floorf(next.minimumBuffer) != next.minimumBuffer)) ||
+      !AutomaticControl::validThresholds(next)) {
+    server.send(400, "text/plain; charset=utf-8", "Startdifferenz muss 5–10 K und beide Mindesttemperaturen müssen ganze Zahlen von 0–80 °C sein.");
     return;
   }
-  // Bestehenden Blob erhalten; die alten Auswahl-/Freigabefelder sind stillgelegt.
-  const float saved[5] = {0.0f, next.differenceStart, 0.0f, 0.0f, 1.0f};
+  // Versionskennung und beide Grenzen gemeinsam mit der Startdifferenz atomar
+  // speichern; ältere Firmware ignoriert die stillgelegten Slots 0/2/3.
+  const float saved[5] = {next.minimumCombi, next.differenceStart, AutomaticControl::MINIMUM_FORMAT_MARKER, next.minimumBuffer, 1.0f};
   if (!storageReady || preferences.putBytes("auto1", saved, sizeof(saved)) != sizeof(saved)) {
     server.send(500, "text/plain; charset=utf-8", "Speicherfehler. Regelung wurde nicht übernommen.");
     return;
   }
-  // Die neue Differenz gilt für den nächsten Start. Einen laufenden Transfer
-  // beim Speichern nicht vor Erreichen der Stoppdifferenz unterbrechen.
+  // Die Startdifferenz gilt beim nächsten Start. Eine erhöhte Mindesttemperatur
+  // stoppt einen laufenden Transfer sofort nach der aktuellen Messung.
   automaticThresholds = next;
   autoSettingsValid = true;
   measureTemperatures();

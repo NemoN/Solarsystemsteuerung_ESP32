@@ -28,6 +28,7 @@ trap 'rm -rf "$test_dir"' EXIT HUP INT TERM
   "$project_dir/Backload/AutomaticControl.cpp" "$project_dir/Backload/PumpControl.cpp" "$project_dir/tests/test_automatic_control.cpp" \
   -o "$test_dir/automatic-tests"
 "$test_dir/automatic-tests"
+python3 "$project_dir/tests/test_automatic_settings.py"
 
 "${CXX:-c++}" -std=c++11 -Wall -Wextra -Werror -fsanitize=address,undefined \
   -I"$project_dir/Backload" \

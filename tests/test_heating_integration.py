@@ -137,6 +137,24 @@ int main() {
   updateAutomaticPump();now+=2200;servicePump();now+=100;servicePump();
   assert(pump.on() && !runtimePumpOn && pins[PUMP_ENABLE_PIN]==HIGH && pins[PUMP_DIRECTION_PIN]==HIGH &&
     pins[OIL_BURNER_PIN]==HIGH);
+  // Die neue Grenze gilt nicht im Handbetrieb, aber sofort wieder in Automatik.
+  SIMULATION_MODE=false; heatingModeValid=true; oilBurnerEnabled=false;
+  pump=PumpControl(PumpDirection::BufferToCombi); automaticControl.reset();
+  controllers[0].valid=true; controllers[0].currentTemp=20;
+  controllers[2].valid=true; controllers[2].currentTemp=30;
+  automaticThresholds=AutomaticThresholds(8,35);
+  manualControl=true; manualDirection=PumpDirection::BufferToCombi; manualPumpOn=true;
+  pump.command(true,manualDirection,now); servicePump(); updateAutomaticPump();
+  assert(pump.on() && pins[PUMP_ENABLE_PIN]==LOW);
+  manualControl=false; updateAutomaticPump();
+  assert(!pump.on() && pins[PUMP_ENABLE_PIN]==HIGH);
+  // Beide Mindesttemperaturen gelten getrennt beim Start und im Betrieb.
+  automaticThresholds=AutomaticThresholds(8,35,40);
+  controllers[2].currentTemp=50;updateAutomaticPump();assert(!pump.on()); // Kombi 20
+  controllers[0].currentTemp=35;controllers[2].currentTemp=43;updateAutomaticPump();assert(pump.on());
+  automaticThresholds.minimumBuffer=44;updateAutomaticPump();assert(!pump.on());
+  automaticThresholds.minimumBuffer=40;updateAutomaticPump();assert(pump.on());
+  controllers[0].currentTemp=34.9f;updateAutomaticPump();assert(!pump.on());
   puts("PASS: Sommer-/Winterfühler, 3K-Stopp, Sensorfehler, Ölsperre, GPIO-Schaltreihenfolge und Simulation.");
 }
 '''

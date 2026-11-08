@@ -33,6 +33,9 @@ Einstellungen:
 - **Einlagerung ab:** 68–72 °C, Vorgabe 68 °C. Die Starttemperatur gilt für
   den gewählten Kombifühler und nur für Kombi → Puffer.
 - **Startdifferenz:** 5–10 K, Vorgabe 8 K, für beide Richtungen.
+- **Mindesttemperaturen:** je 0–80 °C, Vorgabe je 35 °C für den gewählten
+  Kombifühler und für Puffer oben. In der Automatik müssen beide ihre jeweilige
+  Grenze erreichen. Im Handbetrieb gelten die Mindesttemperaturen nicht.
 - **Stoppdifferenz:** fest 3 K für beide Richtungen.
 
 Neue Eingaben im Webinterface sind ganzzahlig. Ältere gespeicherte Dezimalwerte
@@ -40,8 +43,12 @@ innerhalb des zulässigen Bereichs bleiben wirksam und sichtbar.
 
 | Förderrichtung | Start: alle Bedingungen | Stopp: eine Bedingung genügt |
 | --- | --- | --- |
-| Kombi → Puffer | Ölfreigabe AUS und Kombi ≥ Starttemperatur und Kombi − Puffer ≥ Startdifferenz | Kombi − Puffer ≤ 3 K oder Ölfreigabe AN / Betriebsart unbekannt |
-| Puffer → Kombi | Puffer − Kombi ≥ Startdifferenz, unabhängig von Starttemperatur und Ölfreigabe | Puffer − Kombi ≤ 3 K |
+| Kombi → Puffer | Kombi und Puffer jeweils ≥ Mindesttemperatur, Ölfreigabe AUS, Kombi ≥ Starttemperatur und Kombi − Puffer ≥ Startdifferenz | Kombi oder Puffer unter jeweiliger Mindesttemperatur, Kombi − Puffer ≤ 3 K oder Ölfreigabe AN / Betriebsart unbekannt |
+| Puffer → Kombi | Kombi und Puffer jeweils ≥ Mindesttemperatur und Puffer − Kombi ≥ Startdifferenz, unabhängig von Einlagerungs-Starttemperatur und Ölfreigabe | Kombi oder Puffer unter jeweiliger Mindesttemperatur oder Puffer − Kombi ≤ 3 K |
+
+Die Mindesttemperaturen gelten auch während des Pumpenlaufs. Genau auf der
+jeweiligen Grenze ist der Betrieb erlaubt. Bei Puffer 50 °C und Kombi 20 °C
+bleibt die Automatik beispielsweise mit der Vorgabe von je 35 °C ausgeschaltet.
 
 Die Temperaturdifferenz wird dabei jeweils von der wärmeren Quellseite zum
 Ziel berechnet. Nach dem Start muss die Einlagerungstemperatur nicht weiter
@@ -110,10 +117,11 @@ gültiger Startabstand von 5–10 K übernommen; frühere Stoppabstände werden
 ignoriert. Ungültige Startabstände sperren die Automatik bis zur Korrektur.
 
 `GET /api/status` meldet `automatic.controlSensorId` (Sommer 0, Winter 1),
-`automatic.differenceStart`, `automatic.differenceStop` (3) und `heating` mit
+`automatic.differenceStart`, `automatic.minimumCombi`, `automatic.minimumBuffer`, `automatic.differenceStop` (3) und `heating` mit
 Betriebsart, Konfigurationsgültigkeit und physischem Relaiszustand.
 `POST /api/heating` schaltet mit `winter=0/1` Fühlerwahl und Ölfreigabe.
-`POST /api/automatic` erwartet `start`. `solar` enthält den Pumpenzustand, die
+`POST /api/automatic` erwartet `start` und optional beide Felder `minimumCombi`
+und `minimumBuffer`; ohne diese bleiben die bisherigen Werte erhalten. `solar` enthält den Pumpenzustand, die
 Messwert- und Konfigurationsgültigkeit sowie Start-, Stopp- und aktuelle
 Differenz. `POST /api/solar` speichert `start` (3–10 K). Sensor-IDs bleiben
 unverändert.

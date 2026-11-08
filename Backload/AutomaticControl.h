@@ -6,7 +6,15 @@ enum class TransferDemand : uint8_t { Off, CombiToBuffer, BufferToCombi };
 struct AutomaticThresholds {
   static constexpr float MIN_DIFFERENCE_START = 5.0f;
   static constexpr float MAX_DIFFERENCE_START = 10.0f;
+  static constexpr float MIN_TEMPERATURE = 0.0f;
+  static constexpr float MAX_TEMPERATURE = 80.0f;
+  static constexpr float DEFAULT_MIN_TEMPERATURE = 35.0f;
   float differenceStart;
+  float minimumCombi;
+  float minimumBuffer;
+  AutomaticThresholds(float difference = 8.0f, float combi = DEFAULT_MIN_TEMPERATURE,
+                      float buffer = DEFAULT_MIN_TEMPERATURE)
+    : differenceStart(difference), minimumCombi(combi), minimumBuffer(buffer) {}
 };
 
 // Zustandsbehaftete Temperaturregelung; keine GPIO- oder Zeitabhängigkeit.
@@ -19,7 +27,8 @@ public:
   static constexpr float STOP_DIFFERENCE = 3.0f;
   static bool validChargeTarget(float target);
   static bool validThresholds(const AutomaticThresholds& thresholds);
-  // Historisches auto1-Format: Nur Slot 1 ist weiterhin wirksam.
+  // Historische auto1-Daten ohne Kennung übernehmen nur die Startdifferenz.
+  static constexpr float MINIMUM_FORMAT_MARKER = 731042.0f;
   static bool readSavedThresholds(const float saved[5], AutomaticThresholds& thresholds);
   TransferDemand update(bool enabled, bool allowCharging, bool combiValid,
                         float combi, bool bufferValid, float buffer,

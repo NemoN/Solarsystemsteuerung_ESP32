@@ -8,11 +8,19 @@ bool AutomaticControl::validChargeTarget(float target) {
 bool AutomaticControl::validThresholds(const AutomaticThresholds& t) {
   return isfinite(t.differenceStart) &&
     t.differenceStart >= AutomaticThresholds::MIN_DIFFERENCE_START &&
-    t.differenceStart <= AutomaticThresholds::MAX_DIFFERENCE_START;
+    t.differenceStart <= AutomaticThresholds::MAX_DIFFERENCE_START &&
+    isfinite(t.minimumCombi) && isfinite(t.minimumBuffer) &&
+    t.minimumCombi >= AutomaticThresholds::MIN_TEMPERATURE &&
+    t.minimumCombi <= AutomaticThresholds::MAX_TEMPERATURE &&
+    t.minimumBuffer >= AutomaticThresholds::MIN_TEMPERATURE &&
+    t.minimumBuffer <= AutomaticThresholds::MAX_TEMPERATURE;
 }
 
 bool AutomaticControl::readSavedThresholds(const float saved[5], AutomaticThresholds& t) {
-  const AutomaticThresholds candidate = {saved[1]};
+  const bool current = saved[2] == MINIMUM_FORMAT_MARKER;
+  const AutomaticThresholds candidate = {saved[1],
+    current ? saved[0] : AutomaticThresholds::DEFAULT_MIN_TEMPERATURE,
+    current ? saved[3] : AutomaticThresholds::DEFAULT_MIN_TEMPERATURE};
   if (!validThresholds(candidate)) return false;
   t = candidate;
   return true;
@@ -21,7 +29,7 @@ bool AutomaticControl::readSavedThresholds(const float saved[5], AutomaticThresh
 TransferDemand AutomaticControl::update(bool enabled, bool allowCharging, bool combiValid,
     float combi, bool bufferValid, float buffer, float target, const AutomaticThresholds& t) {
   if (!enabled || !combiValid || !bufferValid || !isfinite(combi) || !isfinite(buffer) ||
-      !validThresholds(t)) {
+      !validThresholds(t) || combi < t.minimumCombi || buffer < t.minimumBuffer) {
     reset();
     return demand_;
   }
@@ -29,7 +37,7 @@ TransferDemand AutomaticControl::update(bool enabled, bool allowCharging, bool c
       (!allowCharging || combi - buffer <= STOP_DIFFERENCE)) reset();
   if (demand_ == TransferDemand::BufferToCombi && buffer - combi <= STOP_DIFFERENCE) reset();
   if (demand_ == TransferDemand::Off) {
-    // Die Mindesttemperatur gilt ausschließlich für den Start der Einlagerung.
+    // Die separate Einlagerungs-Starttemperatur gilt nur beim Start.
     if (allowCharging && validChargeTarget(target) && combi >= target && combi - buffer >= t.differenceStart)
       demand_ = TransferDemand::CombiToBuffer;
     else if (buffer - combi >= t.differenceStart)
