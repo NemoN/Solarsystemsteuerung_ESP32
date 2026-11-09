@@ -26,13 +26,15 @@ Die einreihige Programmierleiste neben dem ESP32 ist auf der Unterseite mit
 | TX / TXD | RX |
 | RX / RXD | TX |
 
-Der 5-V-Ausgang des Adapters muss die Karte ausreichend versorgen können. Das
-beiliegende [Datenblatt](https://www.roboter-bausatz.de/media/pdf/ce/40/8c/RBS16467-ESP32-4-Kanal-Relais-Board.pdf) ist zum 5V-Pin beim Programmieren widersprüchlich:
-Es nennt ihn als Versorgungsanschluss und rät an anderer Stelle von seiner
-Nutzung beim Programmieren ab. Angaben zur eigenen Karte und zum Adapter vor
-dem Anschluss prüfen. Alternativ die Karte separat mit 5 V versorgen: Dann
-Adapter-5V freilassen, aber Adapter-GND und Karten-GND verbinden. Niemals
-mehrere Stromversorgungen gleichzeitig anschließen.
+Die Versorgung mit 5 V über den Adapter wird auch in diesem
+[Erfahrungsbericht zur ESP32 Relay X4 V1.1](https://prilchen.de/esp32-4-kanal-relais-entwicklungsplatine/)
+beschrieben. Der Adapter muss dafür ausreichend Strom liefern und TX/RX müssen
+3,3-V-Logik verwenden. Das beiliegende
+[Datenblatt](https://www.roboter-bausatz.de/media/pdf/ce/40/8c/RBS16467-ESP32-4-Kanal-Relais-Board.pdf)
+enthält zum 5V-Pin beim Programmieren allerdings widersprüchliche Angaben.
+Alternativ die Karte separat mit 5 V versorgen: Dann Adapter-5V freilassen,
+aber Adapter-GND und Karten-GND verbinden. Keine weiteren Stromversorgungen
+gleichzeitig anschließen.
 
 1. Adapter per USB mit dem Rechner verbinden und die Karte versorgen.
 2. Für den **Flashmodus** auf der Karte **IO0** gedrückt halten, **EN** kurz
