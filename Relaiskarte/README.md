@@ -8,20 +8,50 @@ Ausgänge zunächst ausgeschaltet. Bei WLAN-Ausfall bleibt der letzte Zustand
 bestehen. Der gemeldete Zustand ist der geschaltete Ausgang, keine Rückmeldung
 des Relaiskontakts oder der angeschlossenen Last.
 
+## Erstinstallation über USB
+
+Karte und Adapter vor dem Verkabeln stromlos machen. Netzspannung und
+angeschlossene Verbraucher während der Erstinstallation getrennt lassen.
+Der USB-Seriell-Adapter muss **3,3-V-Logik an TX und RX** unterstützen; die
+Versorgung der Karte erfolgt mit 5 V. Eine Einstellung für 3,3-V-Logik darf
+den 5-V-Versorgungsausgang des Adapters nicht unbeabsichtigt verändern.
+
+Die einreihige Programmierleiste neben dem ESP32 ist auf der Unterseite mit
+`5V · TX · RX · GND · GND · IO0` beschriftet. Bei Versorgung über den Adapter:
+
+| USB-Seriell-Adapter | Programmierleiste der Karte |
+| --- | --- |
+| 5V-Ausgang | 5V |
+| GND | GND (einer der beiden Pins) |
+| TX / TXD | RX |
+| RX / RXD | TX |
+
+Der 5-V-Ausgang des Adapters muss die Karte ausreichend versorgen können. Das
+beiliegende [Datenblatt](https://www.roboter-bausatz.de/media/pdf/ce/40/8c/RBS16467-ESP32-4-Kanal-Relais-Board.pdf) ist zum 5V-Pin beim Programmieren widersprüchlich:
+Es nennt ihn als Versorgungsanschluss und rät an anderer Stelle von seiner
+Nutzung beim Programmieren ab. Angaben zur eigenen Karte und zum Adapter vor
+dem Anschluss prüfen. Alternativ die Karte separat mit 5 V versorgen: Dann
+Adapter-5V freilassen, aber Adapter-GND und Karten-GND verbinden. Niemals
+mehrere Stromversorgungen gleichzeitig anschließen.
+
+1. Adapter per USB mit dem Rechner verbinden und die Karte versorgen.
+2. Für den **Flashmodus** auf der Karte **IO0** gedrückt halten, **EN** kurz
+   drücken und anschließend **IO0** loslassen.
+3. In der Arduino IDE `Relaiskarte.ino` mit ESP32-Core 2.0.13 öffnen,
+   **ESP32 Dev Module** und den Port des Adapters auswählen und hochladen.
+4. Nach dem Hochladen **EN** kurz drücken, ohne IO0 zu drücken. Die Karte
+   startet nun mit der Firmware.
+
 ## Einrichten
 
 Bis zu vier Erweiterungen lassen sich parallel mit dem Haupt-ESP verbinden.
 
-1. `Relaiskarte.ino` mit ESP32-Core 2.0.13 für **ESP32 Dev Module** auf die
-   Karte laden. Der Programmieranschluss benötigt einen seriellen Adapter mit
-   **3,3-V-Logik**; GPIO 0 beim Flashen auf GND legen. Stromversorgung und
-   Anschlüsse anhand des Datenblatts prüfen.
-2. Die Karte einschalten. Ihr Einrichtungs-WLAN heißt `Relaiserweiterung-XXXX`.
-3. Am Haupt-ESP unter **Einstellungen → Relaiserweiterungen** einen freien
+1. Die Karte einschalten. Ihr Einrichtungs-WLAN heißt `Relaiserweiterung-XXXX`.
+2. Am Haupt-ESP unter **Einstellungen → Relaiserweiterungen** einen freien
    Platz wählen und **Neue Erweiterungen suchen**. Die gewünschte Erweiterung
    auswählen und **Erweiterung einrichten** drücken. Anschließend die Taste
    **IO0** auf der Erweiterung drei Sekunden gedrückt halten.
-4. Der Haupt-ESP öffnet kurz einen Kopplungs-AP und bleibt mit dem
+3. Der Haupt-ESP öffnet kurz einen Kopplungs-AP und bleibt mit dem
    Heim-WLAN verbunden. Die Erweiterung übernimmt darüber die WLAN-Daten. Der
    Haupt-ESP sucht sie anschließend im Heimnetz und prüft ihren übertragenen
    Verbindungsschlüssel.

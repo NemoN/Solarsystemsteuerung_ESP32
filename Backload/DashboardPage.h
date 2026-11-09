@@ -269,11 +269,13 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
   <div class="relay-guide-layout"><div>
     <ol>
       <li><strong>Vorbereiten:</strong> Karte spannungsfrei verkabeln; Netzspannung und Verbraucher getrennt lassen. Stromversorgung und Polung anhand des Datenblatts prüfen.</li>
-      <li><strong>Erstinstallation:</strong> USB-Seriell-Adapter mit 3,3-V-Logik anschließen: TX an RX, RX an TX und GND an GND. Bei separater Versorgung den Versorgungsausgang des Adapters frei lassen.</li>
-      <li><strong>Firmware laden:</strong> IO0 gedrückt halten, EN kurz drücken und IO0 loslassen. Den Sketch <code>Relaiskarte.ino</code> über die Arduino IDE übertragen. Für Karten mit passendem Bootloader und Partitionsschema gibt es auch die aktuelle <a href="https://github.com/NemoN/Solarsystemsteuerung_ESP32/releases/latest/download/Relaiskarte.ino.bin"><strong>Relaiskarte.ino.bin</strong></a>. Danach nur EN kurz drücken.</li>
+      <li><strong>Programmierleiste verbinden:</strong> Die einreihige Stiftleiste neben dem ESP32 ist rückseitig mit <code>5V · TX · RX · GND · GND · IO0</code> beschriftet. Bei passender Versorgung Adapter-5V an Karten-5V, GND an GND, Adapter-TX an Karten-RX und Adapter-RX an Karten-TX anschließen. Die Datenleitungen benötigen 3,3-V-Logik; einen ausreichend starken 5-V-Ausgang verwenden. Keine weitere Stromversorgung gleichzeitig anschließen.</li>
+      <li><strong>Flashmodus:</strong> Adapter per USB anschließen, auf der Karte IO0 gedrückt halten, EN kurz drücken und danach IO0 loslassen. In der Arduino IDE <strong>ESP32 Dev Module</strong> und den Adapter-Port wählen und <code>Relaiskarte.ino</code> übertragen. Anschließend nur EN kurz drücken.</li>
+      <li><strong>Firmwaredatei:</strong> Für Karten mit passendem Bootloader und Partitionsschema gibt es auch die aktuelle <a href="https://github.com/NemoN/Solarsystemsteuerung_ESP32/releases/latest/download/Relaiskarte.ino.bin"><strong>Relaiskarte.ino.bin</strong></a>.</li>
       <li><strong>Verbinden:</strong> Unter Einstellungen → Relaiserweiterungen einen freien Platz wählen, die Karte suchen und die Einrichtung starten. Anschließend IO0 drei Sekunden gedrückt halten.</li>
       <li><strong>Verwenden:</strong> Relais in den Einstellungen beschriften und auf der Startseite schalten. Auch im Testmodus schalten die WLAN-Relais tatsächlich.</li>
     </ol>
+    <p class="muted">Das beiliegende Datenblatt macht widersprüchliche Angaben zum 5V-Pin beim Programmieren. Vor der Versorgung über die Programmierleiste die Angaben für die eigene Karte und den Adapter prüfen. Bei separater 5-V-Versorgung Adapter-5V nicht verbinden, GND jedoch gemeinsam anschließen.</p>
     <p class="muted">Relais 1–4: GPIO 32, 33, 25 und 26; HIGH schaltet ein. Firmware-Updates sind nach der Erstinstallation über die Einstellungen möglich.</p>
   </div><figure><img src="/assets/relaiserweiterung.jpg" width="1715" height="1772" loading="lazy" alt="Vierkanal-Relaiserweiterung mit ESP32, Programmierleiste sowie Tasten EN und IO0"><figcaption>Relaiserweiterung RBS16467 · Vorderseite</figcaption></figure></div>
 </div>
