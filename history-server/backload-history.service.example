@@ -1,0 +1,18 @@
+# Benutzer, Pfade und ESP32-Adresse vor der Installation anpassen.
+[Unit]
+Description=Backload Temperaturarchiv
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=BENUTZER
+WorkingDirectory="/pfad/zu/history-server"
+Environment=ESP32_STATUS_URL=http://192.168.177.83/api/status
+Environment="DATABASE_PATH=/pfad/zu/history-server/data/temperatures.sqlite3"
+ExecStart="/pfad/zu/history-server/.venv/bin/python" -m uvicorn app.main:app --host 0.0.0.0 --port 8088 --workers 1
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

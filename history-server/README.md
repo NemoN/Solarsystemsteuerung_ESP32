@@ -1,184 +1,130 @@
 # Backload Temperaturarchiv
 
-Dieser Dienst liest die vorhandene ESP32-Schnittstelle und speichert alle
-15 Minuten die drei Temperaturen und, wenn von der Firmware unterstützt, die
-Pumpenlaufzeiten in SQLite.
-Ein Container enthält Sammler, API und Webseite; ein benanntes Docker-Volume
-enthält die Datenbank. Ein geöffnetes Browserfenster ist für die Erfassung nicht nötig.
+Der History-Server speichert alle 15 Minuten drei Temperaturen und, sofern die
+Firmware sie liefert, die Pumpenlaufzeiten in einer SQLite-Datenbank. Die
+Webseite zeigt den Verlauf und bietet einen CSV-Export. Zur Erfassung muss kein
+Browser geöffnet sein.
 
-## Start auf dem Docker-Server
+Der Rechner benötigt eine synchronisierte Uhr und eine Verbindung zum ESP32.
+Die Webseite hat keine Anmeldung und ist für das private Heimnetz gedacht.
+Alle folgenden Befehle werden im Ordner `history-server` ausgeführt.
 
-Voraussetzung: Docker Engine mit Docker Compose v2. Der Server muss den ESP32 im
-Heimnetz erreichen können und eine korrekt synchronisierte Uhr haben.
+## Mit Docker
 
-Den gesamten Ordner `history-server/` auf den Server kopieren und dort ausführen:
+Voraussetzung sind Docker Engine und Docker Compose v2. Den Ordner
+`history-server` auf den Server kopieren und die Konfiguration anlegen:
 
 ```sh
 cd history-server
 cp .env.example .env
 ```
 
-In `.env` bei Bedarf die beiden Werte anpassen:
-
-```dotenv
-ESP32_STATUS_URL=http://192.168.177.83/api/status
-HISTORY_PORT=8088
-```
-
-Anschließend:
+In `.env` die ESP32-Adresse und bei Bedarf den Port anpassen. Dann starten:
 
 ```sh
 docker compose up -d --build
-docker compose ps
 docker compose logs --tail=50 history
 ```
 
-Webseite: **http://SERVER-IP:8088**. Für einen anderen Port `HISTORY_PORT` ändern
-und `docker compose up -d` erneut ausführen. Die Webseite hat keine Anmeldung;
-der Dienst ist für das private Heimnetz gedacht. Chart.js und alle anderen
-Browserdateien werden lokal ausgeliefert, ohne CDN oder externe Schriftarten.
-Internet wird beim Bau des Containers für Basisimage und Python-Pakete benötigt.
+Die Webseite ist unter `http://SERVER-IP:8088` erreichbar; bei geändertem
+`HISTORY_PORT` entsprechend unter diesem Port. Docker startet den Dienst nach
+einem Neustart wieder, sofern Docker selbst automatisch startet. Ein Update wird
+nach dem Ersetzen der Projektdateien mit `docker compose up -d --build` gebaut.
 
-`restart: unless-stopped` startet den Dienst nach einem Serverneustart wieder,
-sofern Docker selbst automatisch startet. Nach einem absichtlichen
-`docker compose stop` erneut mit `docker compose up -d` starten.
+Die Datenbank liegt im Volume `backload-history_history-data`. Ein anderer
+Compose-Projektname erzeugt ein anderes Volume. **`docker compose down -v`
+löscht das Archiv.**
 
-## Was gespeichert wird
+## Ohne Docker
 
-Die neuere ESP32-Firmware liefert zusätzlich Laufzeiten für die Solarpumpe und
-beide Förderrichtungen der Backloadpumpe. Bei jeder regulären Abfrage übernimmt
-der Server alle auf dem ESP32 vorhandenen Tages-, Monats- und Jahreswerte und
-zeigt sie im Abschnitt **Pumpenlaufzeiten** an. Die Datenbank behält bereits
-abgeholte Zeiträume dauerhaft. Die Firmware speichert die letzten 32 Tage,
-24 Monate und 12 Jahre mit Daten; bei einem längeren Serverausfall können ältere
-Zeiträume verloren gehen. Das Zeitlimit von fünf Sekunden und der bestehende
-Abfragerhythmus gelten gemeinsam für Temperaturen und Laufzeiten.
-
-Die Zähler beginnen erst nach Installation der Funktion und können während des
-ersten Tages, Monats und Jahres unvollständig sein. Laufzeiten ohne gültige
-ESP32-Uhr sind keinem Zeitraum zugeordnet. Testmodus-Daten werden nicht
-archiviert. Nach Stromausfall kann der Flash-Stand des ESP32 um bis zu etwa
-15 Minuten zurückliegen; bereits im Serverarchiv vorhandene höhere Werte werden
-in diesem Fall beibehalten. Spätere Werte können bis zum Überschreiten des
-archivierten Standes unvollständig bleiben. Die Anzeige zeigt außerdem, wann
-ein Zeitraum zuletzt abgeholt wurde. Werte beschreiben Relaislaufzeiten, keinen
-Nachweis für tatsächlich fließendes Wasser.
-
-Ein vorhandenes Archiv wird beim Start auf das erweiterte Schema aktualisiert;
-die bisherigen Temperaturdaten bleiben erhalten. Auch alte Sicherungen können
-wiederhergestellt und beim nächsten Start aktualisiert werden.
-
-- Zur nächsten Viertelstunde `:00`, `:15`, `:30`, `:45` wird genau eine
-  Momentaufnahme abgefragt. Es gibt keine Mittelwertbildung und keinen Sofortwert
-  beim Start. Bis zur ersten Viertelstunde ist das Archiv daher leer.
-- IDs statt Namen oder Reihenfolge bestimmen die Zuordnung: **0 Kombispeicher
-  oben**, **1 Kombispeicher Mitte**, **2 Pufferspeicher oben**. Die Firmware darf
-  ID 2 weiterhin „Pufferspeicher“ nennen.
-- Der Server vergibt den UTC-Zeitstempel des Viertelstundentermins. Die tatsächliche
-  Abfragezeit wird zusätzlich gespeichert. Der Firmware-Zeitstempel wird nicht verwendet.
-- Das Zeitlimit für die gesamte HTTP-Abfrage beträgt **fünf Sekunden**.
-- `valid: false`, Fehlercodes, fehlende oder doppelte IDs sowie ungültige
-  Temperaturen werden je Sensor als Fehler gespeichert; andere gültige Sensoren
-  bleiben erhalten. Erwartet werden numerische, endliche Werte von −200 bis
-  +850 °C, passend zum RTD-Messbereich. Die bisherige Fehleranzeige −242 °C
-  wird damit ebenfalls nicht als Temperatur übernommen.
-- Bei einem nicht erreichbaren ESP32, HTTP-Fehler oder ungültiger Antwort wird
-  ein Ausfalldatensatz mit drei leeren Temperaturfeldern gespeichert.
-- Während der Server aus ist, entstehen keine Datensätze. Nach dem Start geht es
-  zur nächsten Viertelstunde weiter. Fehlende Werte werden nie nachgefüllt.
-- Ein eindeutiger Datenbankschlüssel verhindert doppelte Viertelstundenwerte.
-  Ein bereits gespeicherter Datensatz wird nicht durch einen zweiten überschrieben.
-- Es gibt **keine automatische Löschung**. Der Speicherbedarf wächst über die
-  Jahre; pro Jahr entstehen normalerweise 35.040 Datensätze (Schaltjahr: 35.136).
-
-Die Webseite zeigt Datum und Uhrzeit in **Europe/Berlin** mit Sommer-/Winterzeit.
-Die wiederholte Stunde bei der Herbstumstellung bleibt über UTC eindeutig.
-Tooltips und CSV zeigen die Zeitzone beziehungsweise den UTC-Versatz.
-
-## Diagramm und CSV
-
-Startansicht sind die letzten sieben Tage. Alternativ: 24 Stunden, 30 Tage,
-365 Tage oder ein eigener Zeitraum. Eigene Anfangs- und Enddaten gelten als ganze
-Kalendertage in Berlin; das Enddatum ist eingeschlossen, auch an Tagen mit
-23 oder 25 Stunden. Die drei Kurven lassen sich einzeln ausblenden.
-
-Sensorfehler und fehlende Viertelstunden unterbrechen die jeweilige Linie.
-Wenn der ESP32 im Testmodus läuft, werden die simulierten Werte nicht als
-Messungen gespeichert; die Erfassung kennzeichnet diesen Zeitraum als Testmodus.
-Für lange Zeiträume fasst ausschließlich die Diagrammansicht Punkte durch
-Min/Max-Auswahl zusammen. Anfang, Ende und Extremwerte der Zeitfenster sowie
-Fehlerlücken bleiben erhalten. Es werden keine Temperaturen gemittelt.
-Datenbank und CSV enthalten weiter alle Originalwerte.
-
-**CSV herunterladen** exportiert den gewählten Zeitraum unabhängig von den
-eingeblendeten Kurven. Format: UTF-8 mit BOM, Semikolon, Dezimalkomma, UTC-Zeit,
-Berliner Zeit mit Versatz, drei Temperaturen, Status je Sensor, Abfrageergebnis,
-Fehlerhinweis und tatsächliche Abfragezeit. Leere Temperaturfelder sind Fehler
-und keine Null Grad. Ausfallzeilen stehen im Export; bei ausgeschaltetem Server
-fehlen die entsprechenden Zeitpunkte vollständig.
-
-Verlauf und Erfassungsstatus werden auf der Webseite jede Minute aktualisiert.
-Der Archivdienst ruft den ESP32 weiterhin nur alle 15 Minuten auf.
-
-## Lesende Schnittstellen
-
-| Endpunkt | Inhalt |
-| --- | --- |
-| `GET /api/history` | JSON: drei Kurven, Zähler und Anzeigeauflösung |
-| `GET /api/export.csv` | Vollständiger CSV-Export |
-| `GET /api/collector-status` | Letzte gespeicherte Erfassung, letzte Abfrage/Ergebnis, nächster Termin |
-| `GET /api/pump-runtime?kind=day` | Archivierte Pumpenlaufzeiten; `kind` ist `day`, `month` oder `year`, `limit` höchstens 5000 |
-| `GET /healthz` | Dienst erreichbar; ein ESP32-Ausfall macht den Container nicht ungesund |
-
-Verlauf und CSV akzeptieren `from` und `to`. Ohne Zeitraum: letzte sieben Tage.
-Beispiele:
-
-```text
-/api/history?from=2026-10-01&to=2026-10-25
-/api/export.csv?from=2026-10-25T00:00:00Z&to=2026-10-26T00:00:00Z
-```
-
-Datumswerte sind ganze Berliner Tage, ISO-Zeitstempel benötigen eine Zeitzone
-und verwenden eine **exklusive** obere Grenze. Bei `+01:00` in einer URL muss
-das Plus als `%2B` codiert werden. Ungültige Zeiträume liefern HTTP 400.
-Diagrammpunkte verwenden Unix-Millisekunden, fehlende Werte `null`.
-`sample_count` zählt Originaldatensätze, `display_reduced` kennzeichnet eine
-ausgedünnte Darstellung. Synthetische Lückenmarker existieren nur im Diagramm.
-
-## Daten erhalten und aktualisieren
-
-Die Daten liegen im Volume **`backload-history_history-data`**, nicht im Container.
-Den Compose-Projektnamen und die Volume-Zuordnung beim Betrieb beibehalten.
-Bei `docker compose -p ANDERER-NAME` wird ein anderes Volume verwendet.
-
-Ein neues Image bauen und den Container ersetzen:
+Voraussetzung sind Linux oder macOS und Python 3.13. Für die Installation der
+Python-Pakete wird Internet benötigt. Den Ordner `history-server` auf den
+Rechner kopieren und darin ausführen:
 
 ```sh
-docker compose up -d --build --force-recreate
+cd history-server
+python3.13 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+mkdir -p data
 ```
 
-Auch `docker compose down` und anschließendes `up -d` erhalten das Volume.
-**`docker compose down -v` löscht das Archiv-Volume.** Ein Volume schützt vor
-Containerwechsel, aber nicht vor einem Defekt des Servers: Sicherungen außerhalb
-dieses Servers aufbewahren. Siehe [Docker: Volumes](https://docs.docker.com/engine/storage/volumes/).
+Die Adresse durch die des eigenen ESP32 ersetzen und den Server starten:
 
-## Datensicherung
+```sh
+export ESP32_STATUS_URL=http://192.168.177.83/api/status
+export DATABASE_PATH="$PWD/data/temperatures.sqlite3"
+.venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8088 --workers 1
+```
 
-Eine konsistente SQLite-Sicherung kann bei laufendem Dienst erstellt werden:
+Die Webseite ist unter `http://SERVER-IP:8088` erreichbar. `--port` ändert den
+Port; `--host 127.0.0.1` beschränkt den Zugriff auf den lokalen Rechner. Mit
+Strg+C wird der Server beendet. Die beiden Umgebungsvariablen müssen in jeder
+neuen Shell gesetzt werden; `.env` wird nur von Docker Compose eingelesen.
+Das Datenverzeichnis muss für den ausführenden Benutzer beschreibbar sein.
+
+Nach einem Update der Projektdateien die Abhängigkeiten erneut installieren und
+den Server neu starten:
+
+```sh
+.venv/bin/python -m pip install -r requirements.txt
+```
+
+### Automatischer Start unter Linux
+
+Die Vorlage [backload-history.service.example](backload-history.service.example)
+als systemd-Dienst installieren:
+
+```sh
+sudo cp backload-history.service.example /etc/systemd/system/backload-history.service
+sudoedit /etc/systemd/system/backload-history.service
+```
+
+In der Datei `BENUTZER`, alle Vorkommen von `/pfad/zu/history-server` und die
+ESP32-Adresse anpassen. Das Datenverzeichnis muss bereits existieren und für
+`BENUTZER` beschreibbar sein. Danach den Dienst aktivieren:
+
+```sh
+sudo systemctl daemon-reload
+sudo systemctl enable --now backload-history
+systemctl status backload-history
+journalctl -u backload-history -f
+```
+
+Nach Änderungen an der Dienstdatei `daemon-reload` und anschließend
+`sudo systemctl restart backload-history` ausführen. Nach einem Update der
+Projektdateien und Python-Pakete den Dienst ebenfalls neu starten.
+
+Pro Datenbank darf nur ein Sammler laufen. Deshalb weder mehrere Server noch
+mehrere Uvicorn-Worker oder den Entwicklungsmodus `--reload` verwenden.
+
+## Daten und Verlauf
+
+- Gespeichert werden Kombispeicher oben und Mitte sowie Pufferspeicher oben.
+  Die Erfassung beginnt zur nächsten Viertelstunde. Sensorfehler und Ausfälle
+  werden gekennzeichnet; während eines Serverausfalls fehlen die Messungen.
+- Simulierte Werte im Testmodus werden nicht als Messungen gespeichert. Daten
+  werden nicht automatisch gelöscht. Die Anzeige verwendet die Zeitzone Berlin.
+- Pumpenlaufzeiten sind nach Tag, Monat und Jahr für die Solarpumpe und beide
+  Förderrichtungen der Backloadpumpe abrufbar. Der ESP32 hält die letzten 32 Tage,
+  24 Monate und 12 Jahre mit Daten vor; längere Serverausfälle können daher zu
+  Lücken führen. Die Werte beschreiben Relaislaufzeiten, keinen Wasserfluss.
+- Das Diagramm kann für lange Zeiträume Punkte reduzieren; der CSV-Export enthält
+  alle Werte des gewählten Zeitraums. CSV dient der Auswertung, nicht als Backup.
+
+## Sicherung und Wiederherstellung
+
+Sicherungen auf einem anderen Rechner aufbewahren. Der Export erstellt auch bei
+laufendem Server eine konsistente SQLite-Sicherung. Die Wiederherstellung ersetzt
+das gesamte Archiv; vorher bei Bedarf den aktuellen Stand sichern. Eine ungültige
+Sicherung wird vor dem Ersetzen zurückgewiesen.
+
+Mit Docker:
 
 ```sh
 docker compose exec -T history python -m app.backup export > backload-backup.sqlite3
 ```
 
-Exitcode prüfen und die Datei auf einen anderen Rechner kopieren. Die Sicherung
-nutzt die SQLite-Backup-API; die gerade geöffnete Datenbankdatei muss nicht mit
-`cp` kopiert werden. Der Export enthält auch Fehlermeldungen und Zeitstempel.
-CSV ist für Auswertung gedacht; die SQLite-Sicherung ist für Wiederherstellung.
-
-## Wiederherstellung
-
-Die Wiederherstellung ersetzt das Archiv vollständig durch die Sicherung.
-Vorher bei Bedarf den aktuellen Stand wie oben sichern. Den Dienst stoppen:
+Zum Wiederherstellen:
 
 ```sh
 docker compose stop history
@@ -186,53 +132,38 @@ docker compose run --rm -T --no-deps history python -m app.backup restore < back
 docker compose up -d history
 ```
 
-Die Sicherung wird vor dem Ersetzen auf Integrität, Schema und Version geprüft.
-Eine ungültige Datei lässt die vorhandene Datenbank unverändert. Eine Sperre
-verhindert den Restore, solange für dieses Volume noch ein Sammler läuft.
-Bleibt nach einem abgebrochenen Prozess ein SQLite-Journal liegen, den Dienst
-zuerst einmal sauber starten und stoppen; die Wiederherstellung überspringt
-keine offene SQLite-Transaktion.
-
-## Entwicklung und Prüfungen
-
-Ab Python 3.13, ohne Docker:
+Ohne Docker `DATABASE_PATH` auf dieselbe Datenbank wie beim Server setzen und
+sichern. Die Befehle als derselbe Benutzer ausführen, unter dem der Server läuft,
+damit die Datenbank nach einer Wiederherstellung beschreibbar bleibt:
 
 ```sh
-python3 -m venv .venv
-.venv/bin/pip install -r requirements-dev.txt
+export DATABASE_PATH="$PWD/data/temperatures.sqlite3"
+.venv/bin/python -m app.backup export > backload-backup.sqlite3
+```
+
+Für die Wiederherstellung zuerst den Server mit Strg+C oder bei systemd mit
+`sudo systemctl stop backload-history` stoppen. Dann ausführen:
+
+```sh
+.venv/bin/python -m app.backup restore < backload-backup.sqlite3
+```
+
+Anschließend den Server wieder starten, bei systemd mit
+`sudo systemctl start backload-history`. Die Sperrdatei verhindert eine
+Wiederherstellung, solange der Sammler läuft.
+
+## Schnittstellen und Tests
+
+`/api/history` liefert den Verlauf, `/api/export.csv` den CSV-Export,
+`/api/pump-runtime?kind=day` die Pumpenlaufzeiten (`day`, `month`, `year`) und
+`/api/collector-status` den Erfassungsstatus. `/healthz` prüft nur den Dienst,
+nicht die Verbindung zum ESP32.
+
+Tests ohne Docker:
+
+```sh
+.venv/bin/python -m pip install -r requirements-dev.txt
 .venv/bin/python -m pytest -q
-DATABASE_PATH=./temperatures.sqlite3 .venv/bin/uvicorn app.main:app --port 8088
 ```
 
-Der Container nutzt Python 3.13 und einen Prozess. Nicht mit mehreren Uvicorn-
-Workern oder mit mehreren Containern dasselbe Volume sammeln lassen; die
-Dateisperre verhindert versehentliche Doppelstarts. SQLite nutzt kurze
-Transaktionen mit Rollback-Journal und 30 Sekunden Wartezeit auf Datenbanksperren.
-Die CSV-Datei wird vor der Übertragung erzeugt, damit langsame Downloads keine
-DB-Lesesperre offen halten.
-
-Automatisierte Prüfungen im gleichen Basisimage:
-
-```sh
-docker build --target test -t backload-history-tests .
-docker run --rm backload-history-tests
-```
-
-Zusätzlicher Container-/Volume-Test auf einem Docker-fähigen Rechner:
-
-```sh
-python3 tests/check_container.py
-```
-
-Dieser Test baut das Image, erzeugt ein zufällig benanntes Testprojekt mit eigenem
-Volume, speichert einen Testwert, ersetzt den Container und prüft Backup/Restore.
-Er entfernt anschließend ausschließlich sein eigenes Testprojekt samt Test-Volume.
-Das produktive Archiv und der echte ESP32 werden nicht angesprochen.
-
-Die Tests verwenden ausschließlich temporäre Datenbanken und simulierte
-ESP32-Antworten. Sie prüfen Terminberechnung/Neustart, Duplikate, Sensorfehler,
-Ausfälle/Wiederverbindung, Gesamtzeitlimit, Zeitumstellung, Filter, Kurvenlücken,
-35.040 Jahreszeitpunkte mit vollständigem CSV sowie Backup/Restore.
-
-Der tatsächlich ausgeführte Prüfstand und die noch offene ESP32-Live-Prüfung
-stehen in [VERIFICATION.md](VERIFICATION.md).
+Weitere Angaben zum Prüfstand stehen in [VERIFICATION.md](VERIFICATION.md).
