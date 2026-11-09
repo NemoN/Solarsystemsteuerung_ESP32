@@ -13,6 +13,7 @@
 #include "RelayFactoryReset.h"
 
 constexpr uint8_t RELAY_PINS[] = {32, 33, 25, 26};
+constexpr char RELAY_FIRMWARE_VERSION[] = "2.7.0";
 constexpr uint32_t RETRY_MS = 30000;
 struct Config { char ssid[33]; char password[64]; char key[33]; char apPassword[17]; };
 Config config = {};
@@ -201,6 +202,11 @@ void setup() {
     server.send(200, "text/plain", proof);
   });
   server.on("/api/state", HTTP_GET, sendState);
+  server.on("/api/version", HTTP_GET, []() {
+    if (!authorized()) { server.send(403, "text/plain", "Forbidden"); return; }
+    if (server.args()) { server.send(400, "text/plain", "Invalid request"); return; }
+    server.sendHeader("Cache-Control", "no-store"); server.send(200, "text/plain", String("RLYVER1:") + RELAY_FIRMWARE_VERSION);
+  });
   server.on("/api/relay", HTTP_POST, changeRelay);
   server.on("/api/factory-reset", HTTP_POST, []() {
     if (!authorized()) { server.send(403, "text/plain", "Forbidden"); return; }

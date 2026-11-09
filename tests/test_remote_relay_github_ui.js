@@ -20,9 +20,18 @@ function release(tag,extra={}){return {tag_name:tag,name:tag,published_at:'2026-
  const badHash=release('v1');badHash.assets[0].digest=null;
  const wrong=release('v2');wrong.assets[0].browser_download_url='https://example.org/Relaiskarte.ino.bin';
  const oversized=release('v3');oversized.assets[0].size=1310721;
- const data=[release('v2.5.0'),release('v2.4.0',{draft:true}),badHash,wrong,oversized,release('../escape')];
+ const data=[release('v2.5.0',{body:'- Relais-Firmware verbessert'}),release('v2.4.0',{draft:true}),badHash,wrong,oversized,release('../escape')];
  const result=await ctx.fetchRemoteRelayReleases(async()=>({ok:true,json:async()=>data}));
- assert.equal(result.length,1);assert.equal(result[0].tag,'v2.5.0');
+ assert.equal(result.length,1);assert.equal(result[0].tag,'v2.5.0');assert.equal(result[0].body,'- Relais-Firmware verbessert');
+ const changeStart=sketch.indexOf("remoteGithubForm.elements.release.addEventListener('change'");
+ const changeEnd=sketch.indexOf('async function pollRemoteRelayGithubUpdate(',changeStart);
+ let onChange,shown;
+ const changeForm={elements:{release:{value:'0',addEventListener:(_,fn)=>{onChange=fn;}}}};
+ const changeCtx=vm.createContext({remoteGithubForm:changeForm,remoteRelayReleases:result,remoteRelayState:{},simulationEnabled:false,
+   renderSelectedReleaseNotes:(prefix,release)=>{shown={prefix,release};},updateRemoteRelay:()=>{}});
+ vm.runInContext(sketch.slice(changeStart,changeEnd),changeCtx);onChange();
+ assert.equal(shown.prefix,'relay');assert.equal(shown.release.body,'- Relais-Firmware verbessert');
+ changeForm.elements.release.value='';onChange();assert.equal(shown.release,null);
  assert.equal((await ctx.fetchRemoteRelayReleases(async()=>({ok:true,json:async()=>[]}))).length,0);
  await assert.rejects(()=>ctx.fetchRemoteRelayReleases(async()=>({ok:false,status:403})),/403/);
  let count=0;const progress={},message={};

@@ -102,6 +102,7 @@ python3 "$project_dir/tests/test_heating_integration.py"
 python3 "$project_dir/tests/test_relay_pair_import.py"
 python3 "$project_dir/tests/test_relay_pair_button.py"
 python3 "$project_dir/tests/test_relay_pair_connect.py"
+python3 "$project_dir/tests/test_relay_guide.py"
 
 # Host-HMAC- und Kopplungstests mit optional installiertem mbedcrypto.
 if command -v pkg-config >/dev/null && pkg-config --exists mbedcrypto; then

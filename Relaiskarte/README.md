@@ -89,6 +89,9 @@ Unter **Einstellungen → Relaiskarte aktualisieren** gibt es zwei Möglichkeite
   `Relaiskarte.ino.bin` erzeugen. Das Partitionsschema muss zwei OTA-App-Slots
   enthalten; das Standardschema mit zwei Slots zu je 1,25 MB ist geeignet.
 
+Die installierte Version und die Release Notes stehen ebenfalls dort. Ältere
+Karten melden ihre Version erst nach einem Firmware-Update.
+
 Der Haupt-ESP lädt oder empfängt die Datei, puffert sie im PSRAM und überträgt
 sie im Hintergrund an die Karte. Bei zu wenig PSRAM wird das Update abgelehnt.
 Die Heizungsregelung läuft weiter. Für die GitHub-Suche muss bei einem künftigen

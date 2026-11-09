@@ -15,6 +15,7 @@ struct RemoteRelaySnapshot {
   bool busy;
   uint8_t mask;
   uint8_t forgetState;
+  char version[32];
 };
 class RemoteRelay {
 public:
@@ -35,6 +36,9 @@ private:
   bool storageReady_ = false, online_ = false, busy_ = false;
   uint8_t mask_ = 0, pendingId_ = 0;
   uint32_t lastContact_ = 0;
+  uint32_t lastVersionCheck_ = 0;
+  bool versionChecked_ = false;
+  char version_[32] = {};
   bool pendingValue_ = false;
   ForgetState forgetState_ = FORGET_IDLE;
 };

@@ -14,5 +14,11 @@ int main() {
     assert(!parseRemoteRelayState(text, std::strlen(text), mask) && mask == 77);
   }
   assert(!parseRemoteRelayState(nullptr, 6, mask));
+  char version[32] = {};
+  const char* good = "RLYVER1:2.7.0";
+  assert(parseRemoteRelayVersion(good, std::strlen(good), version) && !std::strcmp(version,"2.7.0"));
+  const char* invalidVersions[] = {"", "RLYVER1:", "RLYVER1:two", "RLYVER1:2.7.0\n", "RLY1:2.7.0", "RLYVER1:2<script>"};
+  for (const char* value : invalidVersions) assert(!parseRemoteRelayVersion(value, std::strlen(value), version));
+  assert(!parseRemoteRelayVersion(nullptr, 9, version));
   std::puts("PASS: Relaisprotokoll akzeptiert nur gültige Zustandsantworten.");
 }

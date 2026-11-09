@@ -6,6 +6,7 @@ const labels=Array.from({length:4},()=>({textContent:''}));
 const buttons=labels.map((label,i)=>({dataset:{relay:String(i+1)},disabled:true,attributes:{},setAttribute(k,v){this.attributes[k]=v;},querySelector(){return label;}}));
 const nodes={
  'remote-relay-status':{},'remote-relay-detail':{},
+ 'relay-installed-version':{},'relay-installed-notes':{},
  'remote-relay-switches':{addEventListener(type,fn){calls.click=fn;}},
 };
 const form={elements:{address:{value:''},key:{value:''},label1:{value:''},label2:{value:''},label3:{value:''},label4:{value:''}},

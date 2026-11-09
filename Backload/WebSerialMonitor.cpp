@@ -6,6 +6,7 @@
 #include "src/AsyncWebConsole/src/AsyncWebConsole.h"
 #include "DashboardStyles.h"
 #include "Esp32BoardPhoto.h"
+#include "RelayBoardPhoto.h"
 #include "WebSerialMonitor.h"
 #include "WebAccess.h"
 #include <atomic>
@@ -250,6 +251,10 @@ void beginWebSerialMonitor() {
     response->addHeader("Cache-Control", "no-store");
     req->send(response);
   });
+  dashboard.server().on("/assets/relaiserweiterung.jpg", HTTP_GET, [](AsyncWebServerRequest* req) {
+    AsyncWebServerResponse* response = req->beginResponse_P(200, "image/jpeg", RELAY_BOARD_PHOTO, sizeof(RELAY_BOARD_PHOTO));
+    response->addHeader("Cache-Control", "public, max-age=86400"); req->send(response);
+  });
   dashboard.server().on("/webserial", HTTP_GET, [](AsyncWebServerRequest* req) {
     req->redirect(String("http://") + req->client()->localIP().toString() + ":81/");
   });
@@ -264,6 +269,8 @@ void beginWebSerialMonitor() {
   dashboard.server().on("/api/remote-relay/pair/scan", HTTP_GET, proxyRequest);
   dashboard.server().on("/api/remote-relay/pair/cancel", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/remote-relay/command", HTTP_POST, proxyRequest);
+  dashboard.server().on("/api/remote-relay/forget", HTTP_POST, proxyRequest);
+  dashboard.server().on("/api/remote-relay/discard", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/remote-relay/update/prepare", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/remote-relay/update/github", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/remote-relay/update/chunk", HTTP_POST, proxyRequest);

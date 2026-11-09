@@ -17,18 +17,22 @@ const select = {
 const install = {}, download = {hidden: true}, link = {removeAttribute() { delete this.href; }};
 const form = {elements: {release: select}, querySelector: () => install};
 const message = {}, check = {addEventListener: (name, fn) => { listeners.check = fn; }};
+const selectedNotes={textContent:''},selectedNotesWrap={hidden:true};
 const document = {getElementById: id => ({'github-update-form': form, 'release-message': message,
-  'release-download': download, 'release-download-link': link, 'release-check': check})[id]};
+  'release-download': download, 'release-download-link': link, 'release-check': check,
+  'main-selected-notes':selectedNotes,'main-selected-notes-wrap':selectedNotesWrap})[id]};
 const asset = {name: 'Backload.ino.bin', digest: 'sha256:' + 'a'.repeat(64), size: 1200000};
 let installedVersion = '1.11.5', fail = false, releases = [
-  {tag_name: 'v1.11.5', name: 'Version 1.11.5', published_at: '2026-10-31', assets: [asset, {...asset, name: 'Backload-1.11.5.bin'}]},
+  {tag_name: 'v1.11.5', name: 'Version 1.11.5', published_at: '2026-10-31',body:'- Verbesserte Steuerung', assets: [asset, {...asset, name: 'Backload-1.11.5.bin'}]},
   {tag_name: 'v1.11.4', name: 'Version 1.11.4', published_at: '2026-10-30', assets: [asset, {...asset, name: 'Backload-1.11.4.bin', digest: 'sha256:'+'b'.repeat(64)}]},
   {tag_name: 'v1.11.3', name: 'Version 1.11.3', published_at: '2026-10-29', assets: [asset]},
 ];
 const context = vm.createContext({document, Option: function(text, value) { this.text = text; this.value = value; },
   request: async () => ({version: installedVersion}),
   fetch: async () => { if (fail) throw new Error('offline'); return {ok: true, json: async () => releases}; }});
-vm.runInContext(sketch.slice(start, end), context);
+const notesStart=sketch.indexOf('let installedReleaseCatalog=null');
+const notesEnd=sketch.indexOf('async function fetchRemoteRelayReleases(',notesStart);
+vm.runInContext(sketch.slice(notesStart,notesEnd)+sketch.slice(start, end), context);
 
 (async () => {
   assert.equal(context.compareVersions('v2.0.0-ohne-ap','1.14.5-mit-ap'),1);
@@ -38,6 +42,7 @@ vm.runInContext(sketch.slice(start, end), context);
   await listeners.check({currentTarget: check});
   assert.equal(download.hidden, true);
   select.value = '0'; listeners.change();
+  assert.equal(selectedNotesWrap.hidden,false);assert.equal(selectedNotes.textContent,'- Verbesserte Steuerung');
   assert.equal(download.hidden, false);
   assert.equal(link.href, 'https://github.com/NemoN/Solarsystemsteuerung_ESP32/releases/download/v1.11.5/Backload-1.11.5.bin');
   select.value = '1'; listeners.change();
@@ -45,7 +50,7 @@ vm.runInContext(sketch.slice(start, end), context);
   select.value = '2'; listeners.change();
   assert.match(link.href, /\/v1\.11\.3\/Backload\.ino\.bin$/);
   select.value = ''; listeners.change();
-  assert.equal(download.hidden, true); assert.equal(link.href, undefined);
+  assert.equal(download.hidden, true); assert.equal(link.href, undefined);assert.equal(selectedNotesWrap.hidden,true);
   releases=[{tag_name:'v2.0.0-mit-ap',name:'Version 2.0.0 – mit AP',published_at:'2026-11-05',assets:[asset]},
     {tag_name:'v2.0.0-ohne-ap',name:'Version 2.0.0 – ohne AP',published_at:'2026-11-04',assets:[asset]}];
   installedVersion='1.14.5-ohne-ap';await listeners.check({currentTarget:check});

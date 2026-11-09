@@ -46,6 +46,17 @@ bool exchange(const RemoteRelayConfig& cfg, unsigned id, bool value, uint8_t& ma
   http.end();
   return parseRemoteRelayState(body.c_str(), body.length(), mask);
 }
+bool exchangeVersion(const RemoteRelayConfig& cfg, char version[32]) {
+  IPAddress ip;
+  if (!ip.fromString(cfg.address) || !compatibleNetwork(ip)) return false;
+  WiFiClient client; HTTPClient http;
+  http.setConnectTimeout(900); http.setTimeout(900); http.setReuse(false);
+  if (!http.begin(client, "http://" + String(cfg.address) + "/api/version")) return false;
+  http.addHeader("X-Relay-Key", cfg.key);
+  const int code = http.GET();
+  String body; if (code == 200 && http.getSize() > 8 && http.getSize() < 40) body = http.getString();
+  http.end(); return parseRemoteRelayVersion(body.c_str(), body.length(), version);
+}
 // One request only: a lost reply may mean that the card has already reset.
 RemoteRelay::ForgetState resetCard(const RemoteRelayConfig& cfg) {
   IPAddress ip;
@@ -83,7 +94,7 @@ RemoteRelaySnapshot RemoteRelay::snapshot() {
   RemoteRelaySnapshot result = {};
   if (!lock_) return result;
   xSemaphoreTake(lock_, portMAX_DELAY);
-  result.config = config_; result.online = online_ && millis() - lastContact_ <= 6500 && WiFi.status() == WL_CONNECTED; result.busy = busy_; result.mask = mask_; result.forgetState = forgetState_;
+  result.config = config_; result.online = online_ && millis() - lastContact_ <= 6500 && WiFi.status() == WL_CONNECTED; result.busy = busy_; result.mask = mask_; result.forgetState = forgetState_; if (result.online) strlcpy(result.version, version_, sizeof(result.version));
   xSemaphoreGive(lock_); return result;
 }
 bool RemoteRelay::configure(const String& address, const String& key, const String labels[4]) {
@@ -101,7 +112,7 @@ bool RemoteRelay::configure(const String& address, const String& key, const Stri
   if (busy_) { xSemaphoreGive(lock_); return false; }
   if (preferences_.putBytes(storageKey_, &next, sizeof(next)) != sizeof(next)) { xSemaphoreGive(lock_); return false; }
   const bool sameConnection = !strcmp(config_.address, next.address) && !strcmp(config_.key, next.key);
-  config_ = next; if (!sameConnection) online_ = false; forgetState_ = FORGET_IDLE;
+  config_ = next; if (!sameConnection) { online_ = false; version_[0] = 0; versionChecked_ = false; } forgetState_ = FORGET_IDLE;
   xSemaphoreGive(lock_); return true;
 }
 bool RemoteRelay::forget() {
@@ -118,7 +129,7 @@ bool RemoteRelay::clearAssociation() {
   RemoteRelayConfig cleared = {};
   for (int i = 0; i < 4; ++i) snprintf(cleared.labels[i], sizeof(cleared.labels[i]), "Relais %d", i + 1);
   const bool saved = preferences_.putBytes(storageKey_, &cleared, sizeof(cleared)) == sizeof(cleared);
-  if (saved) { config_ = cleared; online_ = false; mask_ = 0; forgetState_ = FORGET_IDLE; }
+  if (saved) { config_ = cleared; online_ = false; mask_ = 0; version_[0] = 0; versionChecked_ = false; forgetState_ = FORGET_IDLE; }
   xSemaphoreGive(lock_); return saved;
 }
 bool RemoteRelay::command(unsigned id, bool on) {
@@ -143,7 +154,7 @@ void RemoteRelay::task() {
       if (result == FORGET_DONE) {
         RemoteRelayConfig cleared = {};
         for (int i = 0; i < 4; ++i) snprintf(cleared.labels[i], sizeof(cleared.labels[i]), "Relais %d", i + 1);
-        if (preferences_.putBytes(storageKey_, &cleared, sizeof(cleared)) == sizeof(cleared)) { config_ = cleared; online_ = false; mask_ = 0; forgetState_ = FORGET_DONE; }
+        if (preferences_.putBytes(storageKey_, &cleared, sizeof(cleared)) == sizeof(cleared)) { config_ = cleared; online_ = false; mask_ = 0; version_[0] = 0; versionChecked_ = false; forgetState_ = FORGET_DONE; }
         else { online_ = false; forgetState_ = FORGET_SAVE_FAILED; }
       } else forgetState_ = result;
       busy_ = false;
@@ -151,11 +162,24 @@ void RemoteRelay::task() {
     } else if (id || millis() - lastPoll >= 2000) {
       uint8_t nextMask = 0;
       const bool ok = cfg.address[0] && cfg.key[0] && exchange(cfg, id, value, nextMask);
+      bool checkVersion = false;
       xSemaphoreTake(lock_, portMAX_DELAY);
       // Konfiguration kann sich während einer Abfrage ändern.
-      if (memcmp(&cfg, &config_, sizeof(cfg)) == 0) { online_ = ok; if (ok) { mask_ = nextMask; lastContact_ = millis(); } }
+      if (memcmp(&cfg, &config_, sizeof(cfg)) == 0) {
+        online_ = ok;
+        if (ok) {
+          mask_ = nextMask; lastContact_ = millis();
+          if (!id && (!versionChecked_ || millis() - lastVersionCheck_ >= 10000)) { versionChecked_ = true; lastVersionCheck_ = millis(); checkVersion = true; }
+        } else { version_[0] = 0; versionChecked_ = false; }
+      }
       if (id) busy_ = false;
       xSemaphoreGive(lock_); lastPoll = millis();
+      if (checkVersion) {
+        char nextVersion[32] = {}; exchangeVersion(cfg, nextVersion);
+        xSemaphoreTake(lock_, portMAX_DELAY);
+        if (online_ && !strcmp(cfg.address, config_.address) && !strcmp(cfg.key, config_.key)) strlcpy(version_, nextVersion, sizeof(version_));
+        xSemaphoreGive(lock_);
+      }
     }
     vTaskDelay(pdMS_TO_TICKS(100));
   }

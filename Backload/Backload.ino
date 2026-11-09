@@ -42,7 +42,7 @@
 #include <time.h>
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
-const char* FIRMWARE_VERSION = "2.6.0";
+const char* FIRMWARE_VERSION = "2.7.0";
 // Der AP wird nur für Einrichtung und Wiederherstellung benötigt.
 constexpr bool AP_RECOVERY_ONLY = true;
 
@@ -499,6 +499,20 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
   <p class="org-layout-note muted">Die Einträge sind nach Funktion gruppiert; ihre Position neben dem Bild entspricht nicht der physischen Pin-Reihenfolge.</p>
   <p class="org-note muted">Die Ölfreigabe zeigt den Schaltbefehl; eine Rückmeldung über den tatsächlichen Brennerlauf gibt es nicht.</p>
 </div>
+<div class="org-hardware relay-guide" aria-labelledby="relay-guide-heading">
+  <div class="org-section-title"><svg class="org-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 9h3v3H7zM14 9h3v3h-3zM7 16h10"/></svg><h2 id="relay-guide-heading">Relaiserweiterung einrichten</h2></div>
+  <p class="muted">Für die vierfache WLAN-Relaiskarte RBS16467. Bis zu vier Karten können verbunden werden.</p>
+  <div class="relay-guide-layout"><div>
+    <ol>
+      <li><strong>Vorbereiten:</strong> Karte spannungsfrei verkabeln; Netzspannung und Verbraucher getrennt lassen. Stromversorgung und Polung anhand des Datenblatts prüfen.</li>
+      <li><strong>Erstinstallation:</strong> USB-Seriell-Adapter mit 3,3-V-Logik anschließen: TX an RX, RX an TX und GND an GND. Bei separater Versorgung den Versorgungsausgang des Adapters frei lassen.</li>
+      <li><strong>Firmware laden:</strong> IO0 gedrückt halten, EN kurz drücken, IO0 loslassen und <code>Relaiskarte.ino</code> übertragen. Danach nur EN kurz drücken.</li>
+      <li><strong>Verbinden:</strong> Unter Einstellungen → Relaiserweiterungen einen freien Platz wählen, die Karte suchen und die Einrichtung starten. Anschließend IO0 drei Sekunden gedrückt halten.</li>
+      <li><strong>Verwenden:</strong> Relais in den Einstellungen beschriften und auf der Startseite schalten. Auch im Testmodus schalten die WLAN-Relais tatsächlich.</li>
+    </ol>
+    <p class="muted">Relais 1–4: GPIO 32, 33, 25 und 26; HIGH schaltet ein. Firmware-Updates sind nach der Erstinstallation über die Einstellungen möglich.</p>
+  </div><figure><img src="/assets/relaiserweiterung.jpg" width="1715" height="1772" loading="lazy" alt="Vierkanal-Relaiserweiterung mit ESP32, Programmierleiste sowie Tasten EN und IO0"><figcaption>Relaiserweiterung RBS16467 · Vorderseite</figcaption></figure></div>
+</div>
 </section>
 <section id="info-section" aria-labelledby="info-heading">
 <h2 id="info-heading">ESP-Informationen</h2><p class="muted">Speicherwerte: Aktualisierung alle 5 Sekunden.</p>
@@ -571,8 +585,11 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <section id="update-section" aria-labelledby="update-heading">
 <h2 id="update-heading">Firmware aktualisieren</h2>
 <p class="muted">Beim Update bleibt die Pumpe aus. Der ESP startet neu und der Temperaturverlauf wird gelöscht.</p>
+<p id="main-installed-version" class="muted">Installierte Firmware wird ermittelt …</p>
+<details class="release-notes"><summary>Änderungen der installierten Version</summary><p id="main-installed-notes" class="release-notes-text" role="status">Release Notes werden geladen …</p></details>
 <button id="release-check" type="button">GitHub-Releases suchen</button><p id="release-message" class="message" role="status">Noch nicht nach Updates gesucht.</p>
 <form id="github-update-form"><label>Firmware-Version<select name="release" required disabled><option value="">Bitte zuerst Releases suchen</option></select></label><button type="submit" disabled>Ausgewählte Version installieren</button><p id="release-download" hidden><a id="release-download-link" target="_blank" rel="noopener noreferrer">Ausgewählte Firmware herunterladen (.bin)</a></p></form>
+<div id="main-selected-notes-wrap" class="release-notes" hidden><h3>Änderungen der ausgewählten Version</h3><p id="main-selected-notes" class="release-notes-text"></p></div>
 <progress id="update-progress" max="100" value="0" hidden></progress><p id="update-message" class="message" role="status"></p>
 <details><summary>Firmware-Datei manuell hochladen</summary><p>Eine für dieses ESP32-S3-Board kompilierte Datei (.bin) auswählen.</p><form id="update-form"><label>Firmware-Datei<input name="firmware" type="file" accept=".bin,application/octet-stream" required></label><button type="submit">Datei hochladen</button></form></details>
 </section>
@@ -615,8 +632,11 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <section id="remote-relay-update-section" aria-labelledby="remote-relay-update-heading"><h2 id="remote-relay-update-heading">Firmware der Relaiskarte aktualisieren</h2>
 <p class="muted">Die ausgewählte Erweiterung startet nach dem Update neu und stellt ihre gespeicherten Zustände wieder her.</p>
 <label>Erweiterung<select id="remote-update-board"><option value="0">Relaiserweiterung 1</option><option value="1">Relaiserweiterung 2</option><option value="2">Relaiserweiterung 3</option><option value="3">Relaiserweiterung 4</option></select></label>
+<p id="relay-installed-version" class="muted">Installierte Firmware wird ermittelt …</p>
+<details class="release-notes"><summary>Änderungen der installierten Version</summary><p id="relay-installed-notes" class="release-notes-text" role="status">Release Notes werden geladen …</p></details>
 <button id="remote-release-check" type="button">GitHub-Releases suchen</button><p id="remote-release-message" class="message" role="status">Noch nicht nach Updates gesucht.</p>
 <form id="remote-github-form"><label>Firmware-Version<select name="release" required disabled><option value="">Bitte zuerst Releases suchen</option></select></label><button type="submit" disabled>Ausgewählte Version installieren</button></form>
+<div id="relay-selected-notes-wrap" class="release-notes" hidden><h3>Änderungen der ausgewählten Version</h3><p id="relay-selected-notes" class="release-notes-text"></p></div>
 <details><summary>Firmwaredatei manuell hochladen</summary><form id="remote-relay-update-form"><label>Firmwaredatei (.bin)<input name="firmware" type="file" accept=".bin,application/octet-stream" required></label><button type="submit" disabled>Relaiskarte aktualisieren</button></form></details>
 <progress id="remote-relay-update-progress" max="100" value="0" hidden></progress><p id="remote-relay-update-message" class="message" role="status"></p>
 </section>
@@ -1300,6 +1320,7 @@ function updateRemoteRelay(state,simulation){
   const online=!!(state&&state.online), configured=!!(state&&state.configured);
   const target=remoteRelayCards[Number(remoteUpdateBoard.value)]||state;
   const updateOnline=!!(target&&target.online);
+  renderInstalledRelayRelease(target);
   badge.textContent=!state?'Status unbekannt':!state.ready?'Nicht verfügbar':!configured?'Nicht eingerichtet':online?'Verbunden':'Nicht erreichbar';
   badge.className='badge'+(online?' on':'');
   detail.textContent=!state?'Keine aktuellen Daten vom Haupt-ESP.':!state.ready?'Die Relaisanbindung konnte nicht gestartet werden.':!configured?'Relaiskarte in den Einstellungen einrichten.':state.updating?'Firmware-Update der Relaiskarte läuft.':simulation&&online?'Testmodus: Die WLAN-Relais schalten tatsächlich.':online?'Zustand von der Relaiskarte bestätigt.':'Verbindung und IP-Adresse prüfen; der tatsächliche Zustand ist unbekannt.';
@@ -1326,7 +1347,7 @@ function updateRemoteRelay(state,simulation){
     const card=remoteRelayCards[i];
     remoteRelayBoard.options[i].textContent='Relaiserweiterung '+(i+1)+(card?(card.configured?(card.online?' · verbunden':' · nicht erreichbar'):' · frei'):'');
   }
-  remoteRelaySlotStatus.textContent=!selected?'Status wird geladen …':!selected.configured?'Freier Platz · Neue Erweiterung hinzufügen.':selected.online?'Verbunden · '+selected.address:'Nicht erreichbar · '+selected.address;
+  remoteRelaySlotStatus.textContent=!selected?'Status wird geladen …':!selected.configured?'Freier Platz · Neue Erweiterung hinzufügen.':selected.online?'Verbunden · '+selected.address+(selected.version?' · Firmware '+selected.version:' · Firmware-Version nicht verfügbar'):'Nicht erreichbar · '+selected.address;
   remoteRelayForget.hidden=!selected||!selected.configured;
   remoteRelayForget.disabled=!selected||!selected.online||selected.busy||selected.updating||relayPairActive||remoteRelayBusy;
   relayForgetRecovery.hidden=!selected||!selected.configured;
@@ -1513,6 +1534,43 @@ async function switchRemoteRelay(event){
 }
 document.getElementById('remote-relay-switches').addEventListener('click',switchRemoteRelay);
 remoteExtraGroups.addEventListener('click',switchRemoteRelay);
+let installedReleaseCatalog=null,installedReleaseLoadState='loading';
+function releaseNotesText(release){
+  return release&&typeof release.body==='string'&&release.body.trim()?release.body.trim().slice(0,12000):'Für diese Version sind keine Release Notes vorhanden.';
+}
+function installedReleaseText(version){
+  if(!version)return 'Die installierte Version ist nicht bekannt.';
+  if(installedReleaseLoadState==='loading')return 'Release Notes werden geladen …';
+  if(installedReleaseLoadState==='error')return 'Release Notes nicht verfügbar. Internetverbindung zu GitHub prüfen.';
+  const release=installedReleaseCatalog.find(item=>item.tag_name.replace(/^v/i,'')===version.replace(/^v/i,''));
+  return release?releaseNotesText(release):'Für diese Version wurden keine Release Notes auf GitHub gefunden.';
+}
+function renderInstalledMainRelease(){
+  document.getElementById('main-installed-version').textContent=currentFirmwareVersion?'Installierte Firmware: '+currentFirmwareVersion:'Installierte Firmware wird ermittelt …';
+  document.getElementById('main-installed-notes').textContent=installedReleaseText(currentFirmwareVersion);
+}
+function renderInstalledRelayRelease(target){
+  const version=target&&target.online&&target.version||'';
+  document.getElementById('relay-installed-version').textContent=!target||!target.configured?'Keine Erweiterung ausgewählt.':!target.online?'Relaiserweiterung nicht erreichbar.':version?'Installierte Firmware: '+version:'Firmware-Version nicht verfügbar; ältere Versionen melden sie nicht.';
+  document.getElementById('relay-installed-notes').textContent=version?installedReleaseText(version):'Ohne gemeldete Firmware-Version lassen sich keine Release Notes zuordnen.';
+}
+function renderSelectedReleaseNotes(prefix,release){
+  const container=document.getElementById(prefix+'-selected-notes-wrap');
+  container.hidden=!release;
+  document.getElementById(prefix+'-selected-notes').textContent=release?releaseNotesText(release):'';
+}
+async function loadInstalledReleaseNotes(){
+  installedReleaseLoadState='loading';
+  const abort=new AbortController();const timeout=setTimeout(()=>abort.abort(),10000);
+  try{
+    const response=await fetch('https://api.github.com/repos/NemoN/Solarsystemsteuerung_ESP32/releases?per_page=100',{cache:'no-store',signal:abort.signal,headers:{Accept:'application/vnd.github+json'}});
+    if(!response.ok)throw new Error('GitHub '+response.status);
+    const releases=await response.json();if(!Array.isArray(releases))throw new Error('Ungültige Antwort');
+    installedReleaseCatalog=releases.filter(r=>!r.draft&&typeof r.tag_name==='string');installedReleaseLoadState='ready';
+  }catch(error){installedReleaseCatalog=[];installedReleaseLoadState='error';}
+  finally{clearTimeout(timeout);}
+  renderInstalledMainRelease();renderInstalledRelayRelease(remoteRelayCards[Number(remoteUpdateBoard.value)]||remoteRelayState);
+}
 async function fetchRemoteRelayReleases(fetcher){
   const response=await fetcher('https://api.github.com/repos/NemoN/Solarsystemsteuerung_ESP32/releases?per_page=100',{cache:'no-store',headers:{Accept:'application/vnd.github+json'}});
   if(!response.ok)throw new Error('GitHub meldet HTTP '+response.status);
@@ -1520,15 +1578,16 @@ async function fetchRemoteRelayReleases(fetcher){
   return releases.filter(r=>!r.draft&&Array.isArray(r.assets)&&typeof r.tag_name==='string'&&/^[A-Za-z0-9._-]+$/.test(r.tag_name)).map(r=>{
     const asset=r.assets.find(a=>a.name==='Relaiskarte.ino.bin'&&typeof a.digest==='string'&&/^sha256:[0-9a-f]{64}$/.test(a.digest)&&a.size>=1024&&a.size<=1310720&&
       a.browser_download_url==='https://github.com/NemoN/Solarsystemsteuerung_ESP32/releases/download/'+r.tag_name+'/Relaiskarte.ino.bin');
-    return {tag:r.tag_name,name:r.name||r.tag_name,date:r.published_at||'',prerelease:r.prerelease,asset};
+    return {tag:r.tag_name,name:r.name||r.tag_name,date:r.published_at||'',prerelease:r.prerelease,asset,body:typeof r.body==='string'?r.body:''};
   }).filter(r=>r.asset).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,8);
 }
 remoteReleaseCheck.addEventListener('click',async()=>{
   if(remoteRelaySearchBusy)return;
   remoteRelaySearchBusy=true;remoteReleaseCheck.disabled=true;remoteGithubForm.elements.release.disabled=true;remoteGithubForm.querySelector('button').disabled=true;
-  remoteRelayReleases=[];remoteReleaseMessage.className='message';remoteReleaseMessage.textContent='GitHub-Releases werden gesucht …';
+  remoteRelayReleases=[];renderSelectedReleaseNotes('relay',null);remoteReleaseMessage.className='message';remoteReleaseMessage.textContent='GitHub-Releases werden gesucht …';
   try{
     remoteRelayReleases=await fetchRemoteRelayReleases(fetch);
+    if(installedReleaseLoadState==='error')loadInstalledReleaseNotes();
     const select=remoteGithubForm.elements.release;
     select.replaceChildren(new Option(remoteRelayReleases.length?'Version auswählen …':'Keine Releases mit Relaiskarten-Firmware',''));
     remoteRelayReleases.forEach((r,i)=>select.add(new Option(r.name+(r.prerelease?' · Vorabversion':''),String(i))));
@@ -1537,7 +1596,7 @@ remoteReleaseCheck.addEventListener('click',async()=>{
   }catch(error){remoteReleaseMessage.className='message error';remoteReleaseMessage.textContent='GitHub nicht erreichbar: '+error.message;}
   finally{remoteRelaySearchBusy=false;remoteReleaseCheck.disabled=false;}
 });
-remoteGithubForm.elements.release.addEventListener('change',()=>updateRemoteRelay(remoteRelayState,simulationEnabled));
+remoteGithubForm.elements.release.addEventListener('change',()=>{const selected=remoteGithubForm.elements.release.value;renderSelectedReleaseNotes('relay',selected===''?null:remoteRelayReleases[Number(selected)]);updateRemoteRelay(remoteRelayState,simulationEnabled);});
 async function pollRemoteRelayGithubUpdate(post,token,progress,message){
   let disconnectedAt=null;
   for(;;){
@@ -1646,6 +1705,7 @@ let githubReleases=[],currentFirmwareVersion='';
 function updateReleaseDownload(){
   const selected=githubForm.elements.release.value;
   const release=selected===''?null:githubReleases[Number(selected)];
+  renderSelectedReleaseNotes('main',release);
   releaseDownload.hidden=!release;
   if(release)releaseDownloadLink.href='https://github.com/NemoN/Solarsystemsteuerung_ESP32/releases/download/'+encodeURIComponent(release.tag)+'/'+encodeURIComponent(release.downloadAsset?release.downloadAsset.name:'Backload.ino.bin');
   else releaseDownloadLink.removeAttribute('href');
@@ -1664,10 +1724,11 @@ document.getElementById('release-check').addEventListener('click',async event=>{
     const response=await fetch('https://api.github.com/repos/NemoN/Solarsystemsteuerung_ESP32/releases?per_page=100',{cache:'no-store',headers:{Accept:'application/vnd.github+json'}});
     if(!response.ok)throw new Error('GitHub meldet HTTP '+response.status);
     const releases=await response.json();if(!Array.isArray(releases))throw new Error('Ungültige GitHub-Antwort');
+    if(installedReleaseLoadState==='error')loadInstalledReleaseNotes();
     const matchingReleases=releases.filter(r=>!r.draft&&Array.isArray(r.assets)&&typeof r.tag_name==='string'&&/^[A-Za-z0-9._-]+$/.test(r.tag_name)).map(r=>{
       const asset=r.assets.find(a=>a.name==='Backload.ino.bin'&&typeof a.digest==='string'&&/^sha256:[0-9a-f]{64}$/.test(a.digest)&&a.size>=1024&&a.size<=3145728);
       const downloadAsset=asset&&r.assets.find(a=>a.name==='Backload-'+r.tag_name.replace(/^v/,'')+'.bin'&&a.digest===asset.digest&&a.size===asset.size);
-      return {tag:r.tag_name,name:r.name||r.tag_name,date:r.published_at||'',prerelease:r.prerelease,asset,downloadAsset};
+      return {tag:r.tag_name,name:r.name||r.tag_name,date:r.published_at||'',prerelease:r.prerelease,asset,downloadAsset,body:typeof r.body==='string'?r.body:''};
     }).filter(r=>r.asset).sort((a,b)=>b.date.localeCompare(a.date));
     githubReleases=matchingReleases.slice(0,8);
     select.replaceChildren(new Option(githubReleases.length?'Version auswählen …':'Keine passenden Releases',''));
@@ -1978,6 +2039,8 @@ async function refresh(){
   try{
     if(saving||wifiBusy||wifiScanning)return;
     const data=await request('/api/status');
+    currentFirmwareVersion=typeof data.version==='string'?data.version:'';
+    renderInstalledMainRelease();
     updateRuntime(data.pumpRuntime,data.simulation);
     if(simRequestRevision===simRevision)updateSimulation(data);
     updateWifi(data.wifi);
@@ -2133,6 +2196,7 @@ if(document.body.classList.contains('history-page')){
 }
 if(document.body.classList.contains('info-page')){loadDeviceInfo();setInterval(loadDeviceInfo,5000);}
 if(!document.body.classList.contains('history-page')&&!document.body.classList.contains('settings-page')&&!document.body.classList.contains('info-page')&&!document.body.classList.contains('organigram-page')){loadSparklines();setInterval(loadSparklines,60000);}
+if(document.body.classList.contains('settings-page'))loadInstalledReleaseNotes();
 refresh();
 </script></main></body></html>)HTML";
 
@@ -2946,7 +3010,7 @@ String remoteRelayStatusJson(unsigned board = 0) {
     ",\"online\":" + String(state.online ? "true" : "false") +
     ",\"busy\":" + String(state.busy ? "true" : "false") +
     ",\"updating\":" + String(remoteRelayUpdate.active() ? "true" : "false") +
-    ",\"mask\":" + String(state.mask) + ",\"forget\":" + jsonString(forgetNames[state.forgetState]) + ",\"address\":" + jsonString(state.config.address) + ",\"labels\":[";
+    ",\"mask\":" + String(state.mask) + ",\"forget\":" + jsonString(forgetNames[state.forgetState]) + ",\"address\":" + jsonString(state.config.address) + ",\"version\":" + jsonString(state.version) + ",\"labels\":[";
   for (int i = 0; i < 4; ++i) { if (i) json += ','; json += jsonString(state.config.labels[i]); }
   return json + "]}";
 }
