@@ -75,8 +75,8 @@ Insbesondere können gespeicherte Relais beim Neustart wieder einschalten.
 
 Die hier enthaltene Firmware mit Updatefunktion muss zunächst einmal über den
 seriellen Anschluss auf die Relaiskarte geladen werden. Auch der Haupt-ESP
-benötigt die zugehörige Firmware. Die Karte muss im Heimnetz erreichbar sein;
-der Haupt-ESP muss im Normalbetrieb sein. Im Testmodus sind Relais-Updates gesperrt.
+benötigt die zugehörige Firmware. Die Karte muss im Heimnetz erreichbar sein.
+Das Update funktioniert auch im Testmodus des Haupt-ESP.
 
 Unter **Einstellungen → Relaiskarte aktualisieren** gibt es zwei Möglichkeiten:
 

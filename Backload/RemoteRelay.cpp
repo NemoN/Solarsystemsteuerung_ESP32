@@ -32,7 +32,7 @@ bool exchange(const RemoteRelayConfig& cfg, unsigned id, bool value, uint8_t& ma
   if (!ip.fromString(cfg.address) || !compatibleNetwork(ip)) return false;
   WiFiClient client;
   HTTPClient http;
-  http.setConnectTimeout(900); http.setTimeout(900); http.setReuse(false);
+  http.setConnectTimeout(1500); http.setTimeout(1500); http.setReuse(false);
   String url = "http://" + String(cfg.address) + (id ? "/api/relay" : "/api/state");
   if (!http.begin(client, url)) return false;
   http.addHeader("X-Relay-Key", cfg.key);
@@ -50,7 +50,7 @@ bool exchangeVersion(const RemoteRelayConfig& cfg, char version[32]) {
   IPAddress ip;
   if (!ip.fromString(cfg.address) || !compatibleNetwork(ip)) return false;
   WiFiClient client; HTTPClient http;
-  http.setConnectTimeout(900); http.setTimeout(900); http.setReuse(false);
+  http.setConnectTimeout(1500); http.setTimeout(1500); http.setReuse(false);
   if (!http.begin(client, "http://" + String(cfg.address) + "/api/version")) return false;
   http.addHeader("X-Relay-Key", cfg.key);
   const int code = http.GET();
@@ -166,11 +166,14 @@ void RemoteRelay::task() {
       xSemaphoreTake(lock_, portMAX_DELAY);
       // Konfiguration kann sich während einer Abfrage ändern.
       if (memcmp(&cfg, &config_, sizeof(cfg)) == 0) {
-        online_ = ok;
         if (ok) {
-          mask_ = nextMask; lastContact_ = millis();
+          online_ = true; mask_ = nextMask; lastContact_ = millis();
           if (!id && (!versionChecked_ || millis() - lastVersionCheck_ >= 10000)) { versionChecked_ = true; lastVersionCheck_ = millis(); checkVersion = true; }
-        } else { version_[0] = 0; versionChecked_ = false; }
+        } else if (id || millis() - lastContact_ > 6500) {
+          // Einzelne fehlgeschlagene Statusabfragen überbrücken, aber einen
+          // nicht bestätigten Schaltauftrag sofort als unbekannt melden.
+          online_ = false; version_[0] = 0; versionChecked_ = false;
+        }
       }
       if (id) busy_ = false;
       xSemaphoreGive(lock_); lastPoll = millis();

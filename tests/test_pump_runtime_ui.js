@@ -1,7 +1,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const sketch = fs.readFileSync(require('node:path').join(__dirname, '../Backload/Backload.ino'), 'utf8');
+const sketch = fs.readFileSync(require('node:path').join(__dirname, '../Backload/DashboardPage.h'), 'utf8');
 const styles = fs.readFileSync(require('node:path').join(__dirname, '../Backload/DashboardStyles.h'), 'utf8');
 const historySection = sketch.indexOf('<section id="history-section"');
 const runtimeSection = sketch.indexOf('<section id="pump-runtime-section"');

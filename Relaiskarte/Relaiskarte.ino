@@ -13,7 +13,7 @@
 #include "RelayFactoryReset.h"
 
 constexpr uint8_t RELAY_PINS[] = {32, 33, 25, 26};
-constexpr char RELAY_FIRMWARE_VERSION[] = "2.7.0";
+constexpr char RELAY_FIRMWARE_VERSION[] = "2.7.1";
 constexpr uint32_t RETRY_MS = 30000;
 struct Config { char ssid[33]; char password[64]; char key[33]; char apPassword[17]; };
 Config config = {};
@@ -180,7 +180,7 @@ void setup() {
   if (!storeReady) Serial.println("Speicherfehler: Relais bleiben AUS.");
   else Serial.printf("Verbindungsschlüssel für Haupt-ESP: %s\n", config.key);
   snprintf(relayHostname, sizeof(relayHostname), "relais-%012llx", (unsigned long long)(ESP.getEfuseMac() & 0xffffffffffffULL));
-  WiFi.persistent(false); WiFi.setHostname(relayHostname); WiFi.mode(WIFI_STA); WiFi.setAutoReconnect(false);
+  WiFi.persistent(false); WiFi.setHostname(relayHostname); WiFi.mode(WIFI_STA); WiFi.setSleep(false); WiFi.setAutoReconnect(false);
   const char* headers[] = {"X-Relay-Key"}; server.collectHeaders(headers, 1);
   server.on("/", HTTP_GET, []() {
     if (!apActive || server.client().localIP() != WiFi.softAPIP()) { server.send(404, "text/plain", "Not found"); return; }

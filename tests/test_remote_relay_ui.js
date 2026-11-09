@@ -1,12 +1,12 @@
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
-const sketch=fs.readFileSync(path.join(__dirname,'../Backload/Backload.ino'),'utf8');
+const sketch=fs.readFileSync(path.join(__dirname,'../Backload/DashboardPage.h'),'utf8');
 const calls={};
 const labels=Array.from({length:4},()=>({textContent:''}));
 const buttons=labels.map((label,i)=>({dataset:{relay:String(i+1)},disabled:true,attributes:{},setAttribute(k,v){this.attributes[k]=v;},querySelector(){return label;}}));
 const nodes={
  'remote-relay-status':{},'remote-relay-detail':{},
- 'relay-installed-version':{},'relay-installed-notes':{},
+ 'relay-installed-version':{},'relay-installed-notes':{},'remote-update-availability':{},
  'remote-relay-switches':{addEventListener(type,fn){calls.click=fn;}},
 };
 const form={elements:{address:{value:''},key:{value:''},label1:{value:''},label2:{value:''},label3:{value:''},label4:{value:''}},
@@ -21,7 +21,8 @@ const relayPairForm={elements:{ssid:selectStub(),password:{value:''}},querySelec
 const relayPairScan={addEventListener(){}},relayPairCancel={addEventListener(){}},relayPairScanMessage={},relayPairMessage={};
 const remoteReleaseCheck={addEventListener(){}},remoteReleaseMessage={};
 const remoteSelect={value:'',addEventListener(){}};
-const remoteGithubForm={elements:{release:remoteSelect},querySelector:()=>({}),addEventListener(){}};
+const githubButton={disabled:true};
+const remoteGithubForm={elements:{release:remoteSelect},querySelector:()=>githubButton,addEventListener(){}};
 const updateButton={disabled:true};
 const updateForm={elements:{firmware:{files:[]}},querySelector:()=>updateButton,addEventListener(type,fn){calls.update=fn;}};
 let posted=null;
@@ -45,8 +46,16 @@ assert.equal(buttons[0].disabled,false);
 context.updateRemoteRelay(state,true);
 assert.equal(buttons[0].disabled,false);
 assert.match(nodes['remote-relay-detail'].textContent,/Testmodus/);
+remoteSelect.value='0';context.updateRemoteRelay(state,true);
+assert.equal(githubButton.disabled,false);assert.equal(updateButton.disabled,false);
+assert.equal(nodes['remote-update-availability'].textContent,'');
+context.updateRemoteRelay(state,false);
+assert.equal(githubButton.disabled,false);assert.equal(updateButton.disabled,false);
+assert.equal(nodes['remote-update-availability'].textContent,'');
 context.updateRemoteRelay({...state,online:false},false);
 assert.equal(buttons[2].disabled,true);
+assert.equal(githubButton.disabled,true);assert.equal(updateButton.disabled,true);
+assert.match(nodes['remote-update-availability'].textContent,/nicht erreichbar/);
 assert.match(labels[2].textContent,/unbekannt/);
 context.updateRemoteRelay(state,true);
 (async()=>{

@@ -1,5 +1,5 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
-const sketch=fs.readFileSync(path.join(__dirname,'../Backload/Backload.ino'),'utf8');
+const sketch=fs.readFileSync(path.join(__dirname,'../Backload/DashboardPage.h'),'utf8');
 const css=fs.readFileSync(path.join(__dirname,'../Backload/DashboardStyles.h'),'utf8');
 const main=sketch.slice(sketch.indexOf('<section id="remote-relay-section"'),sketch.indexOf('<section id="remote-relay-settings"'));
 assert(main.includes('id="remote-relay-switches"'));
@@ -49,7 +49,7 @@ function release(tag,extra={}){return {tag_name:tag,name:tag,published_at:'2026-
  const submitEnd=sketch.indexOf("remoteRelayUpdateForm.addEventListener('submit'",pollEnd);
  assert(submitEnd>pollEnd);
  const submitCtx=vm.createContext({remoteGithubForm:ghForm,remoteRelayUpdateForm:fileForm,remoteRelayReleases:result,
-   remoteRelayUploadBusy:false,remoteRelayState:{online:true},remoteRelayCards:[{online:false},{online:false},{online:true}],remoteUpdateBoard:{value:'2'},simulationEnabled:false,
+   remoteRelayUploadBusy:false,remoteRelayState:{online:true},remoteRelayCards:[{online:false},{online:false},{online:true}],remoteUpdateBoard:{value:'2'},simulationEnabled:true,
    remoteRelayUpdateProgress:updateProgress,remoteRelayUpdateMessage:updateMessage,URLSearchParams,Date,
    confirm:()=>true,setTimeout:fn=>fn(),request:async(url,options)=>{
      const kind=url.split('/').pop();if(kind==='github'){startedPayload=options.body;return {token:'t'};}

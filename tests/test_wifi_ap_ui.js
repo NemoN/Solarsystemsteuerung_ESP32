@@ -2,7 +2,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const sketch = fs.readFileSync(require('node:path').join(__dirname, '../Backload/Backload.ino'), 'utf8');
+const sketch = fs.readFileSync(require('node:path').join(__dirname, '../Backload/DashboardPage.h'), 'utf8');
 const start = sketch.indexOf('function updateWifiSignalBars(wifi)');
 const end = sketch.indexOf('function updateRoof(', start);
 assert(start >= 0 && end > start);

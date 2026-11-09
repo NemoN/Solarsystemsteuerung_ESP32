@@ -103,6 +103,10 @@ python3 "$project_dir/tests/test_relay_pair_import.py"
 python3 "$project_dir/tests/test_relay_pair_button.py"
 python3 "$project_dir/tests/test_relay_pair_connect.py"
 python3 "$project_dir/tests/test_relay_guide.py"
+python3 "$project_dir/tests/test_remote_relay_update_modes.py"
+if [ -n "${BACKLOAD_FIRMWARE_BIN:-}" ]; then
+  python3 "$project_dir/tests/test_built_dashboard.py" "$BACKLOAD_FIRMWARE_BIN"
+fi
 
 # Host-HMAC- und Kopplungstests mit optional installiertem mbedcrypto.
 if command -v pkg-config >/dev/null && pkg-config --exists mbedcrypto; then

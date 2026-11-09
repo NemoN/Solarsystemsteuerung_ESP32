@@ -1,5 +1,5 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
-const sketch=fs.readFileSync(path.join(__dirname,'../Backload/Backload.ino'),'utf8');
+const sketch=fs.readFileSync(path.join(__dirname,'../Backload/DashboardPage.h'),'utf8');
 const start=sketch.indexOf('let infoBusy=false;'),end=sketch.indexOf("if(document.body.classList.contains('history-page'))",start);
 assert(start>0&&end>start);
 const nodes=new Map();const node=id=>{if(!nodes.has(id))nodes.set(id,{textContent:'',className:''});return nodes.get(id);};

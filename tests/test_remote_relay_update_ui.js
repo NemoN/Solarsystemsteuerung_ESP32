@@ -1,5 +1,5 @@
 const assert=require('node:assert/strict'),fs=require('node:fs'),vm=require('node:vm'),path=require('node:path');
-const sketch=fs.readFileSync(path.join(__dirname,'../Backload/Backload.ino'),'utf8');
+const sketch=fs.readFileSync(path.join(__dirname,'../Backload/DashboardPage.h'),'utf8');
 const start=sketch.indexOf("remoteRelayUpdateForm.addEventListener('submit'");
 const end=sketch.indexOf('async function request(url,options={})',start);
 assert(start>0&&end>start);

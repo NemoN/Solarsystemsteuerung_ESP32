@@ -2,7 +2,7 @@
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const vm = require('node:vm');
-const sketch = fs.readFileSync(require('node:path').join(__dirname, '../Backload/Backload.ino'), 'utf8');
+const sketch = fs.readFileSync(require('node:path').join(__dirname, '../Backload/DashboardPage.h'), 'utf8');
 const styles = fs.readFileSync(require('node:path').join(__dirname, '../Backload/DashboardStyles.h'), 'utf8');
 const server = fs.readFileSync(require('node:path').join(__dirname, '../Backload/WebSerialMonitor.cpp'), 'utf8');
 const nav = sketch.slice(sketch.indexOf('<nav class="page-nav"'), sketch.indexOf('</nav>'));
@@ -23,6 +23,10 @@ for (const cls of ['dashboard', 'history', 'organigram', 'info', 'settings'])
 assert(sketch.indexOf('id="settings-intro"') < sketch.indexOf('id="wifi-section"'));
 assert(sketch.indexOf('id="wifi-section"') < sketch.indexOf('id="update-section"'));
 const hostSection = sketch.slice(sketch.indexOf('<section id="hostname-section"'), sketch.indexOf('<section id="wifi-section"'));
+const hostnamePattern = hostSection.match(/pattern="([^"]+)"/)[1];
+const hostnameRegex = new RegExp(`^(?:${hostnamePattern})$`, 'v');
+for (const value of ['a', 'backload-test', 'a'.repeat(31)]) assert(hostnameRegex.test(value));
+for (const value of ['-backload', 'backload-', 'has space', 'a'.repeat(32)]) assert(!hostnameRegex.test(value));
 const wifiSection = sketch.slice(sketch.indexOf('<section id="wifi-section"'), sketch.indexOf('<section id="update-section"'));
 assert(hostSection.includes('id="hostname-form"') && !wifiSection.includes('id="hostname-form"'));
 for (const id of ['appearance-section','security-section','hostname-section','wifi-section','update-section','simulation-settings'])

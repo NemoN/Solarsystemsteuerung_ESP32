@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict');
 const fs=require('node:fs'),vm=require('node:vm');
-const sketch=fs.readFileSync(require('node:path').join(__dirname,'../Backload/Backload.ino'),'utf8');
+const sketch=fs.readFileSync(require('node:path').join(__dirname,'../Backload/DashboardPage.h'),'utf8');
 const inputs={'access-password':{type:'password',value:'Abc123!? X'},'access-confirm':{type:'password',value:'Abc123!? X'}};
 const buttons=Object.keys(inputs).map(id=>({attributes:{'aria-controls':id,'aria-pressed':'false'},title:'Passwort anzeigen',
   getAttribute(name){return this.attributes[name];},setAttribute(name,value){this.attributes[name]=value;},
