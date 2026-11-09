@@ -1,4 +1,4 @@
-Backload 2.2.0 – automatische und manuelle Pumpensteuerung
+Backload 2.6.0 – automatische und manuelle Pumpensteuerung
 
 Sensoren und Relais
 Fünf MAX31865-Sensoren mit gemeinsamer Software-SPI-Verbindung:
@@ -25,6 +25,15 @@ PumpDirection::BufferToCombi ändern und die Firmware erneut hochladen.
 GPIO 3 ist ein ESP32-S3-Strapping-Pin. Das Verhalten des Relais beim
 Einschalten und Reset am realen Aufbau prüfen; die Software übernimmt die
 Steuerung erst nach Beginn von setup().
+
+WLAN-Relaiskarte
+Bis zu vier Relaiserweiterungen mit je vier Schaltern stehen auf der Startseite.
+Neue Erweiterungen lassen sich in den Einstellungen über einen vorübergehenden
+Kopplungs-AP ins Heimnetz übernehmen und automatisch finden. Einrichtung,
+Beschriftungen und Firmware-Updates liegen in den Einstellungen.
+Nach einmaliger serieller Erstinstallation kann die Firmware der Karte dort
+auch von GitHub oder aus einer Datei aktualisiert werden. Einrichtung und
+Verhalten: Relaiskarte/README.md. Der Dachsensor-Empfang und seine Anzeige sind vorläufig deaktiviert.
 
 Solarregelung (Relais 3)
 Solarpanel und Kombispeicher unten bestimmen die Solarpumpe unabhängig von
@@ -186,18 +195,15 @@ ESP-Informationen: http://<ESP32-IP>/info
 Regelungsübersicht und GPIO-Zuordnung: http://<ESP32-IP>/regelungsuebersicht
 Live-Monitor: http://<ESP32-IP>:81/ (oder Link in der Oberfläche).
 Die Oberfläche und Steuerungs-API verwenden Port 80, der Monitor Port 81.
-Varianten 2.0.0-mit-ap und 2.0.0-ohne-ap: Beide starten zunächst
-mit ESP32-Zugang. In der Ohne-AP-Version wird dieser nach 30 Sekunden stabiler
-Heimnetzverbindung und abgeschlossener Update-Startprüfung ausgeschaltet. Bei
-30 Sekunden Verbindungsausfall, fehlenden Zugangsdaten oder einer WLAN-
-Neueinrichtung startet er als Notzugang erneut. Nach einer Verbindung bleibt
-er wieder 30 Sekunden an; ein laufendes Update über den Notzugang wird nicht
-durch Abschalten unterbrochen. Der Zustand steht auf der WLAN-Seite.
-Der Vergleich soll zeigen, ob AP+STA das Update beeinflusst; die Ursache von
-Verbindungsabbrüchen ist damit nicht automatisch behoben. Einstellungen und
-Temperaturregelung sind in beiden Versionen gleich. Der Quellcode verwendet
-ohne zusätzlichen Compiler-Schalter die Variante mit AP; für die andere beim
-Kompilieren BACKLOAD_AP_COMPARISON_NO_AP definieren.
+Es gibt eine gemeinsame Firmware. Der ESP32-Zugang startet zur Einrichtung und
+wird nach 30 Sekunden stabiler Heimnetzverbindung und abgeschlossener Update-
+Startprüfung ausgeschaltet. Bei längerem Verbindungsausfall, fehlenden
+Zugangsdaten oder WLAN-Neueinrichtung dient er als Notzugang. Ein laufendes
+Update über den Notzugang wird nicht durch Abschalten unterbrochen. Für die
+Kopplung einer Relaiserweiterung wird zeitweise ein eigener AP verwendet;
+dabei bleibt die Heimnetzverbindung bestehen. Die Zugangsdaten werden bei der
+Kopplung verschlüsselt übertragen; ein aktiver Angriff während der Kopplung
+ist ohne unabhängige Identitätsprüfung möglich.
 Das helle oder dunkle Design kann in den Einstellungen umgeschaltet werden; die
 Auswahl bleibt im jeweiligen Browser gespeichert.
 Die Infoseite zeigt Chipmodell, Revision, CPU, Firmware, Slots und nutzbaren
@@ -298,8 +304,8 @@ eingerichtet wird, ist die Oberfläche wie bisher ohne Anmeldung erreichbar.
 Das Passwort gilt für Heimnetz und ESP32-WLAN sowie für den Live-Monitor und
 bleibt beim Wechsel zwischen Test- und Normalbetrieb erhalten. Eine Änderung
 beendet alle angemeldeten Sitzungen; danach erneut anmelden. Die Statusabfrage
-GET /api/status bleibt für das Temperaturarchiv ohne Anmeldung lesbar, der
-UDP-Empfang des Dachsensors bleibt unverändert.
+GET /api/status bleibt für das Temperaturarchiv ohne Anmeldung lesbar.
+Der Dachsensor-Empfang ist vorläufig deaktiviert.
 HTTP verschlüsselt das Passwort und die Sitzung nicht. Für einen Fernzugriff
 ein VPN oder einen vertrauenswürdigen HTTPS-Reverse-Proxy verwenden; den ESP32
 nicht direkt per HTTP ins Internet freigeben. Geht das Passwort verloren, ist
@@ -314,8 +320,9 @@ Image. Dies prüft den Start, nicht die korrekte Funktion der gesamten Anlage.
 Testmodus (Simulation)
 Unter http://<ESP32-IP>/?test=on oder über „Testmodus starten“ einschalten.
 Nach der Bestätigung schaltet die Pumpe aus, der ESP wartet mindestens zwei
-Sekunden und startet neu. Im Testmodus bleiben die realen Relais AUS und die
-MAX31865 werden nicht initialisiert. Die echte Regelungslogik verarbeitet
+Sekunden und startet neu. Im Testmodus bleiben die Relais am Haupt-ESP AUS und die
+MAX31865 werden nicht initialisiert. Externe WLAN-Relais bleiben schaltbar
+und schalten ihre Ausgänge tatsächlich. Die echte Regelungslogik verarbeitet
 stattdessen die Testwerte; der Betriebszustand ist sichtbar gekennzeichnet.
 „Testmodus beenden“ (oder /?test=off) startet nach Bestätigung wieder die
 Anlagensteuerung. Dabei kann die Automatik die echte Pumpe einschalten.

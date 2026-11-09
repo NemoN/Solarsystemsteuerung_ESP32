@@ -1,8 +1,8 @@
 #pragma once
 #include <stdint.h>
 
-// Testvariante: AP erst nach stabiler STA-Verbindung abschalten und bei
-// längerem Verbindungsausfall oder einer Neueinrichtung wieder bereitstellen.
+// AP nach stabiler Heimnetzverbindung abschalten und bei längerem
+// Verbindungsausfall oder einer Neueinrichtung wieder bereitstellen.
 class RecoveryApPolicy {
  public:
   enum Action { Keep, Enable, Disable };

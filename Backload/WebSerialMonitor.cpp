@@ -161,7 +161,7 @@ void proxyRequest(AsyncWebServerRequest* req) {
     if (args.length()) args += '&';
     args += urlEncode(param->name()) + '=' + urlEncode(param->value());
   }
-  const size_t maxArgs = req->url() == "/api/update/chunk" ? 20000 : 2048;
+  const size_t maxArgs = (req->url() == "/api/update/chunk" || req->url() == "/api/remote-relay/update/chunk") ? 20000 : 2048;
   if (args.length() > maxArgs) { req->send(413, "text/plain", "Anfrage zu groß."); return; }
   const bool post = req->method() == HTTP_POST;
   String target = req->url();
@@ -258,6 +258,18 @@ void beginWebSerialMonitor() {
   dashboard.server().on("/api/device-info", HTTP_GET, proxyRequest);
   dashboard.server().on("/api/settings", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/pump", HTTP_POST, proxyRequest);
+  dashboard.server().on("/api/remote-relay/config", HTTP_POST, proxyRequest);
+  dashboard.server().on("/api/remote-relay/discover", HTTP_POST, proxyRequest);
+  dashboard.server().on("/api/remote-relay/pair", HTTP_POST, proxyRequest);
+  dashboard.server().on("/api/remote-relay/pair/scan", HTTP_GET, proxyRequest);
+  dashboard.server().on("/api/remote-relay/pair/cancel", HTTP_POST, proxyRequest);
+  dashboard.server().on("/api/remote-relay/command", HTTP_POST, proxyRequest);
+  dashboard.server().on("/api/remote-relay/update/prepare", HTTP_POST, proxyRequest);
+  dashboard.server().on("/api/remote-relay/update/github", HTTP_POST, proxyRequest);
+  dashboard.server().on("/api/remote-relay/update/chunk", HTTP_POST, proxyRequest);
+  dashboard.server().on("/api/remote-relay/update/start", HTTP_POST, proxyRequest);
+  dashboard.server().on("/api/remote-relay/update/status", HTTP_POST, proxyRequest);
+  dashboard.server().on("/api/remote-relay/update/abort", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/automatic", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/solar", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/heating", HTTP_POST, proxyRequest);

@@ -4,6 +4,7 @@
 // Die zusätzlich benötigten Bibliotheken liegen mit Lizenzinformationen im Sketchordner src.
 #include "src/Adafruit_MAX31865/Adafruit_MAX31865.h"
 #include <WiFi.h>
+#include <esp_wifi.h>
 #include <WiFiUdp.h>
 #include <ESPmDNS.h>
 #include <WebServer.h>
@@ -12,6 +13,10 @@
 #include "SensorReading.h"
 #include "PumpControl.h"
 #include "PumpRuntime.h"
+#include "RemoteRelay.h"
+#include "RelayDiscovery.h"
+#include "RelayProvisioning.h"
+#include "RemoteRelayUpdate.h"
 #include "AutomaticControl.h"
 #include "SolarControl.h"
 #include "TemperatureHistory.h"
@@ -37,13 +42,9 @@
 #include <time.h>
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
-#ifdef BACKLOAD_AP_COMPARISON_NO_AP
-const char* FIRMWARE_VERSION = "2.2.0-ohne-ap";
+const char* FIRMWARE_VERSION = "2.6.0";
+// Der AP wird nur für Einrichtung und Wiederherstellung benötigt.
 constexpr bool AP_RECOVERY_ONLY = true;
-#else
-const char* FIRMWARE_VERSION = "2.2.0-mit-ap";
-constexpr bool AP_RECOVERY_ONLY = false;
-#endif
 
 // Beim ersten Start ohne gespeicherte Betriebsart läuft die echte Steuerung.
 // Der Testmodus wird über das Webinterface nach Bestätigung ein-/ausgeschaltet.
@@ -162,12 +163,21 @@ Preferences preferences;
 Preferences hostnamePreferences;
 Preferences runtimePreferences;
 PumpRuntime pumpRuntime;
+constexpr unsigned REMOTE_RELAY_COUNT = 4;
+RemoteRelay remoteRelays[REMOTE_RELAY_COUNT];
+bool remoteRelayCardReady[REMOTE_RELAY_COUNT] = {};
+RemoteRelayUpdate remoteRelayUpdate;
+RelayDiscovery relayDiscovery;
+RelayProvisioning relayProvisioning;
+bool remoteRelayReady = false, remoteRelayUpdateReady = false, relayDiscoveryReady = false, relayProvisioningReady = false;
 bool runtimeReady = false, runtimeStorageHealthy = false;
 bool runtimeSolarOn = false, runtimePumpOn = false;
 PumpDirection runtimePumpDirection = PumpDirection::CombiToBuffer;
 uint32_t runtimeLastUpdate = 0, runtimeLastSave = 0;
 bool hostnameStorageReady = false, hostnameUsesDefault = true, mdnsReady = false;
 String configuredHostname, activeHostname;
+// Dachsensor vorläufig deaktiviert; die Implementierung bleibt für später erhalten.
+constexpr bool ROOF_SENSOR_ENABLED = false;
 WiFiUDP roofUdp;
 const uint16_t ROOF_HEARTBEAT_PORT = 4210;
 const char ROOF_HEARTBEAT[] = "DACHSENSOR_1";
@@ -301,6 +311,8 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
     <a href="#security-section">Zugangspasswort</a>
     <a href="#hostname-section">Hostname</a>
     <a href="#wifi-section">WLAN einrichten</a>
+    <a href="#remote-relay-settings">Relaiserweiterungen</a>
+    <a href="#remote-relay-update-section">Relaiskarte aktualisieren</a>
     <a href="#update-section">Firmware aktualisieren</a>
     <a href="#simulation-settings">Testwerte</a>
   </div>
@@ -308,7 +320,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
   </div>
 </nav>
 <header class="dashboard-header"><div class="dashboard-title"><h1>Solarsystemsteuerung</h1><p id="firmware-version" class="muted">Version: …</p></div><div class="header-status"><p class="connection-status" role="status"><span id="connection-dot" class="connection-dot" aria-hidden="true"></span><span id="connection">Verbindung wird aufgebaut …</span></p><p id="device-clock" class="muted">ESP32-Zeit wird geladen …</p><p class="wifi-signal-status muted"><svg id="wifi-signal-bars" class="wifi-signal-bars" viewBox="0 0 25 18" role="img" aria-label="WLAN-Signalstärke nicht verfügbar"><rect x="0" y="15" width="3" height="3" rx=".5"/><rect x="5" y="12" width="3" height="6" rx=".5"/><rect x="10" y="9" width="3" height="9" rx=".5"/><rect x="15" y="6" width="3" height="12" rx=".5"/><rect x="20" y="3" width="3" height="15" rx=".5"/></svg><span id="wifi-signal">WLAN-Signal wird geladen …</span></p></div></header>
-<div id="sim-banner" role="status" hidden><strong>Testmodus:</strong> Werte, Verlauf und Pumpe sind simuliert. Echte Relais bleiben aus. <button id="test-stop" type="button">Testmodus beenden</button></div>
+<div id="sim-banner" role="status" hidden><strong>Testmodus:</strong> Werte, Verlauf und Pumpe sind simuliert. Relais am Haupt-ESP bleiben aus; WLAN-Relais schalten tatsächlich. <button id="test-stop" type="button">Testmodus beenden</button></div>
 <p id="test-message" class="message" role="status"></p>
 <section aria-labelledby="heating-heading">
 <div class="heading"><h2 id="heating-heading">Sommer / Winter · Ölbrenner</h2><span id="heating-badge" class="badge" role="status">Status wird geladen …</span></div>
@@ -495,6 +507,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <div><h3>Chip</h3><dl><div><dt>Modell</dt><dd id="info-chip">—</dd></div><div><dt>Revision</dt><dd id="info-revision">—</dd></div><div><dt>CPU-Kerne</dt><dd id="info-cores">—</dd></div><div><dt>CPU-Takt</dt><dd id="info-cpu">—</dd></div><div><dt>Laufzeit</dt><dd id="info-uptime">—</dd></div></dl></div>
 <div><h3>Firmware</h3><dl><div><dt>Version</dt><dd id="info-version">—</dd></div><div><dt>ESP32-Core</dt><dd id="info-core">—</dd></div><div><dt>ESP-IDF</dt><dd id="info-idf">—</dd></div><div><dt>Aktiver Firmware-Slot</dt><dd id="info-slot">—</dd></div><div><dt>Update-Slot</dt><dd id="info-update-slot">—</dd></div></dl></div>
 <div><h3>Speicher</h3><dl><div><dt>Flash</dt><dd id="info-flash">—</dd></div><div><dt>Interner RAM nutzbar</dt><dd id="info-heap">—</dd></div><div><dt>Interner RAM frei</dt><dd id="info-heap-free">—</dd></div><div><dt>PSRAM nutzbar</dt><dd id="info-psram">—</dd></div><div><dt>PSRAM frei</dt><dd id="info-psram-free">—</dd></div></dl><p class="muted">Der Temperaturverlauf reserviert PSRAM; die nutzbare Größe kann unter der verbauten Größe liegen.</p></div>
+<div class="info-wifi"><h3>WLAN</h3><dl><div><dt>Status</dt><dd id="info-wifi-state">—</dd></div><div><dt>Heimnetz (SSID)</dt><dd id="info-wifi-ssid">—</dd></div><div><dt>Hostname / mDNS</dt><dd id="info-wifi-host">—</dd></div><div><dt>Signalstärke</dt><dd id="info-wifi-rssi">—</dd></div><div><dt>Kanal</dt><dd id="info-wifi-channel">—</dd></div><div><dt>WLAN-Sicherheit</dt><dd id="info-wifi-security">—</dd></div><div><dt>WLAN-Standards des Zugangspunkts</dt><dd id="info-wifi-standards">—</dd></div><div><dt>IP-Adresse</dt><dd id="info-wifi-ip">—</dd></div><div><dt>Subnetzmaske</dt><dd id="info-wifi-mask">—</dd></div><div><dt>Gateway</dt><dd id="info-wifi-gateway">—</dd></div><div><dt>DNS-Server</dt><dd id="info-wifi-dns">—</dd></div><div><dt>MAC-Adresse</dt><dd id="info-wifi-mac">—</dd></div><div><dt>Access-Point (BSSID)</dt><dd id="info-wifi-bssid">—</dd></div><div><dt>ESP-Zugang</dt><dd id="info-wifi-ap">—</dd></div><div><dt>ESP-Zugang IP / MAC</dt><dd id="info-wifi-ap-network">—</dd></div><div><dt>Verbundene Geräte</dt><dd id="info-wifi-clients">—</dd></div></dl></div>
 </div></section>
 <section id="history-section" aria-labelledby="history-heading">
 <h2 id="history-heading">Temperaturverlauf</h2>
@@ -563,6 +576,50 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <progress id="update-progress" max="100" value="0" hidden></progress><p id="update-message" class="message" role="status"></p>
 <details><summary>Firmware-Datei manuell hochladen</summary><p>Eine für dieses ESP32-S3-Board kompilierte Datei (.bin) auswählen.</p><form id="update-form"><label>Firmware-Datei<input name="firmware" type="file" accept=".bin,application/octet-stream" required></label><button type="submit">Datei hochladen</button></form></details>
 </section>
+<section id="remote-relay-section" aria-labelledby="remote-relay-heading">
+<div class="heading"><h2 id="remote-relay-heading">WLAN-Relais</h2><span id="remote-relay-status" class="badge" role="status">Status wird geladen …</span></div>
+<p id="remote-relay-detail" class="muted">Verbindung zur Relaiserweiterung wird geprüft.</p>
+<h3>Relaiserweiterung 1</h3>
+<div id="remote-relay-switches" class="remote-relay-switches">
+<button type="button" class="relay-switch" role="switch" aria-checked="false" data-relay="1" disabled><span class="switch-track" aria-hidden="true"></span><span>Relais 1</span></button>
+<button type="button" class="relay-switch" role="switch" aria-checked="false" data-relay="2" disabled><span class="switch-track" aria-hidden="true"></span><span>Relais 2</span></button>
+<button type="button" class="relay-switch" role="switch" aria-checked="false" data-relay="3" disabled><span class="switch-track" aria-hidden="true"></span><span>Relais 3</span></button>
+<button type="button" class="relay-switch" role="switch" aria-checked="false" data-relay="4" disabled><span class="switch-track" aria-hidden="true"></span><span>Relais 4</span></button>
+</div><div id="remote-extra-groups"></div><p id="remote-relay-message" class="message" role="status"></p>
+</section>
+<section id="remote-relay-settings" aria-labelledby="remote-relay-settings-heading"><h2 id="remote-relay-settings-heading">Relaiserweiterungen</h2>
+<p class="muted">Bis zu vier Erweiterungen mit je vier Relais.</p>
+<label>Erweiterung<select id="remote-relay-board"><option value="0">Relaiserweiterung 1</option><option value="1">Relaiserweiterung 2</option><option value="2">Relaiserweiterung 3</option><option value="3">Relaiserweiterung 4</option></select></label>
+<p id="remote-relay-slot-status" class="muted" role="status">Status wird geladen …</p>
+<details id="relay-add-details"><summary>Neue Erweiterung hinzufügen</summary>
+<p class="muted">Erweiterung einschalten und suchen. Nach dem Start der Einrichtung IO0 an der Erweiterung drei Sekunden drücken.</p>
+<button id="relay-pair-scan" type="button">Neue Erweiterungen suchen</button><p id="relay-pair-scan-message" class="message" role="status"></p>
+<form id="relay-pair-form"><label>Einrichtungs-WLAN<select name="ssid" required disabled><option value="">Bitte zuerst suchen</option></select></label><button type="submit" disabled>Erweiterung einrichten</button></form>
+<button id="relay-pair-cancel" type="button" hidden>Einrichtung abbrechen</button><p id="relay-pair-message" class="message" role="status"></p></details>
+<details id="relay-edit-details"><summary>Relais beschriften und Verbindung bearbeiten</summary>
+<form id="remote-relay-form">
+<label>Relais 1<input name="label1" maxlength="48" required></label>
+<label>Relais 2<input name="label2" maxlength="48" required></label>
+<label>Relais 3<input name="label3" maxlength="48" required></label>
+<label>Relais 4<input name="label4" maxlength="48" required></label>
+<details class="relay-manual-settings"><summary>Verbindung manuell einrichten</summary>
+<p class="muted">Für bereits im Heimnetz eingerichtete Erweiterungen. Bei unveränderter Adresse bleibt der gespeicherte Schlüssel erhalten.</p>
+<label>Im Heimnetz gefunden<select id="relay-discovery-select"><option value="">Erweiterung auswählen …</option></select></label>
+<button id="relay-discovery-search" type="button">Erweiterungen suchen</button><p id="relay-discovery-message" class="message" role="status">Suche wird vorbereitet …</p>
+<label>IP-Adresse<input name="address" maxlength="15" placeholder="192.168.1.100" autocomplete="off"></label>
+<label>Verbindungsschlüssel<input name="key" type="password" maxlength="32" autocomplete="new-password" spellcheck="false"></label></details>
+<button type="submit">Änderungen speichern</button></form><p id="remote-relay-config-message" class="message" role="status"></p></details>
+<button id="remote-relay-forget" type="button" class="secondary-button" hidden>Erweiterung vergessen</button><p id="remote-relay-forget-message" class="message" role="status"></p>
+<details id="relay-forget-recovery" hidden><summary>Probleme beim Zurücksetzen?</summary><p class="muted">Falls die Rückmeldung verloren ging, lässt sich die Zuordnung hier entfernen. Die Karte wird dabei nicht zurückgesetzt und kann noch WLAN-Zugangsdaten besitzen.</p><button id="remote-relay-discard" type="button" class="secondary-button">Nur Zuordnung entfernen</button></details>
+</section>
+<section id="remote-relay-update-section" aria-labelledby="remote-relay-update-heading"><h2 id="remote-relay-update-heading">Firmware der Relaiskarte aktualisieren</h2>
+<p class="muted">Die ausgewählte Erweiterung startet nach dem Update neu und stellt ihre gespeicherten Zustände wieder her.</p>
+<label>Erweiterung<select id="remote-update-board"><option value="0">Relaiserweiterung 1</option><option value="1">Relaiserweiterung 2</option><option value="2">Relaiserweiterung 3</option><option value="3">Relaiserweiterung 4</option></select></label>
+<button id="remote-release-check" type="button">GitHub-Releases suchen</button><p id="remote-release-message" class="message" role="status">Noch nicht nach Updates gesucht.</p>
+<form id="remote-github-form"><label>Firmware-Version<select name="release" required disabled><option value="">Bitte zuerst Releases suchen</option></select></label><button type="submit" disabled>Ausgewählte Version installieren</button></form>
+<details><summary>Firmwaredatei manuell hochladen</summary><form id="remote-relay-update-form"><label>Firmwaredatei (.bin)<input name="firmware" type="file" accept=".bin,application/octet-stream" required></label><button type="submit" disabled>Relaiskarte aktualisieren</button></form></details>
+<progress id="remote-relay-update-progress" max="100" value="0" hidden></progress><p id="remote-relay-update-message" class="message" role="status"></p>
+</section>
 <section id="simulation-settings" aria-labelledby="simulation-heading">
 <h2 id="simulation-heading">Testwerte für die Sensoren</h2>
 <p id="test-page-status" class="muted" role="status">Verbindung wird aufgebaut …</p>
@@ -573,7 +630,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 </div>
 </section>
 <div id="sensor-grid"><div id="controllers"></div>
-<section id="roof-section" aria-labelledby="roof-heading">
+<section id="roof-section" aria-labelledby="roof-heading" hidden>
 <div class="heading"><h2 id="roof-heading">Dachsensor</h2><span id="roof-badge" class="badge" role="status">Status wird geladen …</span></div>
 <p id="roof-detail" class="muted">Warte auf ein Lebenszeichen aus dem Heimnetz.</p>
 </section></div>
@@ -664,6 +721,36 @@ const wifiNetworks=document.getElementById('wifi-networks');
 const wifiNetworkLabel=document.getElementById('wifi-network-label');
 const roofBadge=document.getElementById('roof-badge');
 const roofDetail=document.getElementById('roof-detail');
+const remoteRelayForm=document.getElementById('remote-relay-form');
+const remoteRelayBoard=document.getElementById('remote-relay-board');
+const remoteRelayForget=document.getElementById('remote-relay-forget');
+const remoteRelayForgetMessage=document.getElementById('remote-relay-forget-message');
+const remoteRelaySlotStatus=document.getElementById('remote-relay-slot-status');
+const remoteRelayDiscard=document.getElementById('remote-relay-discard');
+const relayForgetRecovery=document.getElementById('relay-forget-recovery');
+const remoteUpdateBoard=document.getElementById('remote-update-board');
+const remoteExtraGroups=document.getElementById('remote-extra-groups');
+const relayDiscoverySelect=document.getElementById('relay-discovery-select');
+const relayDiscoverySearch=document.getElementById('relay-discovery-search');
+const relayDiscoveryMessage=document.getElementById('relay-discovery-message');
+const relayPairForm=document.getElementById('relay-pair-form');
+const relayPairScan=document.getElementById('relay-pair-scan');
+const relayPairScanMessage=document.getElementById('relay-pair-scan-message');
+const relayPairMessage=document.getElementById('relay-pair-message');
+const relayPairCancel=document.getElementById('relay-pair-cancel');
+let remoteRelayCards=[],relayDiscoverySignature='',relayPairActive=false,relayPairScanBusy=false;
+const remoteExtraCards=new Map();
+const remoteRelayMessage=document.getElementById('remote-relay-message');
+const remoteRelayConfigMessage=document.getElementById('remote-relay-config-message');
+let remoteRelayDirty=false,remoteRelayBusy=false,remoteRelayRevision=0,remoteRelayState=null;
+let pendingRemoteAction=null;
+const remoteRelayUpdateForm=document.getElementById('remote-relay-update-form');
+const remoteRelayUpdateMessage=document.getElementById('remote-relay-update-message');
+const remoteRelayUpdateProgress=document.getElementById('remote-relay-update-progress');
+const remoteReleaseCheck=document.getElementById('remote-release-check');
+const remoteReleaseMessage=document.getElementById('remote-release-message');
+const remoteGithubForm=document.getElementById('remote-github-form');
+let remoteRelayUploadBusy=false,remoteRelaySearchBusy=false,remoteRelayReleases=[];
 const manualSwitch=document.getElementById('manual-switch');
 const pumpSwitch=document.getElementById('pump-switch');
 const directionSwitch=document.getElementById('direction-switch');
@@ -938,7 +1025,7 @@ function updateSimulation(data){
   document.getElementById('sim-banner').hidden=!simulationEnabled;
   document.getElementById('test-link').hidden=simulationEnabled;
   document.getElementById('simulation-section').hidden=!simulationEnabled;
-  document.getElementById('test-page-status').textContent=simulationEnabled?'Testmodus aktiv · Echte Relais aus.':'Testwerte nur im Testmodus verfügbar.';
+  document.getElementById('test-page-status').textContent=simulationEnabled?'Testmodus aktiv · Relais am Haupt-ESP aus; WLAN-Relais schalten tatsächlich.':'Testwerte nur im Testmodus verfügbar.';
   document.querySelector('.dashboard-link').href=simulationEnabled?'/?test=on':'/';
   document.querySelector('.history-link').href=simulationEnabled?'/verlauf?test=on':'/verlauf';
   document.querySelector('.info-link').href=simulationEnabled?'/info?test=on':'/info';
@@ -974,7 +1061,7 @@ function updateSimulation(data){
 }
 async function changeTestMode(enable){
   if(modeChanging)return;
-  const prompt=enable?'Testmodus starten? Pumpe und Ölbrennerfreigabe werden ausgeschaltet und simuliert. Der ESP32 startet neu.':'Testmodus beenden? Der ESP32 startet neu. Die gespeicherte Ölbrennerfreigabe und die echte Pumpenregelung werden wieder aktiv.';
+  const prompt=enable?'Testmodus starten? Pumpe und Ölbrennerfreigabe werden ausgeschaltet und simuliert. WLAN-Relais bleiben schaltbar. Der ESP32 startet neu.':'Testmodus beenden? Der ESP32 startet neu. Die gespeicherte Ölbrennerfreigabe und die echte Pumpenregelung werden wieder aktiv.';
   if(!confirm(prompt)){reflectTestModeInUrl(simulationEnabled);return;}
   modeChanging=true;
   const message=document.getElementById('test-message');
@@ -1097,8 +1184,8 @@ function updateWifi(wifi){
   status.textContent=(states[wifi.state]||'WLAN-Status unbekannt')+(signal?' · Signal: '+signal:'');
   document.getElementById('wifi-signal').textContent=signal?'Heim-WLAN: '+signal:'Heim-WLAN-Signal: nicht verfügbar';
   status.className=wifi.state==='retry'?'error':'';
-  document.getElementById('wifi-ap-description').textContent=wifi.apRecoveryOnly?'ESP32-Zugang nur bei längerem WLAN-Ausfall.':'2,4-GHz-WLAN nutzen. Der ESP32-Zugang bleibt erreichbar.';
-  document.getElementById('wifi-address').textContent=(wifi.ip?'Im Heimnetz: http://'+wifi.ip+' · ':'')+(wifi.apIp?'ESP32-Zugang: http://'+wifi.apIp:'ESP32-Zugang: ausgeschaltet');
+  document.getElementById('wifi-ap-description').textContent=wifi.pairing?'Kopplungszugang für eine Relaiserweiterung aktiv.':wifi.apRecoveryOnly?'ESP32-Zugang nur bei längerem WLAN-Ausfall.':'2,4-GHz-WLAN nutzen. Der ESP32-Zugang bleibt erreichbar.';
+  document.getElementById('wifi-address').textContent=(wifi.ip?'Im Heimnetz: http://'+wifi.ip+' · ':'')+(wifi.apIp?(wifi.pairing?'Kopplungszugang':'ESP32-Zugang')+': http://'+wifi.apIp:'ESP32-Zugang: ausgeschaltet');
   if(wifiPending&&wifi.changeId===wifiPending.id){
     if(wifiPending.revision===wifiRevision){
       wifiForm.elements.password.value='';
@@ -1206,6 +1293,343 @@ async function saveHostnameSetting(reset){
 hostnameForm.addEventListener('submit',event=>{event.preventDefault();saveHostnameSetting(false);});
 hostnameReset.addEventListener('click',()=>saveHostnameSetting(true));
 let saving=false;
+function updateRemoteRelay(state,simulation){
+  remoteRelayState=state;
+  const badge=document.getElementById('remote-relay-status');
+  const detail=document.getElementById('remote-relay-detail');
+  const online=!!(state&&state.online), configured=!!(state&&state.configured);
+  const target=remoteRelayCards[Number(remoteUpdateBoard.value)]||state;
+  const updateOnline=!!(target&&target.online);
+  badge.textContent=!state?'Status unbekannt':!state.ready?'Nicht verfügbar':!configured?'Nicht eingerichtet':online?'Verbunden':'Nicht erreichbar';
+  badge.className='badge'+(online?' on':'');
+  detail.textContent=!state?'Keine aktuellen Daten vom Haupt-ESP.':!state.ready?'Die Relaisanbindung konnte nicht gestartet werden.':!configured?'Relaiskarte in den Einstellungen einrichten.':state.updating?'Firmware-Update der Relaiskarte läuft.':simulation&&online?'Testmodus: Die WLAN-Relais schalten tatsächlich.':online?'Zustand von der Relaiskarte bestätigt.':'Verbindung und IP-Adresse prüfen; der tatsächliche Zustand ist unbekannt.';
+  remoteRelayUpdateForm.querySelector('button').disabled=!updateOnline||simulation||remoteRelayBusy||remoteRelayUploadBusy||!!target.updating;
+  remoteGithubForm.querySelector('button').disabled=!updateOnline||simulation||remoteRelayBusy||remoteRelayUploadBusy||remoteRelaySearchBusy||!!target.updating||remoteGithubForm.elements.release.value==='';
+  if(pendingRemoteAction&&state&&!state.busy&&!remoteRelayBusy){
+    const action=pendingRemoteAction, actual=remoteRelayCards[action.board]||state;
+    if(actual&&!actual.busy){
+      pendingRemoteAction=null;
+      remoteRelayMessage.textContent=!actual.online?'Keine Rückmeldung zum Schaltauftrag. Zustand prüfen.':
+        !!(actual.mask&(1<<(action.id-1)))===action.on?'Relaiszustand bestätigt.':'Gewünschter Zustand nicht bestätigt. Relaiserweiterung prüfen.';
+    }
+  }
+  for(const button of document.querySelectorAll('#remote-relay-switches button')){
+    const index=Number(button.dataset.relay)-1;
+    const on=online&&!!(state.mask&(1<<index));
+    button.disabled=!online||remoteRelayBusy||!!state.busy||!!state.updating;
+    button.setAttribute('aria-checked',String(on));
+    button.dataset.state=online?(on?'on':'off'):'unknown';
+    button.querySelector('span:last-child').textContent=(state&&state.labels&&state.labels[index]||'Relais '+(index+1))+(online?(on?' · EIN':' · AUS'):' · unbekannt');
+  }
+  const selected=remoteRelayCards[Number(remoteRelayBoard.value)]||state;
+  if(remoteRelayBoard.options)for(let i=0;i<remoteRelayBoard.options.length;i++){
+    const card=remoteRelayCards[i];
+    remoteRelayBoard.options[i].textContent='Relaiserweiterung '+(i+1)+(card?(card.configured?(card.online?' · verbunden':' · nicht erreichbar'):' · frei'):'');
+  }
+  remoteRelaySlotStatus.textContent=!selected?'Status wird geladen …':!selected.configured?'Freier Platz · Neue Erweiterung hinzufügen.':selected.online?'Verbunden · '+selected.address:'Nicht erreichbar · '+selected.address;
+  remoteRelayForget.hidden=!selected||!selected.configured;
+  remoteRelayForget.disabled=!selected||!selected.online||selected.busy||selected.updating||relayPairActive||remoteRelayBusy;
+  relayForgetRecovery.hidden=!selected||!selected.configured;
+  remoteRelayDiscard.disabled=!selected||selected.busy||selected.updating||relayPairActive||remoteRelayBusy;
+  if(selected&&selected.forget&&selected.forget!=='idle'){
+    const messages={pending:'Erweiterung wird zurückgesetzt …',done:'Erweiterung zurückgesetzt und vergessen.',failed:'Zurücksetzen abgelehnt. Verbindung und Firmware der Erweiterung prüfen; sie bleibt gespeichert.',uncertain:'Rücksetzung nicht bestätigt. Die Erweiterung könnte bereits zurückgesetzt sein; Zuordnung und Karte prüfen.',save_failed:'Erweiterung zurückgesetzt, aber die Zuordnung konnte nicht gelöscht werden. Speicher am Haupt-ESP prüfen.'};
+    remoteRelayForgetMessage.textContent=messages[selected.forget]||'';
+  }
+  if(selected&&!remoteRelayDirty&&!remoteRelayBusy&&!remoteRelayForm.contains(document.activeElement)){
+    remoteRelayForm.elements.address.value=selected.address||'';
+    for(let i=0;i<4;i++)remoteRelayForm.elements['label'+(i+1)].value=selected.labels[i];
+  }
+}
+function updateExtraRelays(cards,simulation){
+  if(!cards.length){
+    for(const item of remoteExtraCards.values()){
+      item.status.textContent='Keine aktuellen Daten vom Haupt-ESP.';
+      for(const {button,label} of item.buttons){button.disabled=true;button.setAttribute('aria-checked','false');button.dataset.state='unknown';label.textContent=label.textContent.replace(/ · (EIN|AUS|unbekannt)$/,'')+' · unbekannt';}
+    }
+    return;
+  }
+  for(let board=1;board<cards.length;board++){
+    const state=cards[board];let item=remoteExtraCards.get(board);
+    if(!state.configured){if(item){item.container.remove();remoteExtraCards.delete(board);}continue;}
+    if(!item){
+      const container=document.createElement('div');container.className='remote-extra-card';
+      const heading=document.createElement('h3');heading.textContent='Relaiserweiterung '+(board+1);container.appendChild(heading);
+      const status=document.createElement('p');status.className='muted';container.appendChild(status);
+      const controls=document.createElement('div');controls.className='remote-relay-switches';container.appendChild(controls);
+      const buttons=[];
+      for(let id=1;id<=4;id++){
+        const button=document.createElement('button');button.type='button';button.className='relay-switch';button.dataset.board=String(board);button.dataset.relay=String(id);button.setAttribute('role','switch');
+        const track=document.createElement('span');track.className='switch-track';track.setAttribute('aria-hidden','true');
+        const label=document.createElement('span');button.append(track,label);controls.appendChild(button);buttons.push({button,label});
+      }
+      remoteExtraGroups.appendChild(container);item={container,status,buttons};remoteExtraCards.set(board,item);
+    }
+    item.status.textContent=state.online?'Verbunden':'Nicht erreichbar · Zustand unbekannt';
+    for(let index=0;index<4;index++){
+      const {button,label}=item.buttons[index],on=state.online&&!!(state.mask&(1<<index));
+      button.disabled=!state.online||remoteRelayBusy||!!state.busy||!!state.updating;
+      button.setAttribute('aria-checked',String(on));button.dataset.state=state.online?(on?'on':'off'):'unknown';
+      label.textContent=(state.labels[index]||'Relais '+(index+1))+(state.online?(on?' · EIN':' · AUS'):' · unbekannt');
+    }
+  }
+}
+function updateRelayDiscovery(discovery){
+  const devices=discovery&&Array.isArray(discovery.devices)?discovery.devices:[];
+  const signature=JSON.stringify(devices);
+  if(signature!==relayDiscoverySignature){
+    relayDiscoverySignature=signature;const previous=relayDiscoverySelect.value;
+    relayDiscoverySelect.replaceChildren(new Option('Erweiterung auswählen …',''));
+    devices.forEach(device=>relayDiscoverySelect.add(new Option(device.name+' · '+device.address,device.address)));
+    if(devices.some(device=>device.address===previous))relayDiscoverySelect.value=previous;
+  }
+  relayDiscoverySearch.disabled=!discovery||!discovery.ready||!discovery.available||discovery.searching;
+  relayDiscoveryMessage.textContent=!discovery||!discovery.ready?'Suche nicht verfügbar.':!discovery.available?'Heim-WLAN ist nicht verbunden.':discovery.searching?'Erweiterungen werden gesucht …':discovery.failed?'Suche fehlgeschlagen; bitte erneut versuchen.':devices.length?devices.length+' Erweiterung(en) im Heimnetz gefunden.':'Keine Erweiterung im Heimnetz gefunden.';
+}
+function updateRelayProvisioning(state){
+  const active=!!(state&&['waiting','claimed','searching','verifying'].includes(state.state));
+  relayPairActive=active;
+  const selected=remoteRelayCards[Number(remoteRelayBoard.value)];
+  relayPairMessage.textContent=!state||!state.ready?'Einrichtung nicht verfügbar.':!active&&selected&&selected.configured?'Für eine weitere Erweiterung einen freien Platz auswählen.':state.message||'';
+  relayPairForm.querySelector('button').disabled=!state||!state.ready||active||relayPairScanBusy||!relayPairForm.elements.ssid.value||!!(selected&&selected.configured);
+  relayPairScan.disabled=!state||!state.ready||active||relayPairScanBusy;
+  relayPairCancel.hidden=!active;
+  remoteRelayBoard.disabled=active;
+}
+relayPairForm.elements.ssid.addEventListener('change',()=>{
+  const selected=remoteRelayCards[Number(remoteRelayBoard.value)];
+  relayPairForm.querySelector('button').disabled=relayPairActive||!relayPairForm.elements.ssid.value||!!(selected&&selected.configured);
+});
+relayPairScan.addEventListener('click',async()=>{
+  if(relayPairScanBusy||wifiBusy||wifiScanning||relayPairActive)return;
+  relayPairScanBusy=true;wifiScanning=true;relayPairScan.disabled=true;relayPairForm.querySelector('button').disabled=true;
+  relayPairScanMessage.textContent='Einrichtungs-WLANs werden gesucht …';
+  try{
+    await request('/api/wifi/scan',{method:'POST',headers:{'X-Requested-With':'HeatingUI'}});
+    let result;
+    for(let i=0;i<24;i++){
+      await new Promise(resolve=>setTimeout(resolve,500));result=await request('/api/remote-relay/pair/scan');
+      if(result.state!=='scanning')break;
+    }
+    if(!result||result.state!=='complete')throw new Error('WLAN-Suche nicht abgeschlossen.');
+    const names=[...new Set(result.networks.filter(n=>/^Relaiserweiterung-[0-9A-F]{4}$/.test(n.ssid)&&!n.open).map(n=>n.ssid))];
+    const select=relayPairForm.elements.ssid;select.replaceChildren(new Option(names.length?'Erweiterung auswählen …':'Keine Erweiterung gefunden',''));
+    names.forEach(name=>select.add(new Option(name,name)));select.disabled=!names.length;
+    relayPairScanMessage.textContent=names.length?names.length+' Einrichtungs-WLAN(s) gefunden.':'Keine neue Erweiterung gefunden. Stromversorgung und Firmware prüfen.';
+  }catch(error){relayPairScanMessage.textContent='Suche fehlgeschlagen: '+error.message;}
+  finally{relayPairScanBusy=false;wifiScanning=false;relayPairScan.disabled=false;}
+});
+relayPairForm.addEventListener('submit',async event=>{
+  event.preventDefault();if(relayPairActive)return;
+  if(remoteRelayDirty&&!confirm('Ungespeicherte Änderungen verwerfen und die Erweiterung einrichten?'))return;
+  remoteRelayDirty=false;relayPairActive=true;remoteRelayBoard.disabled=true;relayPairScan.disabled=true;
+  relayPairForm.querySelector('button').disabled=true;relayPairMessage.textContent='Einrichtung wird gestartet …';
+  try{
+    await request('/api/remote-relay/pair',{method:'POST',headers:{'X-Requested-With':'HeatingUI','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({board:remoteRelayBoard.value,ssid:relayPairForm.elements.ssid.value})});
+    relayPairMessage.textContent='IO0 an der Relaiserweiterung eine Sekunde drücken.';
+  }catch(error){
+    if(error.status){relayPairActive=false;remoteRelayBoard.disabled=false;relayPairScan.disabled=false;relayPairMessage.textContent='Einrichtung nicht gestartet: '+error.message;}
+    else relayPairMessage.textContent='Start nicht bestätigt. Der Einrichtungsstatus wird geprüft.';
+  }
+});
+relayPairCancel.addEventListener('click',async()=>{
+  relayPairCancel.disabled=true;
+  try{await request('/api/remote-relay/pair/cancel',{method:'POST',headers:{'X-Requested-With':'HeatingUI'}});relayPairMessage.textContent='Einrichtung wurde abgebrochen.';}
+  catch(error){relayPairMessage.textContent='Abbruch nicht bestätigt: '+error.message;}
+  finally{relayPairCancel.disabled=false;}
+});
+remoteRelayBoard.addEventListener('change',()=>{
+  if(remoteRelayDirty&&!confirm('Ungespeicherte Änderungen verwerfen?')){remoteRelayBoard.value=remoteRelayBoard.dataset.previous||'0';return;}
+  remoteRelayBoard.dataset.previous=remoteRelayBoard.value;remoteRelayDirty=false;remoteRelayEditRevision++;remoteRelayForm.elements.key.value='';remoteRelayForgetMessage.textContent='';
+  showRemoteRelayConfigMessage('');
+  updateRemoteRelay(remoteRelayState,simulationEnabled);
+  const selected=remoteRelayCards[Number(remoteRelayBoard.value)];
+  relayPairForm.querySelector('button').disabled=relayPairActive||!relayPairForm.elements.ssid.value||!!(selected&&selected.configured);
+});
+remoteUpdateBoard.addEventListener('change',()=>updateRemoteRelay(remoteRelayState,simulationEnabled));
+relayDiscoverySelect.addEventListener('change',()=>{
+  if(!relayDiscoverySelect.value)return;
+  remoteRelayForm.elements.address.value=relayDiscoverySelect.value;remoteRelayForm.elements.key.value='';remoteRelayDirty=true;remoteRelayEditRevision++;
+  showRemoteRelayConfigMessage('Bitte den Verbindungsschlüssel der ausgewählten Erweiterung eingeben.');
+});
+relayDiscoverySearch.addEventListener('click',async()=>{
+  relayDiscoverySearch.disabled=true;
+  try{await request('/api/remote-relay/discover',{method:'POST',headers:{'X-Requested-With':'HeatingUI'}});relayDiscoveryMessage.textContent='Erweiterungen werden gesucht …';}
+  catch(error){relayDiscoveryMessage.textContent='Suche nicht gestartet: '+error.message;}
+});
+let remoteRelayEditRevision=0,remoteRelayConfigTimer=0;
+function showRemoteRelayConfigMessage(message,clearAfter=0){
+  if(remoteRelayConfigTimer)clearTimeout(remoteRelayConfigTimer);
+  remoteRelayConfigTimer=0;remoteRelayConfigMessage.textContent=message;
+  if(clearAfter)remoteRelayConfigTimer=setTimeout(()=>{remoteRelayConfigMessage.textContent='';remoteRelayConfigTimer=0;},clearAfter);
+}
+remoteRelayForm.addEventListener('input',()=>{remoteRelayDirty=true;remoteRelayEditRevision++;showRemoteRelayConfigMessage('');});
+remoteRelayForm.addEventListener('submit',async event=>{
+  event.preventDefault();if(remoteRelayBusy)return;
+  const board=remoteRelayBoard.value,editRevision=remoteRelayEditRevision;
+  remoteRelayBusy=true;remoteRelayRevision++;showRemoteRelayConfigMessage('Wird gespeichert …');
+  const values=new URLSearchParams();
+  for(const name of ['address','key','label1','label2','label3','label4'])values.set(name,remoteRelayForm.elements[name].value.trim());
+  values.set('board',board);
+  try{
+    await request('/api/remote-relay/config',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'HeatingUI'},body:values});
+    if(remoteRelayBoard.value===board){
+      if(remoteRelayEditRevision===editRevision){remoteRelayDirty=false;remoteRelayForm.elements.key.value='';showRemoteRelayConfigMessage('Gespeichert.',4000);}
+      else showRemoteRelayConfigMessage('Gespeichert. Weitere Änderungen sind noch nicht gespeichert.');
+    }
+  }catch(error){if(remoteRelayBoard.value===board)showRemoteRelayConfigMessage(error.status?'Nicht gespeichert: '+error.message:'Speichern nicht bestätigt. Bitte Verbindung und Einstellungen prüfen.');}
+  finally{remoteRelayBusy=false;}
+});
+remoteRelayForget.addEventListener('click',async()=>{
+  const board=Number(remoteRelayBoard.value),state=remoteRelayCards[board];
+  if(!state||!state.configured||!state.online||state.busy||remoteRelayBusy||relayPairActive)return;
+  if(!confirm('Erweiterung zurücksetzen und vergessen? Alle vier Relais werden ausgeschaltet; WLAN-Daten und gespeicherte Schaltzustände werden gelöscht.'))return;
+  remoteRelayBusy=true;remoteRelayRevision++;remoteRelayForget.disabled=true;remoteRelayForgetMessage.textContent='Erweiterung wird zurückgesetzt …';
+  try{await request('/api/remote-relay/forget',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'HeatingUI'},body:new URLSearchParams({board:String(board)})});}
+  catch(error){remoteRelayForgetMessage.textContent=error.status?'Zurücksetzen nicht gestartet: '+error.message:'Rücksetzung nicht bestätigt. Karte und Status prüfen.';}
+  finally{remoteRelayBusy=false;}
+});
+remoteRelayDiscard.addEventListener('click',async()=>{
+  const state=remoteRelayCards[Number(remoteRelayBoard.value)];
+  if(!state||!state.configured||state.busy||remoteRelayBusy||relayPairActive)return;
+  if(!confirm('Nur die Zuordnung entfernen? Die Karte wird dabei nicht zurückgesetzt und kann weiterhin WLAN-Zugangsdaten und Schaltzustände speichern.'))return;
+  remoteRelayBusy=true;remoteRelayRevision++;remoteRelayDiscard.disabled=true;
+  try{await request('/api/remote-relay/discard',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'HeatingUI'},body:new URLSearchParams({board:remoteRelayBoard.value})});remoteRelayDirty=false;remoteRelayForgetMessage.textContent='Zuordnung entfernt. Die Karte wurde nicht zurückgesetzt.';}
+  catch(error){remoteRelayForgetMessage.textContent='Zuordnung nicht entfernt: '+error.message;}
+  finally{remoteRelayBusy=false;}
+});
+async function switchRemoteRelay(event){
+  const button=event.target.closest('button[data-relay]');
+  const board=button&&button.dataset.board?Number(button.dataset.board):0;
+  const state=remoteRelayCards[board]||remoteRelayState;
+  if(!button||button.disabled||remoteRelayBusy||!state||!state.online)return;
+  const id=Number(button.dataset.relay),on=!(state.mask&(1<<(id-1)));
+  remoteRelayBusy=true;remoteRelayRevision++;remoteRelayMessage.textContent='Schaltauftrag wird gesendet …';
+  updateRemoteRelay(remoteRelayState,false);updateExtraRelays(remoteRelayCards,false);
+  try{
+    await request('/api/remote-relay/command',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'HeatingUI'},body:new URLSearchParams({board:String(board),id:String(id),value:on?'1':'0'})});
+    pendingRemoteAction={board,id,on};remoteRelayMessage.textContent='Auftrag angenommen. Warte auf Rückmeldung der Relaiserweiterung.';
+  }catch(error){remoteRelayMessage.textContent='Schaltauftrag nicht bestätigt: '+error.message;}
+  finally{remoteRelayBusy=false;}
+}
+document.getElementById('remote-relay-switches').addEventListener('click',switchRemoteRelay);
+remoteExtraGroups.addEventListener('click',switchRemoteRelay);
+async function fetchRemoteRelayReleases(fetcher){
+  const response=await fetcher('https://api.github.com/repos/NemoN/Solarsystemsteuerung_ESP32/releases?per_page=100',{cache:'no-store',headers:{Accept:'application/vnd.github+json'}});
+  if(!response.ok)throw new Error('GitHub meldet HTTP '+response.status);
+  const releases=await response.json();if(!Array.isArray(releases))throw new Error('Ungültige GitHub-Antwort');
+  return releases.filter(r=>!r.draft&&Array.isArray(r.assets)&&typeof r.tag_name==='string'&&/^[A-Za-z0-9._-]+$/.test(r.tag_name)).map(r=>{
+    const asset=r.assets.find(a=>a.name==='Relaiskarte.ino.bin'&&typeof a.digest==='string'&&/^sha256:[0-9a-f]{64}$/.test(a.digest)&&a.size>=1024&&a.size<=1310720&&
+      a.browser_download_url==='https://github.com/NemoN/Solarsystemsteuerung_ESP32/releases/download/'+r.tag_name+'/Relaiskarte.ino.bin');
+    return {tag:r.tag_name,name:r.name||r.tag_name,date:r.published_at||'',prerelease:r.prerelease,asset};
+  }).filter(r=>r.asset).sort((a,b)=>b.date.localeCompare(a.date)).slice(0,8);
+}
+remoteReleaseCheck.addEventListener('click',async()=>{
+  if(remoteRelaySearchBusy)return;
+  remoteRelaySearchBusy=true;remoteReleaseCheck.disabled=true;remoteGithubForm.elements.release.disabled=true;remoteGithubForm.querySelector('button').disabled=true;
+  remoteRelayReleases=[];remoteReleaseMessage.className='message';remoteReleaseMessage.textContent='GitHub-Releases werden gesucht …';
+  try{
+    remoteRelayReleases=await fetchRemoteRelayReleases(fetch);
+    const select=remoteGithubForm.elements.release;
+    select.replaceChildren(new Option(remoteRelayReleases.length?'Version auswählen …':'Keine Releases mit Relaiskarten-Firmware',''));
+    remoteRelayReleases.forEach((r,i)=>select.add(new Option(r.name+(r.prerelease?' · Vorabversion':''),String(i))));
+    select.disabled=!remoteRelayReleases.length;
+    remoteReleaseMessage.textContent=remoteRelayReleases.length?'Relaiskarten-Firmware gefunden.':'Noch kein Release mit Relaiskarte.ino.bin und SHA-256-Prüfsumme vorhanden.';
+  }catch(error){remoteReleaseMessage.className='message error';remoteReleaseMessage.textContent='GitHub nicht erreichbar: '+error.message;}
+  finally{remoteRelaySearchBusy=false;remoteReleaseCheck.disabled=false;}
+});
+remoteGithubForm.elements.release.addEventListener('change',()=>updateRemoteRelay(remoteRelayState,simulationEnabled));
+async function pollRemoteRelayGithubUpdate(post,token,progress,message){
+  let disconnectedAt=null;
+  for(;;){
+    await new Promise(resolve=>setTimeout(resolve,1000));
+    let status;
+    try{status=await post('status',{token});disconnectedAt=null;}
+    catch(error){
+      if(disconnectedAt===null)disconnectedAt=Date.now();
+      if((error.status&&error.status<500)||Date.now()-disconnectedAt>45000){const uncertain=new Error('Update-Status nicht erreichbar. Relaiskarte prüfen.');uncertain.updateUncertain=true;throw uncertain;}
+      message.textContent='Verbindung unterbrochen. Update-Status wird erneut abgefragt …';continue;
+    }
+    if(status.state==='done'){progress.value=100;message.textContent='Firmware aktualisiert. Neustart und Startprüfung der Relaiskarte bestätigt.';return;}
+    if(status.state==='failed'||status.state==='canceled')throw new Error(status.error||'Update nicht abgeschlossen');
+    if(status.state==='unknown'){const uncertain=new Error(status.error||'Neustart nicht bestätigt.');uncertain.updateUncertain=true;throw uncertain;}
+    const downloading=status.state==='downloading';
+    progress.value=status.size?Math.round((downloading?status.received:status.sent)*100/status.size):0;
+    message.textContent=status.state==='verifying'?'Relaiskarte startet neu; Startprüfung läuft …':
+      downloading?'Firmware wird von GitHub geladen: '+progress.value+' %':'Zur Relaiskarte übertragen: '+progress.value+' %';
+  }
+}
+remoteGithubForm.addEventListener('submit',async event=>{
+  event.preventDefault();
+  const selected=remoteGithubForm.elements.release.value,release=selected===''?null:remoteRelayReleases[Number(selected)];
+  const target=remoteRelayCards[Number(remoteUpdateBoard.value)]||remoteRelayState;
+  if(!release||remoteRelayUploadBusy||!target||!target.online||simulationEnabled)return;
+  if(!confirm('Version '+release.tag+' auf der Relaiskarte installieren? Beim Neustart sind die Relais kurz aus und stellen danach ihre gespeicherten Zustände wieder her.'))return;
+  remoteRelayUploadBusy=true;remoteGithubForm.querySelector('button').disabled=true;remoteRelayUpdateForm.querySelector('button').disabled=true;
+  remoteRelayUpdateProgress.hidden=false;remoteRelayUpdateProgress.value=0;remoteRelayUpdateMessage.className='message';remoteRelayUpdateMessage.textContent='GitHub-Download wird gestartet …';
+  const post=(path,values)=>request('/api/remote-relay/update/'+path,{method:'POST',headers:{'X-Requested-With':'HeatingUI','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(values)});
+  let started=false;
+  try{
+    const result=await post('github',{url:release.asset.browser_download_url,size:String(release.asset.size),sha256:release.asset.digest.slice(7),board:remoteUpdateBoard.value});
+    started=true;await pollRemoteRelayGithubUpdate(post,result.token,remoteRelayUpdateProgress,remoteRelayUpdateMessage);
+  }catch(error){
+    remoteRelayUpdateMessage.className='message error';
+    if(error.updateUncertain||(!started&&(!error.status||error.status>=500)))remoteRelayUpdateMessage.textContent='Update-Status unklar: Bitte die Relaiskarte und ihre Firmware prüfen.';
+    else remoteRelayUpdateMessage.textContent='Update nicht abgeschlossen: '+(error.message||'Verbindung unterbrochen');
+  }finally{remoteRelayUploadBusy=false;}
+});
+remoteRelayUpdateForm.addEventListener('submit',async event=>{
+  event.preventDefault();
+  const file=remoteRelayUpdateForm.elements.firmware.files[0];
+  if(!file||remoteRelayUploadBusy)return;
+  if(!confirm('Firmware der Relaiskarte aktualisieren? Beim Neustart sind die Relais kurz aus und stellen danach ihre gespeicherten Zustände wieder her.'))return;
+  remoteRelayUploadBusy=true;remoteRelayUpdateForm.querySelector('button').disabled=true;
+  remoteRelayUpdateProgress.hidden=false;remoteRelayUpdateProgress.value=0;
+  remoteRelayUpdateMessage.className='message';remoteRelayUpdateMessage.textContent='Firmware wird vorbereitet …';
+  const post=(path,values)=>request('/api/remote-relay/update/'+path,{method:'POST',headers:{'X-Requested-With':'HeatingUI','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(values)});
+  let token='',started=false,startUncertain=false;
+  try{
+    const prepared=await post('prepare',{size:String(file.size),board:remoteUpdateBoard.value});token=prepared.token;
+    for(let offset=0;offset<file.size;offset+=4096){
+      const bytes=new Uint8Array(await file.slice(offset,offset+4096).arrayBuffer());
+      const data=btoa(Array.from(bytes,byte=>String.fromCharCode(byte)).join(''));
+      let result;
+      for(let attempt=0;attempt<3;attempt++){
+        try{result=await post('chunk',{token,offset:String(offset),data});break;}
+        catch(error){if(attempt===2||(error.status&&error.status<500))throw error;await new Promise(resolve=>setTimeout(resolve,400));}
+      }
+      if(!result||result.received!==offset+bytes.length)throw new Error('Datenblock nicht bestätigt');
+      remoteRelayUpdateProgress.value=Math.round((offset+bytes.length)*100/file.size);
+      remoteRelayUpdateMessage.textContent='Zum Haupt-ESP übertragen: '+remoteRelayUpdateProgress.value+' %';
+    }
+    remoteRelayUpdateProgress.value=0;
+    try{await post('start',{token});started=true;}
+    catch(error){if(error.status&&error.status<500)throw error;startUncertain=true;}
+    let disconnectedAt=null,resent=false;
+    for(;;){
+      await new Promise(resolve=>setTimeout(resolve,1000));
+      let status;
+      try{status=await post('status',{token});disconnectedAt=null;}
+      catch(error){
+        if(disconnectedAt===null)disconnectedAt=Date.now();
+        if((error.status&&error.status<500)||Date.now()-disconnectedAt>45000){const uncertain=new Error('Der Update-Status ist nicht erreichbar. Relaiskarte prüfen.');uncertain.updateUncertain=true;throw uncertain;}
+        remoteRelayUpdateMessage.textContent='Verbindung unterbrochen. Update-Status wird erneut abgefragt …';continue;
+      }
+      if(status.state==='receiving'&&startUncertain&&!resent){
+        resent=true;try{await post('start',{token});started=true;startUncertain=false;}catch(error){if(error.status&&error.status<500&&error.status!==409)throw error;}
+        continue;
+      }
+      if(status.state==='done'){token='';remoteRelayUpdateProgress.value=100;remoteRelayUpdateMessage.textContent='Firmware aktualisiert. Neustart und Startprüfung der Relaiskarte bestätigt.';break;}
+      if(status.state==='failed'||status.state==='canceled')throw new Error(status.error||'Update nicht abgeschlossen');
+      if(status.state==='unknown'){const uncertain=new Error(status.error||'Neustart nicht bestätigt.');uncertain.updateUncertain=true;throw uncertain;}
+      remoteRelayUpdateProgress.value=status.size?Math.round(status.sent*100/status.size):0;
+      remoteRelayUpdateMessage.textContent=status.state==='verifying'?'Relaiskarte startet neu; Startprüfung läuft …':'Zur Relaiskarte übertragen: '+remoteRelayUpdateProgress.value+' %';
+    }
+  }catch(error){
+    if(token&&!started&&!startUncertain&&!error.updateUncertain){try{await post('abort',{token});}catch(ignored){}}
+    remoteRelayUpdateMessage.className='message error';
+    remoteRelayUpdateMessage.textContent=(error.updateUncertain?'Update-Status unklar: ':'Update nicht abgeschlossen: ')+(error.message||'Verbindung unterbrochen');
+  }finally{remoteRelayUploadBusy=false;}
+});
 async function request(url,options={}){
   const abort=new AbortController();
   const timer=setTimeout(()=>abort.abort(),6000);
@@ -1550,6 +1974,7 @@ async function refresh(){
   const simRequestRevision=simRevision;
   const solarRequestRevision=solarRevision;
   const heatingRequestRevision=heatingRevision;
+  const remoteRelayRequestRevision=remoteRelayRevision;
   try{
     if(saving||wifiBusy||wifiScanning)return;
     const data=await request('/api/status');
@@ -1558,6 +1983,11 @@ async function refresh(){
     updateWifi(data.wifi);
     updateHostname(data.wifi);
     updateRoof(data.roof,data.wifi);
+    if(remoteRelayRequestRevision===remoteRelayRevision&&!remoteRelayBusy){
+      remoteRelayCards=Array.isArray(data.remoteRelays)?data.remoteRelays:[data.remoteRelay];
+      updateRemoteRelay(remoteRelayCards[0],data.simulation);updateExtraRelays(remoteRelayCards,data.simulation);
+    }
+    updateRelayDiscovery(data.relayDiscovery);updateRelayProvisioning(data.relayProvisioning);
     if(!heatingBusy&&heatingRequestRevision===heatingRevision)updateHeating(data.heating);
     if(autoRequestRevision===autoRevision){updateAutomatic(data.automatic);updateAutomaticRules(data.automatic,data.controllers,data.pump);}
     if(!pumpBusy&&revision===pumpRevision)updatePump(data.pump);
@@ -1590,6 +2020,7 @@ async function refresh(){
     setConnectionStatus(true);
   }catch(error){
     updateRuntime(null,false);
+    remoteRelayCards=[];updateRemoteRelay(null,false);updateExtraRelays([],false);updateRelayDiscovery(null);updateRelayProvisioning(null);
     if(document.body.classList.contains('organigram-page'))updateOrganigram(null);
     if(solarRequestRevision===solarRevision){updateSolar(null,false);updateSolarDiagram(null,false,null);}
     if(!pumpBusy&&revision===pumpRevision)unknownPump();
@@ -1678,6 +2109,18 @@ async function loadDeviceInfo(){
     set('update-slot',d.updateSlot?d.updateSlot.label+' · '+size(d.updateSlot.size):'Nicht verfügbar');
     set('flash',size(d.flashBytes));set('heap',size(d.heapBytes));set('heap-free',size(d.heapFreeBytes));
     set('psram',d.psramBytes?size(d.psramBytes):'Nicht verfügbar');set('psram-free',d.psramBytes?size(d.psramFreeBytes):'Nicht verfügbar');
+    const w=d.wifi||{},n=d.wifiDetails||{},connected=w.state==='connected',ap=!!n.apActive;
+    const shown=value=>value&&value!=='0.0.0.0'?value:'—';
+    const states={unconfigured:'Nicht eingerichtet',queued:'Wird vorbereitet',starting:'Verbindung wird gestartet',connecting:'Verbindet',connected:'Verbunden',retry:'Nicht verbunden · neuer Versuch folgt'};
+    set('wifi-state',states[w.state]||'Nicht verfügbar');set('wifi-ssid',shown(w.ssid));
+    set('wifi-host',w.activeHostname?(w.activeHostname+(w.mdnsReady?' · '+w.activeHostname+'.local':' · mDNS nicht verfügbar')):'—');
+    set('wifi-rssi',connected&&typeof w.rssi==='number'?w.rssi+' dBm':'—');set('wifi-channel',n.channel?String(n.channel):'—');
+    const security=['Offen','WEP','WPA','WPA2','WPA / WPA2','WPA2 Enterprise','WPA3','WPA2 / WPA3'];
+    set('wifi-security',Number.isInteger(n.auth)?(security[n.auth]||'Andere'):'—');set('wifi-standards',shown(n.standards));
+    set('wifi-ip',shown(w.ip));set('wifi-mask',shown(n.mask));set('wifi-gateway',shown(n.gateway));
+    set('wifi-dns',[n.dns1,n.dns2].filter(v=>v&&v!=='0.0.0.0').join(' · ')||'—');set('wifi-mac',shown(n.mac));set('wifi-bssid',shown(n.bssid));
+    set('wifi-ap',ap?(shown(n.apSsid)+(w.pairing?' · Kopplung':' · Notzugang')):'Aus');
+    set('wifi-ap-network',ap?[n.apIp,n.apMac].filter(Boolean).join(' · '):'—');set('wifi-clients',ap?String(n.apClients):'—');
     status.className='muted';status.textContent='Verbunden · Aktualisierung alle 5 Sekunden';
   }catch(error){
     document.querySelectorAll('#info-section dd').forEach(e=>e.textContent='—');
@@ -2099,11 +2542,11 @@ void processWifi() {
   }
 }
 
-// Nur in der Vergleichsversion: Das AP/STA-Verhalten wird unabhängig von
+// Der Notzugang wird unabhängig von
 // Sensormessung und Pumpe geschaltet. Bootvalidierung und Neueinrichtung
 // benötigen den AP; WLAN-Ausfälle lösen den Notzugang nach 30 Sekunden aus.
 void processRecoveryAp() {
-  if (!AP_RECOVERY_ONLY) return;
+  if (relayProvisioning.apActive()) return;
   const uint32_t now = millis();
   const bool connected = wifiPhase == WIFI_CONNECTED && WiFi.status() == WL_CONNECTED;
   const bool apActive = (WiFi.getMode() & WIFI_AP) != 0;
@@ -2118,11 +2561,13 @@ void processRecoveryAp() {
   lastAttempt = now;
   waitingRetry = true;
   if (action == RecoveryApPolicy::Disable) {
-    if (WiFi.enableAP(false)) FirmwareLog.println("WLAN-Test: ESP32-Zugang ausgeschaltet; Heimnetz bleibt aktiv.");
-    else FirmwareLog.println("WLAN-Test: ESP32-Zugang konnte nicht ausgeschaltet werden.");
+    if (WiFi.enableAP(false)) FirmwareLog.println("ESP32-Notzugang ausgeschaltet; Heimnetz bleibt aktiv.");
+    else FirmwareLog.println("ESP32-Notzugang konnte nicht ausgeschaltet werden.");
   } else {
-    if (WiFi.softAP(AP_SSID, AP_PASSWORD)) FirmwareLog.println("WLAN-Test: ESP32-Notzugang aktiviert: http://192.168.4.1");
-    else FirmwareLog.println("WLAN-Test: ESP32-Notzugang konnte nicht aktiviert werden.");
+    WiFi.enableAP(true);
+    WiFi.softAPConfig(IPAddress(192, 168, 4, 1), IPAddress(192, 168, 4, 1), IPAddress(255, 255, 255, 0));
+    if (WiFi.softAP(AP_SSID, AP_PASSWORD)) FirmwareLog.println("ESP32-Notzugang aktiviert: http://192.168.4.1");
+    else FirmwareLog.println("ESP32-Notzugang konnte nicht aktiviert werden.");
   }
 }
 
@@ -2139,10 +2584,12 @@ String wifiStatusJson() {
     ",\"rssi\":" + (connected ? String(WiFi.RSSI()) : String("null")) +
     ",\"ip\":" + jsonString(connected ? WiFi.localIP().toString() : String("")) +
     ",\"apRecoveryOnly\":" + String(AP_RECOVERY_ONLY ? "true" : "false") +
+    ",\"pairing\":" + String(relayProvisioning.apActive() ? "true" : "false") +
     ",\"apIp\":" + jsonString((WiFi.getMode() & WIFI_AP) ? WiFi.softAPIP().toString() : String("")) + "}";
 }
 
 void startWifiScan() {
+  if (relayProvisioning.active()) { server.send(409, "text/plain; charset=utf-8", "Einrichtung einer Relaiserweiterung läuft."); return; }
   if (modeTransition) { server.send(409, "text/plain", "Neustart läuft."); return; }
   if (server.header("X-Requested-With") != "HeatingUI") {
     server.send(403, "text/plain; charset=utf-8", "Bitte das Webinterface verwenden.");
@@ -2197,7 +2644,26 @@ void sendWifiScan() {
   server.send(200, "application/json; charset=utf-8", json);
 }
 
+void sendRelayPairScan() {
+  server.sendHeader("Cache-Control", "no-store");
+  if (!wifiScanRequested) { server.send(200, "application/json", "{\"state\":\"idle\"}"); return; }
+  const int16_t count = WiFi.scanComplete();
+  if (count == WIFI_SCAN_RUNNING) { server.send(200, "application/json", "{\"state\":\"scanning\"}"); return; }
+  if (count < 0) { server.send(200, "application/json", "{\"state\":\"failed\"}"); return; }
+  String json = "{\"state\":\"complete\",\"networks\":["; unsigned found = 0;
+  for (int i = 0; i < count && found < 12; ++i) {
+    const String ssid = WiFi.SSID(i);
+    if (ssid.length() != 22 || !ssid.startsWith("Relaiserweiterung-") || WiFi.encryptionType(i) == WIFI_AUTH_OPEN) continue;
+    bool valid = true;
+    for (size_t j = 18; j < 22; ++j) if (!((ssid[j] >= '0' && ssid[j] <= '9') || (ssid[j] >= 'A' && ssid[j] <= 'F'))) valid = false;
+    if (!valid) continue;
+    if (found++) json += ',';
+    json += "{\"ssid\":" + jsonString(ssid) + ",\"open\":false}";
+  }
+  server.send(200, "application/json", json + "]}");
+}
 bool allowWifiChange() {
+  if (relayProvisioning.active()) { server.send(409, "text/plain; charset=utf-8", "Einrichtung einer Relaiserweiterung läuft."); return false; }
   if (modeTransition) { server.send(409, "text/plain", "Neustart läuft."); return false; }
   if (server.header("X-Requested-With") != "HeatingUI") {
     server.send(403, "text/plain; charset=utf-8", "Bitte das Webinterface verwenden.");
@@ -2407,6 +2873,16 @@ void sendDeviceInfo() {
   const esp_partition_t* next = esp_ota_get_next_update_partition(nullptr);
   const String core = String(ESP_ARDUINO_VERSION_MAJOR) + "." + ESP_ARDUINO_VERSION_MINOR + "." + ESP_ARDUINO_VERSION_PATCH;
   const String revision = String(chip.full_revision / 100) + "." + String(chip.full_revision % 100);
+  const bool connected = wifiPhase == WIFI_CONNECTED && WiFi.status() == WL_CONNECTED;
+  const bool apActive = WiFi.getMode() & WIFI_AP;
+  wifi_ap_record_t apInfo = {};
+  const bool apInfoReady = connected && esp_wifi_sta_get_ap_info(&apInfo) == ESP_OK;
+  String standards;
+  if (apInfoReady) {
+    if (apInfo.phy_11b) standards += "802.11b";
+    if (apInfo.phy_11g) standards += (standards.length() ? " / " : "") + String("802.11g");
+    if (apInfo.phy_11n) standards += (standards.length() ? " / " : "") + String("802.11n");
+  }
   const auto slotJson = [](const esp_partition_t* p) -> String {
     return p ? "{\"label\":" + jsonString(p->label) + ",\"size\":" + String(unsigned(p->size)) + "}" : "null";
   };
@@ -2418,7 +2894,20 @@ void sendDeviceInfo() {
     ",\"idf\":" + jsonString(ESP.getSdkVersion()) + ",\"uptimeSeconds\":" + String((unsigned long)(esp_timer_get_time() / 1000000ULL)) +
     ",\"flashBytes\":" + String(ESP.getFlashChipSize()) + ",\"heapBytes\":" + String(ESP.getHeapSize()) +
     ",\"heapFreeBytes\":" + String(ESP.getFreeHeap()) + ",\"psramBytes\":" + String(ESP.getPsramSize()) +
-    ",\"psramFreeBytes\":" + String(ESP.getFreePsram()) + ",\"runningSlot\":" + slotJson(running) + ",\"updateSlot\":" + slotJson(next) + "}";
+    ",\"psramFreeBytes\":" + String(ESP.getFreePsram()) + ",\"runningSlot\":" + slotJson(running) + ",\"updateSlot\":" + slotJson(next) +
+    ",\"wifi\":" + wifiStatusJson() + ",\"wifiDetails\":{\"mac\":" + jsonString(WiFi.macAddress()) +
+    ",\"bssid\":" + jsonString(connected ? WiFi.BSSIDstr() : String("")) +
+    ",\"channel\":" + String((connected || apActive) ? WiFi.channel() : 0) +
+    ",\"auth\":" + (apInfoReady ? String(int(apInfo.authmode)) : String("null")) + ",\"standards\":" + jsonString(standards) +
+    ",\"mask\":" + jsonString(connected ? WiFi.subnetMask().toString() : String("")) +
+    ",\"gateway\":" + jsonString(connected ? WiFi.gatewayIP().toString() : String("")) +
+    ",\"dns1\":" + jsonString(connected ? WiFi.dnsIP(0).toString() : String("")) +
+    ",\"dns2\":" + jsonString(connected ? WiFi.dnsIP(1).toString() : String("")) +
+    ",\"apActive\":" + String(apActive ? "true" : "false") +
+    ",\"apSsid\":" + jsonString(apActive ? WiFi.softAPSSID() : String("")) +
+    ",\"apIp\":" + jsonString(apActive ? WiFi.softAPIP().toString() : String("")) +
+    ",\"apMac\":" + jsonString(apActive ? WiFi.softAPmacAddress() : String("")) +
+    ",\"apClients\":" + String(apActive ? WiFi.softAPgetStationNum() : 0) + "}}";
   server.sendHeader("Cache-Control", "no-store");
   server.send(200, "application/json; charset=utf-8", json);
 }
@@ -2449,6 +2938,175 @@ String pumpRuntimeJson() {
     ",\"undated\":[" + String(s.undated[0]) + "," + String(s.undated[1]) + "," + String(s.undated[2]) + "]}";
 }
 
+String remoteRelayStatusJson(unsigned board = 0) {
+  const RemoteRelaySnapshot state = remoteRelays[board].snapshot();
+  static const char* forgetNames[] = {"idle", "pending", "done", "failed", "uncertain", "save_failed"};
+  String json = "{\"id\":" + String(board) + ",\"ready\":" + String(remoteRelayCardReady[board] ? "true" : "false") +
+    ",\"configured\":" + String(state.config.address[0] ? "true" : "false") +
+    ",\"online\":" + String(state.online ? "true" : "false") +
+    ",\"busy\":" + String(state.busy ? "true" : "false") +
+    ",\"updating\":" + String(remoteRelayUpdate.active() ? "true" : "false") +
+    ",\"mask\":" + String(state.mask) + ",\"forget\":" + jsonString(forgetNames[state.forgetState]) + ",\"address\":" + jsonString(state.config.address) + ",\"labels\":[";
+  for (int i = 0; i < 4; ++i) { if (i) json += ','; json += jsonString(state.config.labels[i]); }
+  return json + "]}";
+}
+bool remoteRelayPostAllowed();
+bool remoteRelayAnyBusy() {
+  for (unsigned i = 0; i < REMOTE_RELAY_COUNT; ++i) if (remoteRelays[i].snapshot().busy) return true;
+  return false;
+}
+bool remoteRelayBoardArgument(unsigned& board) {
+  board = 0;
+  if (server.hasArg("board")) {
+    const String value = server.arg("board");
+    if (value.length() != 1 || value[0] < '0' || value[0] >= '0' + REMOTE_RELAY_COUNT) {
+      server.send(400, "text/plain; charset=utf-8", "Ungültige Relaiserweiterung."); return false;
+    }
+    board = unsigned(value[0] - '0');
+  }
+  if (!remoteRelayCardReady[board]) { server.send(503, "text/plain", "Relaiserweiterung nicht verfügbar."); return false; }
+  return true;
+}
+String relayDiscoveryJson() {
+  const RelayDiscoverySnapshot snapshot = relayDiscovery.snapshot();
+  String json = "{\"ready\":" + String(relayDiscoveryReady ? "true" : "false") +
+    ",\"available\":" + String(snapshot.available ? "true" : "false") +
+    ",\"searching\":" + String(snapshot.searching ? "true" : "false") +
+    ",\"failed\":" + String(snapshot.failed ? "true" : "false") + ",\"devices\":[";
+  for (size_t i = 0; i < snapshot.results.size(); ++i) {
+    if (i) json += ',';
+    const RelayDiscoveryEntry& entry = snapshot.results[i];
+    json += "{\"id\":" + jsonString(entry.id) + ",\"name\":" + jsonString(entry.name) + ",\"address\":" + jsonString(entry.address) + "}";
+  }
+  return json + "]}";
+}
+void startRelayDiscovery() {
+  if (!remoteRelayPostAllowed()) return;
+  if (!relayDiscoveryReady || !relayDiscovery.search()) { server.send(409, "text/plain; charset=utf-8", "Suche läuft bereits oder Heim-WLAN ist nicht verbunden."); return; }
+  server.send(202, "application/json", "{\"started\":true}");
+}
+String relayProvisioningJson() {
+  const RelayProvisionSnapshot snapshot = relayProvisioning.snapshot();
+  return "{\"ready\":" + String(relayProvisioningReady ? "true" : "false") + ",\"state\":" + jsonString(snapshot.state) +
+    ",\"message\":" + jsonString(snapshot.message) + ",\"board\":" + String(snapshot.board) + "}";
+}
+void startRelayProvisioning() {
+  if (!remoteRelayPostAllowed()) return;
+  unsigned board = 0; if (!remoteRelayBoardArgument(board)) return;
+  if (!relayProvisioningReady || !relayDiscoveryReady || remoteRelayUpdate.active() ||
+      wifiPhase != WIFI_CONNECTED || WiFi.status() != WL_CONNECTED ||
+      (wifiScanRequested && WiFi.scanComplete() == WIFI_SCAN_RUNNING) || server.args() != 2 ||
+      !relayProvisioning.start(board, server.arg("ssid"), wifiCredentials.ssid, wifiCredentials.password)) {
+    server.send(409, "text/plain; charset=utf-8", "Einrichtung nicht gestartet. Freien Platz, AP-Namen und Heim-WLAN prüfen; der Notzugang darf nicht von anderen Geräten genutzt werden."); return;
+  }
+  server.send(202, "application/json", "{\"started\":true}");
+}
+void cancelRelayProvisioning() {
+  if (!remoteRelayPostAllowed()) return;
+  if (server.args() != 0 || !relayProvisioning.cancel()) { server.send(409, "text/plain", "Keine Einrichtung aktiv."); return; }
+  server.send(200, "application/json", "{\"canceled\":true}");
+}
+bool remoteRelayPostAllowed() {
+  if (server.header("X-Requested-With") != "HeatingUI") { server.send(403, "text/plain", "Bitte das Webinterface verwenden."); return false; }
+  if (!remoteRelayReady) { server.send(503, "text/plain", "Relaisanbindung nicht verfügbar."); return false; }
+  if (otaActive || otaVerificationPending || modeTransition) { server.send(409, "text/plain", "Update oder Neustart läuft."); return false; }
+  return true;
+}
+void saveRemoteRelayConfig() {
+  if (!remoteRelayPostAllowed()) return;
+  if (remoteRelayUpdate.active() || relayProvisioning.active()) { server.send(409, "text/plain", "Einrichtung oder Update der Relaiserweiterung läuft."); return; }
+  unsigned board = 0; if (!remoteRelayBoardArgument(board)) return;
+  const String address = server.arg("address"), key = server.arg("key");
+  if (address.isEmpty()) { server.send(400, "text/plain; charset=utf-8", "IP-Adresse eingeben. Zum Entfernen die Funktion ‚Erweiterung vergessen‘ verwenden."); return; }
+  if (address.length()) for (unsigned i = 0; i < REMOTE_RELAY_COUNT; ++i) {
+    if (i == board) continue;
+    const RemoteRelaySnapshot other = remoteRelays[i].snapshot();
+    if (other.config.address[0] && (address == other.config.address || (key.length() && key == other.config.key))) {
+      server.send(409, "text/plain; charset=utf-8", "Diese Relaiserweiterung ist bereits eingerichtet."); return;
+    }
+  }
+  String labels[4];
+  for (int i = 0; i < 4; ++i) labels[i] = server.arg("label" + String(i + 1));
+  if (!server.hasArg("address") || !server.hasArg("key") || !remoteRelays[board].configure(server.arg("address"), server.arg("key"), labels)) {
+    server.send(400, "text/plain; charset=utf-8", "IP-Adresse, Schlüssel oder Beschriftungen prüfen; eventuell ist die Karte gerade beschäftigt oder der Speicher nicht verfügbar."); return;
+  }
+  server.send(200, "application/json", "{\"saved\":true}");
+}
+void saveRemoteRelayCommand() {
+  if (!remoteRelayPostAllowed()) return;
+  if (remoteRelayUpdate.active()) { server.send(409, "text/plain", "Update der Relaiskarte läuft."); return; }
+  unsigned board = 0; if (!remoteRelayBoardArgument(board)) return;
+  const String id = server.arg("id"), value = server.arg("value");
+  if (id.length() != 1 || id[0] < '1' || id[0] > '4' || (value != "0" && value != "1")) { server.send(400, "text/plain", "Ungültiger Schaltauftrag."); return; }
+  if (!remoteRelays[board].command(id[0] - '0', value == "1")) { server.send(409, "text/plain; charset=utf-8", "Relaiskarte nicht erreichbar oder beschäftigt."); return; }
+  server.send(202, "application/json", "{\"accepted\":true}");
+}
+void forgetRemoteRelay() {
+  if (!remoteRelayPostAllowed()) return;
+  if (remoteRelayUpdate.active() || relayProvisioning.active()) { server.send(409, "text/plain", "Einrichtung oder Update läuft."); return; }
+  unsigned board = 0;
+  if (!remoteRelayBoardArgument(board)) return;
+  if (server.args() != 1) { server.send(400, "text/plain", "Ungültige Auswahl."); return; }
+  if (!remoteRelays[board].forget()) { server.send(409, "text/plain; charset=utf-8", "Erweiterung nicht erreichbar oder beschäftigt; sie bleibt gespeichert."); return; }
+  server.send(202, "application/json", "{\"accepted\":true}");
+}
+void discardRemoteRelay() {
+  if (!remoteRelayPostAllowed()) return;
+  if (remoteRelayUpdate.active() || relayProvisioning.active()) { server.send(409, "text/plain", "Einrichtung oder Update läuft."); return; }
+  unsigned board = 0; if (!remoteRelayBoardArgument(board)) return;
+  if (server.args() != 1 || !remoteRelays[board].clearAssociation()) { server.send(409, "text/plain; charset=utf-8", "Zuordnung konnte nicht entfernt werden."); return; }
+  server.send(200, "application/json", "{\"removed\":true}");
+}
+bool otaNumber(const String& text, uint32_t& number);
+void prepareRemoteRelayUpdate() {
+  if (!remoteRelayPostAllowed()) return;
+  if (!remoteRelayUpdateReady || SIMULATION_MODE || relayProvisioning.active()) { server.send(409, "text/plain; charset=utf-8", "Relais-Update im Testmodus, während der Einrichtung oder ohne Update-Speicher nicht verfügbar."); return; }
+  unsigned board = 0; if (!remoteRelayBoardArgument(board)) return;
+  uint32_t size = 0; char token[33];
+  if (server.args() != (server.hasArg("board") ? 2 : 1) || !otaNumber(server.arg("size"), size) || !remoteRelayUpdate.prepare(size, remoteRelays[board].snapshot(), token)) {
+    server.send(409, "text/plain; charset=utf-8", "Relaiskarte nicht erreichbar, beschäftigt, Datei zu groß oder nicht genügend PSRAM."); return;
+  }
+  server.send(200, "application/json", "{\"token\":\"" + String(token) + "\"}");
+}
+void startRemoteRelayGithubUpdate() {
+  if (!remoteRelayPostAllowed()) return;
+  if (!remoteRelayUpdateReady || SIMULATION_MODE || relayProvisioning.active()) { server.send(409, "text/plain; charset=utf-8", "Relais-Update im Testmodus, während der Einrichtung oder ohne Update-Speicher nicht verfügbar."); return; }
+  unsigned board = 0; if (!remoteRelayBoardArgument(board)) return;
+  uint32_t size = 0; char token[33];
+  if (server.args() != (server.hasArg("board") ? 4 : 3) || !otaNumber(server.arg("size"), size) ||
+      !remoteRelayUpdate.prepareGithub(size, server.arg("url"), server.arg("sha256"), remoteRelays[board].snapshot(), token)) {
+    server.send(400, "text/plain; charset=utf-8", "Release ungültig, Relaiskarte nicht erreichbar oder nicht genügend Speicher."); return;
+  }
+  server.send(202, "application/json", "{\"token\":\"" + String(token) + "\"}");
+}
+void receiveRemoteRelayUpdateChunk() {
+  if (!remoteRelayPostAllowed()) return;
+  uint32_t offset = 0;
+  if (server.args() != 3 || !otaNumber(server.arg("offset"), offset) || !remoteRelayUpdate.chunk(server.arg("token"), offset, server.arg("data"))) {
+    server.send(400, "text/plain; charset=utf-8", "Update-Datenblock ungültig oder nicht erwartet."); return;
+  }
+  RemoteRelayUpdateStatus status;
+  if (!remoteRelayUpdate.status(server.arg("token"), status)) { server.send(409, "text/plain", "Update nicht verfügbar."); return; }
+  server.send(200, "application/json", "{\"received\":" + String(status.received) + "}");
+}
+void startRemoteRelayUpdate() {
+  if (!remoteRelayPostAllowed()) return;
+  if (server.args() != 1 || !remoteRelayUpdate.start(server.arg("token"))) { server.send(409, "text/plain", "Update nicht vollständig oder nicht verfügbar."); return; }
+  server.send(202, "application/json", "{\"started\":true}");
+}
+void cancelRemoteRelayUpdate() {
+  if (!remoteRelayPostAllowed()) return;
+  if (server.args() != 1 || !remoteRelayUpdate.cancel(server.arg("token"))) { server.send(409, "text/plain", "Abbruch nicht möglich."); return; }
+  server.send(200, "application/json", "{\"canceled\":true}");
+}
+void remoteRelayUpdateStatus() {
+  if (!remoteRelayPostAllowed()) return;
+  RemoteRelayUpdateStatus status;
+  if (server.args() != 1 || !remoteRelayUpdate.status(server.arg("token"), status)) { server.send(404, "text/plain", "Update nicht gefunden."); return; }
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "application/json", "{\"state\":" + jsonString(status.state) + ",\"error\":" + jsonString(status.error) +
+    ",\"size\":" + String(status.size) + ",\"received\":" + String(status.received) + ",\"sent\":" + String(status.sent) + "}");
+}
 void sendStatus() {
   String json;
   json.reserve(1400);
@@ -2492,7 +3150,9 @@ void sendStatus() {
     ",\"directionOff\":" + String(DIRECTION_RELAY_OFF_DIRECTION == PumpDirection::BufferToCombi ? 1 : 0) + "}" +
     ",\"statusLed\":{\"state\":" + jsonString(StatusLed::name(statusLed.mode())) +
     ",\"available\":" + String(statusLedPinSafe ? "true" : "false") + "}" +
-    ",\"wifi\":" + wifiStatusJson() + ",\"clock\":" + clockStatusJson() +
+    ",\"remoteRelay\":" + remoteRelayStatusJson() + ",\"remoteRelays\":[";
+  for (unsigned i = 0; i < REMOTE_RELAY_COUNT; ++i) { if (i) json += ','; json += remoteRelayStatusJson(i); }
+  json += "],\"relayDiscovery\":" + relayDiscoveryJson() + ",\"relayProvisioning\":" + relayProvisioningJson() + ",\"wifi\":" + wifiStatusJson() + ",\"clock\":" + clockStatusJson() +
     ",\"roof\":{\"seen\":" + String(roofSeen ? "true" : "false") +
     ",\"online\":" + String(roofOnline ? "true" : "false") +
     ",\"ageSeconds\":" + (roofSeen ? String((millis() - lastRoofHeartbeat) / 1000) : String("null")) + "}}";
@@ -2743,6 +3403,7 @@ void setTestMode() {
   }
   const bool next = enabled == "1";
   if (next == SIMULATION_MODE) { server.send(200, "application/json", "{\"changed\":false}"); return; }
+  if (remoteRelayAnyBusy() || remoteRelayUpdate.active() || relayProvisioning.active()) { server.send(409, "text/plain; charset=utf-8", "Die Relaiskarte ist beschäftigt. Bitte erneut versuchen."); return; }
   if (!storageReady) { server.send(503, "text/plain; charset=utf-8", "Speicher nicht verfügbar."); return; }
 
   // Bei einem Modus ohne WLAN-Einstellungen den aktuellen Zugang übernehmen.
@@ -2828,7 +3489,7 @@ void prepareOta() {
   FirmwareLog.printf("OTA-Diagnose: Manueller Upload angefordert; Argumente=%u.\n", unsigned(server.args()));
   logOtaEnvironment("Vorbereitung manuell");
   if (server.header("X-Requested-With") != "HeatingUI") { server.send(403, "text/plain", "Bitte das Webinterface verwenden."); return; }
-  if (otaActive || otaVerificationPending || modeTransition) { server.send(409, "text/plain", "Steuerung ist beschäftigt."); return; }
+  if (otaActive || otaVerificationPending || modeTransition || remoteRelayAnyBusy() || remoteRelayUpdate.active() || relayProvisioning.active()) { server.send(409, "text/plain", "Steuerung ist beschäftigt."); return; }
   uint32_t size = 0;
   const esp_partition_t* next = esp_ota_get_next_update_partition(nullptr);
   if (server.args() != 1 || !otaNumber(server.arg("size"), size) || size < 1024 || !next || size > next->size) {
@@ -3015,7 +3676,7 @@ void startGithubOta() {
   FirmwareLog.printf("OTA-Diagnose: GitHub-Update angefordert; Argumente=%u.\n", unsigned(server.args()));
   logOtaEnvironment("Vorbereitung GitHub");
   if (server.header("X-Requested-With") != "HeatingUI") { server.send(403, "text/plain", "Bitte das Webinterface verwenden."); return; }
-  if (otaActive || otaVerificationPending || modeTransition) { server.send(409, "text/plain", "Steuerung ist beschäftigt."); return; }
+  if (otaActive || otaVerificationPending || modeTransition || remoteRelayAnyBusy() || remoteRelayUpdate.active() || relayProvisioning.active()) { server.send(409, "text/plain", "Steuerung ist beschäftigt."); return; }
   const String url = server.arg("url"), digest = server.arg("sha256");
   const String prefix = "https://github.com/NemoN/Solarsystemsteuerung_ESP32/releases/download/", suffix = "/Backload.ino.bin";
   uint32_t size = 0; const esp_partition_t* next = esp_ota_get_next_update_partition(nullptr);
@@ -3129,7 +3790,7 @@ void setup() {
   temperatureHistory.attach(historyBuffer, HISTORY_CAPACITY, [](){ servicePump(); yield(); });
   if (temperatureHistory.available()) FirmwareLog.printf("Temperaturverlauf: %u Minuten im PSRAM reserviert.\n", unsigned(HISTORY_CAPACITY));
   else FirmwareLog.println("Temperaturverlauf nicht verfügbar: PSRAM fehlt oder ist zu klein. Regelung läuft weiter.");
-  if (SIMULATION_MODE) FirmwareLog.println("[SIMULATION] Aktiv: simulierte Sensoren, Pumpe und Ölfreigabe; alle realen Relais bleiben AUS.");
+  if (SIMULATION_MODE) FirmwareLog.println("[SIMULATION] Aktiv: simulierte Sensoren, Pumpe und Ölfreigabe; Relais am Haupt-ESP AUS, WLAN-Relais schaltbar.");
   runtimeReady = runtimePreferences.begin("pump-runtime", false);
   if (runtimeReady && runtimePreferences.isKey("periods1")) {
     PumpRuntime::State saved{};
@@ -3213,10 +3874,21 @@ void setup() {
   mdnsReady = MDNS.begin(activeHostname);
   if (mdnsReady) { MDNS.addService("http", "tcp", 80); FirmwareLog.printf("mDNS: http://%s.local/\n", activeHostname.c_str()); }
   else FirmwareLog.println("mDNS konnte nicht gestartet werden; Zugriff über IP bleibt möglich.");
-  if (!roofUdp.begin(ROOF_HEARTBEAT_PORT)) {
+  if (ROOF_SENSOR_ENABLED && !roofUdp.begin(ROOF_HEARTBEAT_PORT)) {
     FirmwareLog.println("UDP-Empfang für Dachsensor konnte nicht gestartet werden.");
   }
   loadWifiCredentials();
+  for (unsigned i = 0; i < REMOTE_RELAY_COUNT; ++i) {
+    char key[16]; snprintf(key, sizeof(key), "config%u", i + 1);
+    remoteRelayCardReady[i] = remoteRelays[i].begin(key);
+    if (!remoteRelayCardReady[i]) FirmwareLog.printf("Relaiserweiterung %u konnte nicht initialisiert werden.\n", i + 1);
+  }
+  remoteRelayReady = remoteRelayCardReady[0];
+  relayDiscoveryReady = relayDiscovery.begin();
+  relayProvisioningReady = relayProvisioning.begin(remoteRelays, REMOTE_RELAY_COUNT, &relayDiscovery);
+  remoteRelayUpdateReady = remoteRelayUpdate.begin();
+  if (!remoteRelayUpdateReady) FirmwareLog.println("Relais-Update konnte nicht initialisiert werden.");
+  if (!remoteRelayReady) FirmwareLog.println("WLAN-Relaisanbindung konnte nicht gestartet werden.");
   const char* headers[] = {"X-Requested-With"};
   server.collectHeaders(headers, 1);
   server.on("/", HTTP_GET, []() {
@@ -3228,6 +3900,20 @@ void setup() {
   server.on("/api/device-info", HTTP_GET, sendDeviceInfo);
   server.on("/api/settings", HTTP_POST, saveSettings);
   server.on("/api/pump", HTTP_POST, savePumpControl);
+  server.on("/api/remote-relay/config", HTTP_POST, saveRemoteRelayConfig);
+  server.on("/api/remote-relay/discover", HTTP_POST, startRelayDiscovery);
+  server.on("/api/remote-relay/pair", HTTP_POST, startRelayProvisioning);
+  server.on("/api/remote-relay/pair/scan", HTTP_GET, sendRelayPairScan);
+  server.on("/api/remote-relay/pair/cancel", HTTP_POST, cancelRelayProvisioning);
+  server.on("/api/remote-relay/command", HTTP_POST, saveRemoteRelayCommand);
+  server.on("/api/remote-relay/forget", HTTP_POST, forgetRemoteRelay);
+  server.on("/api/remote-relay/discard", HTTP_POST, discardRemoteRelay);
+  server.on("/api/remote-relay/update/prepare", HTTP_POST, prepareRemoteRelayUpdate);
+  server.on("/api/remote-relay/update/github", HTTP_POST, startRemoteRelayGithubUpdate);
+  server.on("/api/remote-relay/update/chunk", HTTP_POST, receiveRemoteRelayUpdateChunk);
+  server.on("/api/remote-relay/update/start", HTTP_POST, startRemoteRelayUpdate);
+  server.on("/api/remote-relay/update/status", HTTP_POST, remoteRelayUpdateStatus);
+  server.on("/api/remote-relay/update/abort", HTTP_POST, cancelRemoteRelayUpdate);
   server.on("/api/automatic", HTTP_POST, saveAutomaticSettings);
   server.on("/api/solar", HTTP_POST, saveSolarSettings);
   server.on("/api/heating", HTTP_POST, saveHeatingMode);
@@ -3251,6 +3937,8 @@ void setup() {
 
 void loop() {
   servicePump();
+  remoteRelayUpdate.loop();
+  relayProvisioning.loop();
   unsigned long now = millis();
   if (otaActive && otaFinished && now - otaLastActivity >= 2500 && now - otaStoppedAt >= 2500) { savePumpRuntime(true); ESP.restart(); }
   if (otaActive && !otaFinished && !githubUpdateActive && now - otaLastActivity >= 30000) {
@@ -3309,7 +3997,7 @@ void loop() {
   server.handleClient();
   processWifi();
   processRecoveryAp();
-  processRoofHeartbeat();
+  if (ROOF_SENSOR_ENABLED) processRoofHeartbeat();
   processWebSerialMonitor();
   servicePump();
   savePumpRuntime();

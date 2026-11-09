@@ -9,7 +9,8 @@ Die Backloadpumpe überträgt Wärme zwischen den Speichern. Ihre Mindesttempera
 lassen sich für Kombi und Puffer getrennt einstellen. Die Solarpumpe wird
 unabhängig davon geregelt. Auf der Verlaufsseite stehen die Pumpenlaufzeiten nach
 Tag, Monat und Jahr. Ein optionaler Docker-Dienst archiviert Temperaturen und
-Pumpenlaufzeiten dauerhaft.
+Pumpenlaufzeiten dauerhaft. Bis zu vier WLAN-Relaiserweiterungen lassen sich
+über den Haupt-ESP einrichten und bedienen.
 
 Die Steuerung ist für eine konkrete Heizungsanlage ausgelegt. Vor dem Einsatz
 müssen Sensoranschlüsse, Förderrichtung, Regelparameter und die unabhängigen
@@ -35,6 +36,7 @@ aktualisiert werden; danach den Build mit dem angegebenen Core prüfen.
 
 - [Firmware und Einrichtung](Backload/LIESMICH.txt)
 - [Backload- und Solarregelung](Documentation/Backload-Regelung.md)
+- [WLAN-Relaiskarte einrichten](Relaiskarte/README.md)
 - [Temperaturarchiv](history-server/README.md)
 - [Mitgelieferte Bibliotheken](Backload/src/README.md)
 - [Tests](tests/)

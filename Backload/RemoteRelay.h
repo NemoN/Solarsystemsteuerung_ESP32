@@ -1,0 +1,40 @@
+#pragma once
+#include <Arduino.h>
+#include <Preferences.h>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
+
+struct RemoteRelayConfig {
+  char address[16];
+  char key[33];
+  char labels[4][49];
+};
+struct RemoteRelaySnapshot {
+  RemoteRelayConfig config;
+  bool online;
+  bool busy;
+  uint8_t mask;
+  uint8_t forgetState;
+};
+class RemoteRelay {
+public:
+  enum ForgetState : uint8_t { FORGET_IDLE, FORGET_PENDING, FORGET_DONE, FORGET_FAILED, FORGET_UNCERTAIN, FORGET_SAVE_FAILED };
+  bool begin(const char* storageKey = "config1");
+  RemoteRelaySnapshot snapshot();
+  bool configure(const String& address, const String& key, const String labels[4]);
+  bool command(unsigned id, bool on);
+  bool forget();
+  bool clearAssociation();
+private:
+  static void taskEntry(void* arg);
+  void task();
+  SemaphoreHandle_t lock_ = nullptr;
+  Preferences preferences_;
+  char storageKey_[16] = {};
+  RemoteRelayConfig config_ = {};
+  bool storageReady_ = false, online_ = false, busy_ = false;
+  uint8_t mask_ = 0, pendingId_ = 0;
+  uint32_t lastContact_ = 0;
+  bool pendingValue_ = false;
+  ForgetState forgetState_ = FORGET_IDLE;
+};
