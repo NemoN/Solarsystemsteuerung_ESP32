@@ -42,7 +42,7 @@
 #include <time.h>
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
-const char* FIRMWARE_VERSION = "2.7.2";
+const char* FIRMWARE_VERSION = "2.8.0";
 // Der AP wird nur für Einrichtung und Wiederherstellung benötigt.
 constexpr bool AP_RECOVERY_ONLY = true;
 
@@ -310,8 +310,10 @@ void savePumpRuntime(bool force = false) {
 void serviceSolarPump() {
   const TemperatureController& tank = controllers[3];
   const TemperatureController& panel = controllers[4];
-  const bool enabled = storageReady && solarSettingsValid && solarSensorsFresh() && !modeTransition && !otaActive && !otaVerificationPending;
   const bool wasOn = solarControl.on();
+  const bool paused = modeTransition || otaActive || otaVerificationPending;
+  if (paused) solarControl.setManual(false);
+  const bool enabled = !paused && (solarControl.manual() || (storageReady && solarSettingsValid && solarSensorsFresh()));
   const bool on = solarControl.update(enabled, panel.valid, panel.currentTemp, tank.valid, tank.currentTemp, solarStartDifference);
   // Im Testmodus bleibt der echte Active-Low-Ausgang wie beim Start auf HIGH.
   if (!SIMULATION_MODE) digitalWrite(SOLAR_PUMP_PIN, on ? LOW : HIGH);
@@ -440,7 +442,7 @@ void measureTemperatures() {
     c.fault = reading.fault;
     c.sensorError = reading.error;
     c.valid = reading.valid();
-    // Einen Solarfühlerfehler sofort abschalten, vor der Sensor-Neuinitialisierung.
+    // Solarautomatik bei Fühlerfehler sofort abschalten; Handbetrieb bleibt aktiv.
     if (!c.valid && (i == 3 || i == 4)) serviceSolarPump();
 
     // Nur die Ausgabe filtern: Messung und Relaisregelung laufen in jeder Stufe.
@@ -457,7 +459,7 @@ void measureTemperatures() {
             c.name, c.sensorError, unsigned(c.rawRtd), unsigned(c.fault),
             unsigned(reading.lowerThreshold), unsigned(reading.upperThreshold),
             unsigned(reading.configBefore), unsigned(reading.configWithBias), unsigned(reading.configAfterConversion),
-            (i == 3 || i == 4) ? " | Solarregelung: Solarpumpe AUS" :
+            (i == 3 || i == 4) ? (solarControl.manual() ? " | Solarpumpe: Handbetrieb aktiv" : " | Solarregelung: Solarpumpe AUS") :
             manualControl ? " | Manuelle Steuerung der Backloadpumpe aktiv" :
             (i == (oilBurnerEnabled ? 1 : 0) || i == 2) ? " | Automatik: Backloadpumpe AUS" : " | kein Backload-Regelfühler");
         }
@@ -903,6 +905,8 @@ String solarStatusJson() {
   const TemperatureController& panel = controllers[4];
   const bool sensorsValid = solarSensorsFresh() && panel.valid && tank.valid && isfinite(panel.currentTemp) && isfinite(tank.currentTemp);
   return "{\"on\":" + String(solarControl.on() ? "true" : "false") +
+    ",\"manual\":" + String(solarControl.manual() ? "true" : "false") +
+    ",\"requestedOn\":" + String(solarControl.manualOn() ? "true" : "false") +
     ",\"relayOn\":" + String(solarControl.on() && !SIMULATION_MODE ? "true" : "false") +
     ",\"configValid\":" + String(storageReady && solarSettingsValid ? "true" : "false") +
     ",\"sensorsValid\":" + String(sensorsValid ? "true" : "false") +
@@ -1361,6 +1365,23 @@ void saveSolarSettings() {
   }
   solarStartDifference = next;
   solarSettingsValid = true;
+  serviceSolarPump();
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "application/json", solarStatusJson());
+}
+
+void controlSolarPump() {
+  if (otaActive || otaVerificationPending || modeTransition) { server.send(409, "text/plain; charset=utf-8", "Update oder Neustart läuft."); return; }
+  if (server.header("X-Requested-With") != "HeatingUI") { server.send(403, "text/plain; charset=utf-8", "Bitte das Webinterface verwenden."); return; }
+  const String action = server.arg("action"), value = server.arg("value");
+  if (server.args() != 2 || (action != "manual" && action != "power") || (value != "0" && value != "1")) {
+    server.send(400, "text/plain; charset=utf-8", "Ungültiger Solarpumpenbefehl."); return;
+  }
+  const bool enabled = value == "1";
+  if (action == "manual") solarControl.setManual(enabled);
+  else if (!solarControl.setManualOn(enabled)) {
+    server.send(409, "text/plain; charset=utf-8", "Zuerst den Handbetrieb der Solarpumpe einschalten."); return;
+  }
   serviceSolarPump();
   server.sendHeader("Cache-Control", "no-store");
   server.send(200, "application/json", solarStatusJson());
@@ -1832,7 +1853,7 @@ void serviceStatusLed(uint32_t now) {
   if (!statusLedPinSafe) return;
   bool fault = !storageReady || !heatingModeValid || !autoSettingsValid || !solarSettingsValid || !solarSensorsFresh() || !controllers[0].configValid;
   for (int i = 0; i < numControllers; ++i) fault = fault || controllers[i].sensorError != nullptr;
-  const StatusLedMode mode = StatusLed::select(fault, otaActive || otaVerificationPending, manualControl, SIMULATION_MODE);
+  const StatusLedMode mode = StatusLed::select(fault, otaActive || otaVerificationPending, manualControl || solarControl.manual(), SIMULATION_MODE);
   if (statusLed.update(now, mode)) {
     const StatusLedColor color = statusLed.color();
     neopixelWrite(RGB_STATUS_PIN, color.red, color.green, color.blue);
@@ -2020,6 +2041,7 @@ void setup() {
   server.on("/api/remote-relay/update/abort", HTTP_POST, cancelRemoteRelayUpdate);
   server.on("/api/automatic", HTTP_POST, saveAutomaticSettings);
   server.on("/api/solar", HTTP_POST, saveSolarSettings);
+  server.on("/api/solar/control", HTTP_POST, controlSolarPump);
   server.on("/api/heating", HTTP_POST, saveHeatingMode);
   server.on("/api/test-mode", HTTP_POST, setTestMode);
   server.on("/api/update/prepare", HTTP_POST, prepareOta);

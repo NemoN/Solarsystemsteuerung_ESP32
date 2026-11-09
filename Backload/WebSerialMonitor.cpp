@@ -282,6 +282,7 @@ void beginWebSerialMonitor() {
   dashboard.server().on("/api/remote-relay/update/abort", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/automatic", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/solar", HTTP_POST, proxyRequest);
+  dashboard.server().on("/api/solar/control", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/heating", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/test-mode", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/simulation", HTTP_POST, proxyRequest);

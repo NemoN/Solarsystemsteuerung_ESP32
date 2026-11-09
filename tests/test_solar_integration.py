@@ -5,6 +5,9 @@ import tempfile
 
 root = Path(__file__).resolve().parents[1]
 sketch = (root / 'Backload/Backload.ino').read_text()
+proxy = (root / 'Backload/WebSerialMonitor.cpp').read_text()
+assert 'server.on("/api/solar/control", HTTP_POST, controlSolarPump)' in sketch
+assert 'dashboard.server().on("/api/solar/control", HTTP_POST, proxyRequest)' in proxy
 def function(signature):
     start = sketch.index(signature + ' {')
     return sketch[start:sketch.index('\n}\n', start) + 3]
@@ -20,6 +23,7 @@ harness = r'''
 #include <string>
 #include <map>
 #include <vector>
+using String=std::string;
 constexpr int HIGH=1,LOW=0,SOLAR_PUMP_PIN=9;
 bool storageReady=true,solarSettingsValid=true,modeTransition=false,otaActive=false,otaVerificationPending=false,SIMULATION_MODE=false;
 bool runtimeSolarOn=false;
@@ -56,7 +60,7 @@ struct Server {
 bool parseNumber(std::string s,float& result) {char* end; result=strtof(s.c_str(),&end);return !s.empty() && end==s.c_str()+s.size() && isfinite(result);}
 std::string solarStatusJson(){return "ok";}
 '''
-harness += '\n'.join(function(sig) for sig in ('bool solarSensorsFresh()', 'void serviceSolarPump()', 'void loadSolarSettings()', 'void saveSolarSettings()'))
+harness += '\n'.join(function(sig) for sig in ('bool solarSensorsFresh()', 'void serviceSolarPump()', 'void loadSolarSettings()', 'void saveSolarSettings()', 'void controlSolarPump()'))
 harness += r'''
 int main(){
   serviceSolarPump();assert(solarControl.on() && pin==LOW && runtimeSolarOn);
@@ -86,6 +90,20 @@ int main(){
   lastSolarMeasurement=now;serviceSolarPump();assert(solarControl.on() && pin==LOW);
   lastSolarMeasurement=UINT32_MAX-5;now=5;assert(solarSensorsFresh());
   now=10005;serviceSolarPump();assert(!solarControl.on() && pin==HIGH);
+  server.args_={{"action","power"},{"value","1"}};controlSolarPump();assert(server.status==409&&!solarControl.on());
+  server.args_={{"action","manual"},{"value","1"}};controlSolarPump();assert(server.status==200&&solarControl.manual()&&!solarControl.on()&&pin==HIGH);
+  server.args_={{"action","power"},{"value","1"}};controlSolarPump();assert(server.status==200&&solarControl.on()&&pin==LOW&&runtimeSolarOn);
+  controllers[3].valid=false;controllers[4].valid=false;serviceSolarPump();assert(solarControl.on()&&pin==LOW);
+  storageReady=false;solarSettingsValid=false;serviceSolarPump();assert(solarControl.on()&&pin==LOW);
+  otaActive=true;serviceSolarPump();assert(!solarControl.manual()&&!solarControl.on()&&pin==HIGH&&!runtimeSolarOn);
+  controlSolarPump();assert(server.status==409&&!solarControl.on());
+  otaActive=false;storageReady=true;solarSettingsValid=true;
+  SIMULATION_MODE=true;server.args_={{"action","manual"},{"value","1"}};controlSolarPump();assert(server.status==200&&solarControl.manual()&&!solarControl.on());
+  server.args_={{"action","power"},{"value","1"}};before=writes;controlSolarPump();assert(server.status==200&&solarControl.on()&&pin==HIGH&&writes==before&&!runtimeSolarOn);
+  server.args_={{"action","manual"},{"value","0"}};controlSolarPump();assert(server.status==200&&!solarControl.manual()&&!solarControl.on());
+  SIMULATION_MODE=false;server.header_="evil";server.args_={{"action","manual"},{"value","1"}};controlSolarPump();assert(server.status==403&&!solarControl.manual());
+  server.header_="HeatingUI";server.args_={{"action","wrong"},{"value","1"}};controlSolarPump();assert(server.status==400);
+  server.args_={{"action","manual"},{"value","wrong"}};controlSolarPump();assert(server.status==400);
   std::puts("PASS: Solarrelais, Testmodus, Update, Speicherfehler und Wiederherstellung.");
 }
 '''

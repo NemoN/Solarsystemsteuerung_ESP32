@@ -1,4 +1,4 @@
-Backload 2.7.2 – automatische und manuelle Pumpensteuerung
+Backload 2.8.0 – automatische und manuelle Pumpensteuerung
 
 Sensoren und Relais
 Fünf MAX31865-Sensoren mit gemeinsamer Software-SPI-Verbindung:
@@ -44,10 +44,13 @@ Anlagen- und Testmodus.
 EIN: Solarpanel − Kombi unten >= gespeicherte Einschaltdifferenz.
 AUS: Solarpanel − Kombi unten <= 1 K, Fehler eines Fühlers oder veraltete
 Messwerte (älter als 10 Sekunden).
-Zwischen den Grenzen bleibt der vorherige Pumpenzustand erhalten. Bei
-ungültigen Speicherwerten, während Firmware-Update/Startprüfung und beim
-Betriebsartwechsel bleibt die Pumpe aus. Beim Neustart beginnt die Pumpe aus
-und startet erst nach gültiger Messung und erfüllter Einschaltbedingung.
+Zwischen den Grenzen bleibt der vorherige Pumpenzustand erhalten. Im eigenen
+Handbetrieb kann die Solarpumpe ein- und ausgeschaltet werden; Temperaturregelung
+und Sensorfehler werden dabei übergangen. Beim Aktivieren bleibt sie zunächst
+aus. Beim Wechsel zur Automatik gelten deren Bedingungen sofort wieder.
+Während Firmware-Update/Startprüfung und beim Betriebsartwechsel bleibt die
+Pumpe aus und der Handbetrieb endet. Nach einem Neustart gilt die Automatik;
+die Pumpe startet erst nach gültiger Messung und erfüllter Einschaltbedingung.
 Im Testmodus wird der Zustand simuliert; der reale Relaisausgang bleibt AUS.
 Die Regelung enthält keine Maximaltemperaturbegrenzung; anlagenseitige
 Schutzeinrichtungen müssen unabhängig funktionieren. Relaisbelegung und

@@ -74,11 +74,17 @@ Vorgabe sind 5 K.
 | Solarpanel − Kombi unten ≥ Einschaltdifferenz | Pumpe EIN |
 | Solarpanel − Kombi unten ≤ 1 K | Pumpe AUS |
 | Differenz zwischen den Grenzen | vorheriger Zustand bleibt erhalten |
-| Fehler eines Solarfühlers, Messwerte älter als 10 Sekunden oder ungültige Einstellungen | Pumpe AUS |
+| Fehler eines Solarfühlers, Messwerte älter als 10 Sekunden oder ungültige Einstellungen | Automatik: Pumpe AUS |
+
+Die Solarpumpe hat einen eigenen Handbetrieb. Beim Einschalten des Handbetriebs
+ist sie zunächst aus und kann anschließend ein- und ausgeschaltet werden. Im
+Handbetrieb werden Temperaturdifferenz und Sensorfehler übergangen. Beim Wechsel
+zurück zur Automatik gelten deren Bedingungen wieder unmittelbar.
 
 Während eines Updates, der Startprüfung und eines angeforderten Neustarts ist
-die Solarpumpe aus. Beim Start bleibt das Relais bis zur ersten gültigen
-Messung ausgeschaltet. Test- und Anlagenwerte werden getrennt gespeichert;
+die Solarpumpe aus und der Handbetrieb wird beendet. Nach dem Neustart beginnt
+die Automatik mit ausgeschaltetem Relais und wartet auf gültige Messwerte.
+Test- und Anlagenwerte werden getrennt gespeichert;
 im Testmodus wird nur der Pumpenzustand simuliert und das Relais bleibt AUS.
 Die Regelung enthält keine Maximaltemperaturbegrenzung. Unabhängige
 Schutzeinrichtungen und die tatsächliche Verdrahtung vor dem Einsatz prüfen.

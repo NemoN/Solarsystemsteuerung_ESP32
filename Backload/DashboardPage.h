@@ -37,7 +37,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 .rule-table-hint{display:none}.automatic-rules{margin-top:20px}.automatic-rules summary{cursor:pointer;font-weight:600}.rule-table-wrap{overflow-x:auto;max-width:100%}.automatic-rules table{width:100%;min-width:560px;border-collapse:collapse;font-size:.9rem;line-height:1.5}.automatic-rules th,.automatic-rules td{padding:12px;text-align:left;vertical-align:top;border-bottom:1px solid #b9c8c9}.automatic-rules th:first-child{width:140px}
 @media(max-width:760px){.pump-controls{grid-template-columns:1fr}.pump-controls .relay-switch{width:auto;min-width:240px}}
 .relay-switch[data-state="off"]{background:#d8f2e2;color:#164d30;border-color:#72b58d}.relay-switch[data-state="off"] .switch-track{background:#17643c}
-#manual-switch[data-state="off"],#manual-switch[data-state="off"]:hover{background:#e6eaee;color:#25313b;border-color:#aab5bd}#manual-switch[data-state="off"] .switch-track{background:#60757b}
+#manual-switch[data-state="off"],#manual-switch[data-state="off"]:hover,#solar-manual-switch[data-state="off"],#solar-manual-switch[data-state="off"]:hover{background:#e6eaee;color:#25313b;border-color:#aab5bd}#manual-switch[data-state="off"] .switch-track,#solar-manual-switch[data-state="off"] .switch-track{background:#60757b}
 .relay-switch[data-state="on"]{background:#ffe1df;color:#7d1f22;border-color:#d88482}.relay-switch[data-state="on"] .switch-track{background:#a42b30}
 #heating-switch[data-state="off"],#heating-switch[data-state="off"]:hover{background:#fff0b5;color:#5c4100;border-color:#c89c28}#heating-switch[data-state="off"] .switch-track{background:#805b00}.badge.summer-active{background:#fff0b5;color:#5c4100}
 .storage-overview{position:relative}.storage-overview>.burner-diagram,.storage-overview>.pump-flow{position:relative;z-index:1}.storage-overview>.burner-pipes{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;z-index:0}.burner-pipes path{fill:none;stroke-width:2.5;stroke-linejoin:round}.burner-pipes .pipe-vl{stroke:#e76c58}.burner-pipes .pipe-rl{stroke:#4d9bd5}.burner-pipes text{font:600 10px system-ui,sans-serif;fill:var(--ink1,#192f35);paint-order:stroke;stroke:var(--bg1,#f3f5f4);stroke-width:3px;stroke-linejoin:round}
@@ -179,11 +179,17 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <div class="heading"><h2 id="solar-heading">Solarpumpe</h2><span id="solar-badge" class="badge" role="status">Status wird geladen …</span></div>
 <p class="muted">Relais 3 regelt unabhängig von der Backloadpumpe anhand von Solarpanel und Kombispeicher unten.</p>
 <p id="solar-detail" class="muted">Werte werden geladen …</p>
+<div class="solar-manual-controls">
+<button id="solar-manual-switch" class="relay-switch" type="button" role="switch" aria-checked="false" aria-describedby="solar-manual-help" disabled><span class="switch-track" aria-hidden="true"></span><span>Manuelle Steuerung</span></button>
+<button id="solar-power-switch" class="relay-switch" type="button" role="switch" aria-checked="false" aria-describedby="solar-manual-help" disabled><span class="switch-track" aria-hidden="true"></span><span>Solarpumpe ein / aus</span></button>
+</div>
+<p id="solar-manual-help" class="muted">Im Handbetrieb gelten weder Temperaturregelung noch Sensorfehler. Beim Einschalten des Handbetriebs ist die Pumpe zunächst aus; nach Neustart gilt wieder Automatik.</p>
+<p id="solar-control-message" class="message" role="status"></p>
 <form id="solar-form">
 <div><label for="solar-start">Einschaltdifferenz (3–10 K)</label><div class="stepper"><button type="button" data-direction="-1" aria-label="Solar-Einschaltdifferenz senken">−</button><input id="solar-start" type="number" name="start" min="3" max="10" step="0.1" inputmode="decimal" required><button type="button" data-direction="1" aria-label="Solar-Einschaltdifferenz erhöhen">+</button></div></div>
 <button type="submit">Solarregelung speichern</button>
 </form>
-<p class="muted">Einschalten ab eingestellter Differenz; Ausschalten bei höchstens 1 K oder Sensorfehler.</p>
+<p class="muted">Automatik: Einschalten ab eingestellter Differenz; Ausschalten bei höchstens 1 K oder Sensorfehler.</p>
 <p id="solar-message" class="message" role="status"></p>
 </section>
 
@@ -220,7 +226,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
   <dl class="org-solar-values"><div><dt>Solarpanel</dt><dd id="org-solar-panel">—</dd></div><div><dt>Kombispeicher unten</dt><dd id="org-solar-tank">—</dd></div><div><dt>Aktuelle Differenz</dt><dd id="org-solar-difference">—</dd></div></dl>
   <p><strong>Start:</strong> Solarpanel − Kombi unten ≥ <strong id="org-solar-start">— K</strong> <span class="muted">(einstellbar: 3–10 K)</span>.</p>
   <p><strong>Stopp:</strong> Differenz ≤ <strong id="org-solar-stop">— K</strong> oder Fehler eines der beiden Sensoren.</p>
-  <p class="org-solar-note muted">Bei Update oder Neustart ist die Pumpe ausgeschaltet; im Testmodus wird nur der Zustand simuliert.</p>
+  <p class="org-solar-note muted">Im Handbetrieb werden Temperaturregelung und Sensorfehler übergangen. Bei Update oder Neustart ist die Pumpe ausgeschaltet; im Testmodus wird nur der Zustand simuliert.</p>
 </div>
 <div class="org-led-guide" id="org-led-guide" aria-labelledby="org-led-heading">
   <div class="org-section-title"><svg class="org-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v3m0 14v3M2 12h3m14 0h3M4.9 4.9 7 7m10 10 2.1 2.1m0-14.2L17 7M7 17l-2.1 2.1"/></svg><h2 id="org-led-heading">RGB-Statusanzeige</h2></div>
@@ -545,7 +551,8 @@ const pumpMessage=document.getElementById('pump-message');
 const autoForm=document.getElementById('auto-form');
 const autoMessage=document.getElementById('auto-message');
 const solarForm=document.getElementById('solar-form'),solarMessage=document.getElementById('solar-message');
-let solarDirty=false,solarBusy=false,solarRevision=0;
+const solarManualSwitch=document.getElementById('solar-manual-switch'),solarPowerSwitch=document.getElementById('solar-power-switch'),solarControlMessage=document.getElementById('solar-control-message');
+let solarDirty=false,solarBusy=false,solarControlBusy=false,solarRevision=0,solarState=null;
 const heatingSwitch=document.getElementById('heating-switch');
 function drawBurnerPipes(){
   const box=document.querySelector('.storage-overview'),icon=box.querySelector('.burner-icon'),tank=box.querySelector('.pump-flow'),wires=box.querySelector('.burner-pipes');
@@ -663,10 +670,10 @@ function updateSolarDiagram(state,simulation,controllers){
   const sensor=Array.isArray(controllers)?controllers.find(c=>c.id===4):null;
   const validSensor=!!state&&state.sensorsValid&&sensor&&sensor.valid===true&&typeof sensor.temperature==='number'&&Number.isFinite(sensor.temperature);
   const panel=validSensor?'Solarpanel: '+temperatureNumber.format(sensor.temperature)+' °C':sensor&&!sensor.valid?'Solarpanel: Sensorfehler':'Solarpanel: keine aktuellen Daten';
-  const issue=state&&(!state.configValid?'Einstellung ungültig':!state.sensorsValid?'Sensorfehler':state.paused?'Pausiert':null);
+  const issue=state&&(state.paused?'Pausiert':!state.manual&&!state.configValid?'Einstellung ungültig':!state.manual&&!state.sensorsValid?'Sensorfehler':null);
   const active=!!(state&&!issue&&state.on);
   const label=!state?'Status unbekannt':issue?issue+' · AUS':active?(simulation?'EIN (simuliert)':'EIN'):(simulation?'AUS (simuliert)':'AUS');
-  const detail=!state?'Keine aktuellen Daten':simulation?'Relais 3: AUS · Testmodus':'Relais 3: '+(state.relayOn?'AN':'AUS');
+  const detail=!state?'Keine aktuellen Daten':(simulation?'Relais 3: AUS · Testmodus':'Relais 3: '+(state.relayOn?'AN':'AUS'))+(state.manual?' · Handbetrieb':'');
   diagram.classList.toggle('running',active);
   wires.classList.toggle('solar-active',active);
   document.getElementById('solar-diagram-state').textContent=label;
@@ -900,24 +907,48 @@ solarForm.addEventListener('click',event=>{
 });
 function updateSolar(state,simulation){
   const badge=document.getElementById('solar-badge'),detail=document.getElementById('solar-detail');
+  solarState=state;
+  const manual=!!(state&&state.manual),requested=!!(state&&state.requestedOn);
+  solarManualSwitch.disabled=!state||solarControlBusy||solarBusy||!!state.paused;
+  solarPowerSwitch.disabled=!state||solarControlBusy||solarBusy||!!state.paused||!manual;
+  solarManualSwitch.setAttribute('aria-checked',String(manual));solarManualSwitch.setAttribute('data-state',!state?'unknown':manual?'on':'off');
+  solarPowerSwitch.setAttribute('aria-checked',String(requested));solarPowerSwitch.setAttribute('data-state',!state?'unknown':requested?'on':'off');
   if(!state){badge.className='badge';badge.textContent='Status unbekannt';detail.textContent='Keine aktuellen Daten.';return;}
-  const issue=!state.configValid?'Einstellung ungültig':!state.sensorsValid?'Sensorfehler':state.paused?'Pausiert':null;
+  const issue=state.paused?'Pausiert':!manual&&!state.configValid?'Einstellung ungültig':!manual&&!state.sensorsValid?'Sensorfehler':null;
   badge.className='badge'+(issue?' waiting':state.on?' on':'');
   badge.textContent=issue?issue+' · AUS':state.on?(simulation?'EIN · simuliert':'EIN'):(simulation?'AUS · simuliert':'AUS');
-  detail.textContent=(Number.isFinite(state.difference)?'Aktuelle Differenz: '+setpointNumber.format(state.difference)+' K. ':'Differenz nicht verfügbar. ')+
-    (!state.configValid?'Bitte Einschaltdifferenz erneut speichern.':!state.sensorsValid?'Solarpanel und Kombispeicher unten prüfen.':state.paused?'Update oder Neustart läuft.':'');
+  detail.textContent=(manual?'Handbetrieb aktiv. ':'Automatik aktiv. ')+(Number.isFinite(state.difference)?'Aktuelle Differenz: '+setpointNumber.format(state.difference)+' K. ':'Differenz nicht verfügbar. ')+
+    (state.paused?'Update oder Neustart läuft.':manual&&!state.sensorsValid?'Sensorfehler wird im Handbetrieb übergangen.':!state.configValid?'Bitte Einschaltdifferenz erneut speichern.':!state.sensorsValid?'Solarpanel und Kombispeicher unten prüfen.':'');
   if(!solarDirty&&!solarBusy&&!solarForm.contains(document.activeElement)&&Number.isFinite(state.differenceStart))solarForm.elements.start.value=inputNumber(state.differenceStart);
 }
+async function changeSolarControl(action){
+  if(solarControlBusy||solarBusy||!solarState||solarState.paused||(action==='power'&&!solarState.manual))return;
+  const value=action==='manual'?!solarState.manual:!solarState.requestedOn;
+  solarControlBusy=true;solarRevision++;updateSolar(solarState,simulationEnabled);
+  solarControlMessage.className='message';solarControlMessage.textContent='Befehl wird übertragen …';
+  try{
+    const state=await request('/api/solar/control',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'HeatingUI'},body:new URLSearchParams({action,value:value?'1':'0'})});
+    updateSolar(state,simulationEnabled);
+    solarControlMessage.textContent=action==='manual'?(state.manual?'Handbetrieb eingeschaltet. Solarpumpe ist zunächst AUS.':'Automatik eingeschaltet.'):('Solarpumpe '+(state.on?'eingeschaltet.':'ausgeschaltet.'));
+  }catch(error){
+    let refreshed=false;
+    try{const data=await request('/api/status');updateSolar(data.solar,data.simulation);updateSolarDiagram(data.solar,data.simulation,data.controllers);refreshed=true;}
+    catch(statusError){updateSolar(null,false);updateSolarDiagram(null,false,null);}
+    solarControlMessage.className='message error';solarControlMessage.textContent=(error.status?'Befehl abgelehnt: ':'Schalten nicht bestätigt: ')+error.message+(refreshed?' Aktueller Status wurde neu abgefragt.':' Status nicht verfügbar. Verbindung prüfen.');
+  }finally{solarControlBusy=false;updateSolar(solarState,simulationEnabled);}
+}
+solarManualSwitch.addEventListener('click',()=>changeSolarControl('manual'));
+solarPowerSwitch.addEventListener('click',()=>changeSolarControl('power'));
 solarForm.addEventListener('submit',async event=>{
-  event.preventDefault();if(solarBusy)return;
+  event.preventDefault();if(solarBusy||solarControlBusy)return;
   const input=solarForm.elements.start.value,number=Number(input);
   if(!input.trim()||!Number.isFinite(number)||number<3||number>10||Math.abs(number*10-Math.round(number*10))>0.0001){solarMessage.className='message error';solarMessage.textContent='Einschaltdifferenz von 3 bis 10 K in 0,1-K-Schritten eingeben.';return;}
-  solarBusy=true;solarRevision++;solarForm.querySelectorAll('input,button').forEach(e=>e.disabled=true);solarMessage.className='message';solarMessage.textContent='Wird gespeichert …';
+  solarBusy=true;solarRevision++;updateSolar(solarState,simulationEnabled);solarForm.querySelectorAll('input,button').forEach(e=>e.disabled=true);solarMessage.className='message';solarMessage.textContent='Wird gespeichert …';
   try{
     const state=await request('/api/solar',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'HeatingUI'},body:new URLSearchParams({start:input})});
     solarDirty=false;updateSolar(state,simulationEnabled);solarMessage.textContent='Solarregelung gespeichert.';
   }catch(error){solarMessage.className='message error';solarMessage.textContent='Speichern nicht bestätigt: '+error.message;}
-  finally{solarBusy=false;solarForm.querySelectorAll('input,button').forEach(e=>e.disabled=false);}
+  finally{solarBusy=false;solarForm.querySelectorAll('input,button').forEach(e=>e.disabled=false);updateSolar(solarState,simulationEnabled);}
 });
 let wifiBusy=false,wifiDirty=false,wifiScanning=false,wifiRevision=0,wifiPending=null;
 wifiForm.addEventListener('input',()=>{wifiDirty=true;wifiRevision++;});
@@ -1784,7 +1815,7 @@ function updateOrganigram(data){
   }
   const solar=data&&data.solar;
   const solarBadge=document.getElementById('org-solar-state');
-  const solarIssue=solar&&(!solar.configValid?'Einstellung ungültig':!solar.sensorsValid?'Sensorfehler':solar.paused?'Pausiert':null);
+  const solarIssue=solar&&(solar.paused?'Pausiert':!solar.manual&&!solar.configValid?'Einstellung ungültig':!solar.manual&&!solar.sensorsValid?'Sensorfehler':null);
   solarBadge.className='badge'+(solarIssue?' waiting':solar&&solar.on?' on':'');
   solarBadge.textContent=!solar?'Status unbekannt':solarIssue?solarIssue+' · AUS':solar.on?(data.simulation?'EIN · simuliert':'EIN'):(data.simulation?'AUS · simuliert':'AUS');
   for(const [id,index] of [['org-solar-panel',4],['org-solar-tank',3]]){
@@ -1821,7 +1852,7 @@ async function refresh(){
     if(!heatingBusy&&heatingRequestRevision===heatingRevision)updateHeating(data.heating);
     if(autoRequestRevision===autoRevision){updateAutomatic(data.automatic);updateAutomaticRules(data.automatic,data.controllers,data.pump);}
     if(!pumpBusy&&revision===pumpRevision)updatePump(data.pump);
-    if(solarRequestRevision===solarRevision){updateSolar(data.solar,data.simulation);updateSolarDiagram(data.solar,data.simulation,data.controllers);}
+    if(!solarControlBusy&&solarRequestRevision===solarRevision){updateSolar(data.solar,data.simulation);updateSolarDiagram(data.solar,data.simulation,data.controllers);}
     if(document.body.classList.contains('organigram-page')&&!heatingBusy&&heatingRequestRevision===heatingRevision&&autoRequestRevision===autoRevision)updateOrganigram(data);
     updateStorageDiagram(data.controllers);
     drawBurnerPipes();
@@ -1852,7 +1883,7 @@ async function refresh(){
     updateRuntime(null,false);
     remoteRelayCards=[];updateRemoteRelay(null,false);updateExtraRelays([],false);updateRelayDiscovery(null);updateRelayProvisioning(null);
     if(document.body.classList.contains('organigram-page'))updateOrganigram(null);
-    if(solarRequestRevision===solarRevision){updateSolar(null,false);updateSolarDiagram(null,false,null);}
+    if(!solarControlBusy&&solarRequestRevision===solarRevision){updateSolar(null,false);updateSolarDiagram(null,false,null);}
     if(!pumpBusy&&revision===pumpRevision)unknownPump();
     if(!heatingBusy&&heatingRequestRevision===heatingRevision)unknownHeating();
     updateStorageDiagram(null);

@@ -24,5 +24,18 @@ int main() {
   assert(pump.update(true,true,50,true,40,10));
   assert(!pump.update(false,true,50,true,40,10));           // Update / Neustart
   assert(!pump.update(true,true,42,true,40,3));             // kein Wiederanlauf unter Start
+  assert(!pump.setManualOn(true));                          // Handbefehl nur im Handbetrieb
+  pump.setManual(true);assert(pump.manual()&&!pump.on()&&!pump.manualOn());
+  assert(pump.setManualOn(true));
+  assert(pump.update(true,false,NAN,false,NAN,NAN));       // Sensoren und Grenzen im Handbetrieb übergehen
+  assert(pump.on()&&pump.manualOn());
+  pump.setManual(true);assert(pump.on()&&pump.manualOn()); // Wiederholte Auswahl verändert Zustand nicht
+  assert(pump.setManualOn(false));assert(!pump.update(true,false,NAN,false,NAN,NAN));
+  assert(pump.setManualOn(true));assert(pump.update(true,false,NAN,false,NAN,NAN));
+  assert(!pump.update(false,false,NAN,false,NAN,NAN));    // Update/Neustart sperrt auch den Handbetrieb
+  assert(!pump.manualOn()&&!pump.update(true,false,NAN,false,NAN,NAN));
+  pump.setManual(false);assert(!pump.manual()&&!pump.on());
+  assert(!pump.update(true,false,NAN,false,NAN,5));         // Sensorprüfung in Automatik wieder aktiv
+  assert(pump.update(true,true,50,true,40,5));
   std::puts("PASS: Solargrenzen, Hysterese, Sensorfehler und Sperren.");
 }

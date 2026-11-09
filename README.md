@@ -7,7 +7,7 @@ Die Weboberfläche zeigt Temperaturen und Pumpenzustände und bietet einen Testm
 
 Die Backloadpumpe überträgt Wärme zwischen den Speichern. Ihre Mindesttemperaturen
 lassen sich für Kombi und Puffer getrennt einstellen. Die Solarpumpe wird
-unabhängig davon geregelt. Auf der Verlaufsseite stehen die Pumpenlaufzeiten nach
+unabhängig davon geregelt und kann manuell geschaltet werden. Auf der Verlaufsseite stehen die Pumpenlaufzeiten nach
 Tag, Monat und Jahr. Ein optionaler Docker-Dienst archiviert Temperaturen und
 Pumpenlaufzeiten dauerhaft. Bis zu vier WLAN-Relaiserweiterungen lassen sich
 über den Haupt-ESP einrichten und bedienen.
