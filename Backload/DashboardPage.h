@@ -270,12 +270,12 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
     <ol>
       <li><strong>Vorbereiten:</strong> Karte spannungsfrei verkabeln; Netzspannung und Verbraucher getrennt lassen. Stromversorgung und Polung anhand des Datenblatts prüfen.</li>
       <li><strong>Programmierleiste verbinden:</strong> Die einreihige Stiftleiste neben dem ESP32 ist rückseitig mit <code>5V · TX · RX · GND · GND · IO0</code> beschriftet. Bei passender Versorgung Adapter-5V an Karten-5V, GND an GND, Adapter-TX an Karten-RX und Adapter-RX an Karten-TX anschließen. Die Datenleitungen benötigen 3,3-V-Logik; einen ausreichend starken 5-V-Ausgang verwenden. Keine weitere Stromversorgung gleichzeitig anschließen.</li>
-      <li><strong>Flashmodus:</strong> Adapter per USB anschließen, auf der Karte IO0 gedrückt halten, EN kurz drücken und danach IO0 loslassen. In der Arduino IDE <strong>ESP32 Dev Module</strong> und den Adapter-Port wählen und <code>Relaiskarte.ino</code> übertragen. Anschließend nur EN kurz drücken.</li>
-      <li><strong>Firmwaredatei:</strong> Für Karten mit passendem Bootloader und Partitionsschema gibt es auch die aktuelle <a href="https://github.com/NemoN/Solarsystemsteuerung_ESP32/releases/latest/download/Relaiskarte.ino.bin"><strong>Relaiskarte.ino.bin</strong></a>.</li>
+      <li><strong>Flashmodus:</strong> Adapter per USB anschließen, auf der Karte IO0 gedrückt halten, EN kurz drücken und danach IO0 loslassen.</li>
+      <li><strong>Firmware laden:</strong> Das <a href="https://github.com/NemoN/Solarsystemsteuerung_ESP32/releases/latest/download/Relaiskarte.factory.bin"><strong>Komplettabbild</strong></a> herunterladen und mit dem <a href="https://espressif.github.io/esptool-js/">ESP Tool</a> in Chrome oder Edge auf Adresse <code>0x0</code> übertragen. Es löscht gespeicherte WLAN-Daten, Schlüssel und Relaiszustände. Anschließend EN kurz drücken.</li>
       <li><strong>Verbinden:</strong> Unter Einstellungen → Relaiserweiterungen einen freien Platz wählen, die Karte suchen und die Einrichtung starten. Anschließend IO0 drei Sekunden gedrückt halten.</li>
       <li><strong>Verwenden:</strong> Relais in den Einstellungen beschriften und auf der Startseite schalten. Auch im Testmodus schalten die WLAN-Relais tatsächlich.</li>
     </ol>
-    <p class="muted">Relais 1–4: GPIO 32, 33, 25 und 26; HIGH schaltet ein. Firmware-Updates sind nach der Erstinstallation über die Einstellungen möglich.</p>
+    <p class="muted">Relais 1–4: GPIO 32, 33, 25 und 26; HIGH schaltet ein. Für spätere Updates über die Einstellungen die <a href="https://github.com/NemoN/Solarsystemsteuerung_ESP32/releases/latest/download/Relaiskarte.ino.bin">OTA-Firmware</a> verwenden.</p>
   </div><figure><img src="/assets/relaiserweiterung.svg" width="1715" height="1772" loading="lazy" alt="Vierkanal-Relaiserweiterung mit ESP32, Programmierleiste sowie Tasten EN und IO0"><figcaption>Relaiserweiterung RBS16467 · Vorderseite</figcaption></figure></div>
 </div>
 </section>

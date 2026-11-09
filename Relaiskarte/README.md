@@ -36,13 +36,29 @@ Alternativ die Karte separat mit 5 V versorgen: Dann Adapter-5V freilassen,
 aber Adapter-GND und Karten-GND verbinden. Keine weiteren Stromversorgungen
 gleichzeitig anschließen.
 
-1. Adapter per USB mit dem Rechner verbinden und die Karte versorgen.
+Für die Erstinstallation gibt es ein fertiges
+[Komplettabbild](https://github.com/NemoN/Solarsystemsteuerung_ESP32/releases/latest/download/Relaiskarte.factory.bin)
+mit Bootloader, Partitionstabelle und Firmware. Kompilieren ist nicht nötig.
+
+1. Das Komplettabbild herunterladen und den Adapter per USB verbinden.
 2. Für den **Flashmodus** auf der Karte **IO0** gedrückt halten, **EN** kurz
    drücken und anschließend **IO0** loslassen.
-3. In der Arduino IDE `Relaiskarte.ino` mit ESP32-Core 2.0.13 öffnen,
-   **ESP32 Dev Module** und den Port des Adapters auswählen und hochladen.
-4. Nach dem Hochladen **EN** kurz drücken, ohne IO0 zu drücken. Die Karte
+3. Das [ESP Tool von Espressif](https://espressif.github.io/esptool-js/) in
+   Chrome oder Edge öffnen. **Connect** wählen und den Port des Adapters der
+   Relaiskarte auswählen.
+4. Mit **Add File** die heruntergeladene `Relaiskarte.factory.bin` auswählen,
+   als **Flash Address** `0x0` eintragen und **Program** drücken. **Erase all**
+   ausgeschaltet lassen; die übrigen Einstellungen können auf den Vorgaben
+   bleiben.
+5. Nach dem Hochladen **EN** kurz drücken, ohne IO0 zu drücken. Die Karte
    startet nun mit der Firmware.
+
+Das Komplettabbild überschreibt beim Flashen auch die gespeicherten WLAN-Daten,
+Schlüssel und Relaiszustände. Es löscht nicht den gesamten Flash. Für spätere
+Updates über den Haupt-ESP ausschließlich `Relaiskarte.ino.bin` verwenden.
+
+Alternativ lässt sich `Relaiskarte.ino` mit ESP32-Core 2.0.13 in der Arduino IDE
+für **ESP32 Dev Module** kompilieren und hochladen.
 
 ## Einrichten
 
@@ -141,3 +157,11 @@ als unklar: Verbindung und Relaiszustände prüfen, bevor ein neues Update start
 
 Die Verbindung verwendet denselben individuellen Schlüssel wie die Schalter.
 Sie ist unverschlüsselt und nur für das vertrauenswürdige Heimnetz vorgesehen.
+
+## Komplettabbild für ein Release erzeugen
+
+Nach einem Build für **ESP32 Dev Module** mit ESP32-Core 2.0.13 erzeugt
+`build_factory.sh BUILD_ORDNER ESPTOOL BOOT_APP0_BIN AUSGABE_BIN` die Datei
+`Relaiskarte.factory.bin`. Als `BOOT_APP0_BIN` dient `boot_app0.bin` aus dem
+Partitionsordner des ESP32-Cores. Das fertige Abbild zusätzlich zur unveränderten
+OTA-Datei `Relaiskarte.ino.bin` an das Release anhängen.

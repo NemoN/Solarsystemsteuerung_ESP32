@@ -16,6 +16,8 @@ assert '<mask id="board"' in svg and 'mask="url(#board)"' in svg
 assert b'Exif\x00\x00' not in photo and b'http://ns.adobe.com/xap/1.0/' not in photo
 assert 'src="/assets/relaiserweiterung.svg"' in page
 assert 'https://github.com/NemoN/Solarsystemsteuerung_ESP32/releases/latest/download/Relaiskarte.ino.bin' in page
+assert 'https://github.com/NemoN/Solarsystemsteuerung_ESP32/releases/latest/download/Relaiskarte.factory.bin' in page
+assert 'https://espressif.github.io/esptool-js/' in page and '<code>0x0</code>' in page
 for text in ('5V · TX · RX · GND · GND · IO0', 'Adapter-TX an Karten-RX', 'Adapter-RX an Karten-TX', 'IO0 gedrückt halten, EN kurz drücken und danach IO0 loslassen'):
     assert text in page, f'Fehlender Hinweis zur seriellen Erstinstallation: {text}'
 assert '"/assets/relaiserweiterung.jpg"' in proxy and '"/assets/relaiserweiterung.svg"' in proxy and 'image/svg+xml' in proxy and 'RELAY_BOARD_PHOTO' in proxy
