@@ -192,6 +192,8 @@ sein. Nach erfolgter Synchronisierung läuft die Uhr bei WLAN-Ausfall weiter.
 Der History-Server holt die vorhandenen Zeiträume mit den normalen Abfragen ab;
 siehe history-server/README.md. Sein Archiv kann Lücken aufweisen, wenn er
 länger als die jeweilige Aufbewahrungszeit des ESP32 nicht abfragt.
+Unter Einstellungen → History-Server kann seine Adresse für einen Menülink
+eingetragen werden. Eine leere Adresse blendet den Link aus.
 Webinterface: http://<ESP32-IP>/
 Einstellungen mit WLAN und Firmware: http://<ESP32-IP>/einstellungen
 ESP-Informationen: http://<ESP32-IP>/info

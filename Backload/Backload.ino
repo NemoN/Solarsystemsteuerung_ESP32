@@ -22,6 +22,7 @@
 #include "TemperatureHistory.h"
 #include "RecoveryApPolicy.h"
 #include "Hostname.h"
+#include "HistoryServerUrl.h"
 #include "StatusLed.h"
 #include <esp32-hal-rgb-led.h>
 #include <esp_heap_caps.h>
@@ -42,7 +43,7 @@
 #include <time.h>
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
-const char* FIRMWARE_VERSION = "2.8.0";
+const char* FIRMWARE_VERSION = "2.9.0";
 // Der AP wird nur für Einrichtung und Wiederherstellung benötigt.
 constexpr bool AP_RECOVERY_ONLY = true;
 
@@ -176,6 +177,7 @@ PumpDirection runtimePumpDirection = PumpDirection::CombiToBuffer;
 uint32_t runtimeLastUpdate = 0, runtimeLastSave = 0;
 bool hostnameStorageReady = false, hostnameUsesDefault = true, mdnsReady = false;
 String configuredHostname, activeHostname;
+String historyServerUrl;
 // Dachsensor vorläufig deaktiviert; die Implementierung bleibt für später erhalten.
 constexpr bool ROOF_SENSOR_ENABLED = false;
 WiFiUDP roofUdp;
@@ -547,7 +549,39 @@ void loadHostname() {
     } else FirmwareLog.println("Ungültiger Hostname gespeichert; Standardname wird verwendet.");
   }
   if (!hostnameStorageReady) FirmwareLog.println("Hostname-Speicher nicht verfügbar; Standardname wird verwendet.");
+  if (hostnameStorageReady) {
+    const String saved = hostnamePreferences.getString("history-url", "");
+    if (HistoryServerUrl::valid(saved.c_str(), saved.length())) historyServerUrl = saved;
+    else FirmwareLog.println("Ungültige History-Server-Adresse gespeichert; Link ausgeblendet.");
+  }
   activeHostname = configuredHostname;
+}
+
+void sendHistoryServerUrl() {
+  if (!hostnameStorageReady) { server.send(503, "text/plain; charset=utf-8", "Einstellungsspeicher nicht verfügbar."); return; }
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "application/json", "{\"url\":" + jsonString(historyServerUrl) + "}");
+}
+
+void saveHistoryServerUrl() {
+  if (otaActive || otaVerificationPending || modeTransition) { server.send(409, "text/plain; charset=utf-8", "Update oder Neustart läuft."); return; }
+  if (server.header("X-Requested-With") != "HeatingUI") { server.send(403, "text/plain; charset=utf-8", "Bitte das Webinterface verwenden."); return; }
+  if (!hostnameStorageReady) { server.send(503, "text/plain; charset=utf-8", "Einstellungsspeicher nicht verfügbar."); return; }
+  if (server.args() != 1 || !server.hasArg("url")) { server.send(400, "text/plain; charset=utf-8", "Ungültige Anfrage."); return; }
+  String next = server.arg("url");
+  next.trim();
+  if (!HistoryServerUrl::valid(next.c_str(), next.length())) {
+    server.send(400, "text/plain; charset=utf-8", "Bitte eine HTTP- oder HTTPS-Adresse ohne Zugangsdaten eingeben."); return;
+  }
+  bool saved = true;
+  if (!next.length()) {
+    if (hostnamePreferences.isKey("history-url")) saved = hostnamePreferences.remove("history-url");
+  } else if (next != historyServerUrl || !hostnamePreferences.isKey("history-url")) {
+    saved = hostnamePreferences.putString("history-url", next) == next.length() && hostnamePreferences.getString("history-url", "") == next;
+  }
+  if (!saved) { server.send(500, "text/plain; charset=utf-8", "Adresse konnte nicht gespeichert werden."); return; }
+  historyServerUrl = next;
+  sendHistoryServerUrl();
 }
 
 void saveHostname() {
@@ -2052,6 +2086,8 @@ void setup() {
   server.on("/api/update/github-status", HTTP_POST, githubOtaStatus);
   if (SIMULATION_MODE) server.on("/api/simulation", HTTP_POST, saveSimulationValues);
   server.on("/api/hostname", HTTP_POST, saveHostname);
+  server.on("/api/history-server", HTTP_GET, sendHistoryServerUrl);
+  server.on("/api/history-server", HTTP_POST, saveHistoryServerUrl);
   server.on("/api/wifi", HTTP_POST, saveWifi);
   server.on("/api/wifi/reset", HTTP_POST, resetWifi);
   server.on("/api/wifi/scan", HTTP_POST, startWifiScan);

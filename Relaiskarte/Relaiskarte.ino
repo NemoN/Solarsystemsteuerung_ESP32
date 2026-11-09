@@ -13,7 +13,7 @@
 #include "RelayFactoryReset.h"
 
 constexpr uint8_t RELAY_PINS[] = {32, 33, 25, 26};
-constexpr char RELAY_FIRMWARE_VERSION[] = "2.8.0";
+constexpr char RELAY_FIRMWARE_VERSION[] = "2.9.0";
 constexpr uint32_t RETRY_MS = 30000;
 struct Config { char ssid[33]; char password[64]; char key[33]; char apPassword[17]; };
 Config config = {};

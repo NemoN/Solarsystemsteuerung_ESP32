@@ -287,6 +287,7 @@ void beginWebSerialMonitor() {
   dashboard.server().on("/api/test-mode", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/simulation", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/hostname", HTTP_POST, proxyRequest);
+  dashboard.server().on("/api/history-server", HTTP_GET | HTTP_POST, proxyRequest);
   dashboard.server().on("/api/wifi", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/wifi/reset", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/wifi/scan", HTTP_GET | HTTP_POST, proxyRequest);

@@ -15,6 +15,7 @@ h1{font-size:clamp(1.7rem,5vw,2.4rem);margin:0 0 12px}h2{font-size:1.25rem;margi
 p{line-height:1.6}header{margin-bottom:30px}.muted{color:#4e6268}
 section{border-top:1px solid #b9c8c9;padding:26px 0} .heading,.readings{display:flex;gap:18px;justify-content:space-between;align-items:center;flex-wrap:wrap}
 .readings{justify-content:flex-start;margin:20px 0;font-variant-numeric:tabular-nums}.temperature{font-size:1.7rem;font-weight:650}
+.sensor-heading{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}.sensor-heading h2{min-width:0}.sensor-status{display:inline-flex;flex:none;width:24px;height:24px;color:#4e6268}.sensor-status svg{width:100%;height:100%}.sensor-status[data-state="ok"]{color:#08705c}.sensor-status[data-state="error"]{color:#b42318}
 .badge{padding:6px 12px;border-radius:6px;background:#e0e7e7;font-weight:600}.on{background:#c9e9d9;color:#145239}.error{color:#a32620}
 form{display:grid;grid-template-columns:1fr 1fr auto;gap:16px;align-items:end}label{display:block;font-weight:600;font-size:.95rem}
 input{min-width:0;display:block;width:100%;min-height:46px;margin-top:8px;padding:10px;border:1px solid #8c9fa3;border-radius:6px;font:inherit;background:white;color:inherit}
@@ -63,7 +64,8 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
   <button id="nav-toggle" type="button" aria-controls="nav-links" aria-expanded="false" hidden><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Menü</button>
   <div id="nav-links" class="nav-links">
   <a class="dashboard-link" href="/"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21v-7h6v7"/></svg><span>Steuerung</span></a>
-  <a class="history-link" href="/verlauf"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 4v16h16"/><path d="M7 15l4-4 3 2 5-7"/></svg><span>Verlauf</span></a>
+  <a class="history-link" href="/verlauf"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 4v16h16"/><path d="M7 15l4-4 3 2 5-7"/></svg><span>Verlauf (Lokal)</span></a>
+  <a id="history-server-link" href="#" target="_blank" rel="noopener noreferrer" hidden><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="6" rx="1"/><rect x="3" y="14" width="18" height="6" rx="1"/><path d="M7 7h.01M7 17h.01M11 7h7M11 17h7"/></svg><span>History-Server</span></a>
   <a class="organigram-link" href="/regelungsuebersicht"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="8" y="2" width="8" height="5" rx="1"/><rect x="2" y="17" width="8" height="5" rx="1"/><rect x="14" y="17" width="8" height="5" rx="1"/><path d="M12 7v5M6 17v-5h12v5"/></svg><span>Regelungsübersicht</span></a>
   <a class="info-link" href="/info"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 7.5h.01"/></svg><span>ESP-Info</span></a>
   <a href="/webserial" id="console-link" target="_blank" rel="noopener"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg><span>Live-Monitor öffnen</span></a>
@@ -73,6 +75,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
   <div id="settings-subnav" class="settings-subnav" role="group" aria-label="Einstellungsbereiche">
     <a href="#appearance-section">Darstellung</a>
     <a href="#security-section">Zugangspasswort</a>
+    <a href="#history-server-section">History-Server</a>
     <a href="#hostname-section">Hostname</a>
     <a href="#wifi-section">WLAN einrichten</a>
     <a href="#remote-relay-settings">Relaiserweiterungen</a>
@@ -328,6 +331,12 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <div class="password-field"><label for="access-confirm">Passwort wiederholen</label><div class="password-control"><input id="access-confirm" type="password" minlength="8" maxlength="128" autocomplete="new-password" required><button class="password-visibility" type="button" aria-label="Passwortwiederholung anzeigen" aria-pressed="false" aria-controls="access-confirm" title="Passwort anzeigen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path class="password-eye-slash" d="M3 3l18 18"/></svg></button></div></div>
 <button type="submit">Passwort speichern</button></form>
 <button id="password-remove" class="secondary-button" type="button">Passwortschutz entfernen</button><p id="password-message" class="message" role="status"></p>
+</section>
+<section id="history-server-section" aria-labelledby="history-server-heading">
+<h2 id="history-server-heading">History-Server</h2>
+<p class="muted">Die Adresse ergänzt einen Link zum Temperaturarchiv im Menü. Leer lassen, um den Link auszublenden.</p>
+<form id="history-server-form"><label for="history-server-url">Adresse<input id="history-server-url" name="url" type="url" maxlength="255" placeholder="http://192.168.1.10:8088" autocomplete="url" autocapitalize="none" spellcheck="false" disabled></label><button type="submit" disabled>Adresse speichern</button></form>
+<p id="history-server-message" class="message" role="status">Adresse wird geladen …</p>
 </section>
 <section id="hostname-section" aria-labelledby="hostname-heading">
 <h2 id="hostname-heading">Hostname</h2>
@@ -1496,6 +1505,38 @@ async function request(url,options={}){
     return await response.json();
   }finally{clearTimeout(timer);}
 }
+const historyServerForm=document.getElementById('history-server-form'),historyServerInput=document.getElementById('history-server-url');
+const historyServerMessage=document.getElementById('history-server-message'),historyServerLink=document.getElementById('history-server-link');
+function setHistoryServerLink(value){
+  try{
+    const parsed=new URL(value);
+    if(!['http:','https:'].includes(parsed.protocol)||parsed.username||parsed.password)throw new Error('Ungültige Adresse');
+    historyServerLink.href=parsed.href;historyServerLink.hidden=false;
+  }catch(error){historyServerLink.hidden=true;historyServerLink.removeAttribute('href');}
+}
+async function loadHistoryServer(){
+  try{
+    const result=await request('/api/history-server');
+    historyServerInput.value=result.url;setHistoryServerLink(result.url);
+    historyServerInput.disabled=false;historyServerForm.querySelector('button').disabled=false;historyServerMessage.textContent='';
+  }catch(error){historyServerMessage.className='message error';historyServerMessage.textContent='Adresse konnte nicht geladen werden. Bitte Seite neu laden.';}
+}
+historyServerForm.addEventListener('submit',async event=>{
+  event.preventDefault();
+  let value=historyServerInput.value.trim();
+  try{
+    if(value){const url=new URL(value);if(!['http:','https:'].includes(url.protocol)||url.username||url.password)throw new Error();value=url.href;}
+    if(value.length>255)throw new Error();
+  }catch(error){historyServerMessage.className='message error';historyServerMessage.textContent='Bitte eine gültige HTTP- oder HTTPS-Adresse ohne Zugangsdaten eingeben.';return;}
+  historyServerInput.disabled=true;historyServerForm.querySelector('button').disabled=true;
+  historyServerMessage.className='message';historyServerMessage.textContent='Adresse wird gespeichert …';
+  try{
+    const result=await request('/api/history-server',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'HeatingUI'},body:new URLSearchParams({url:value})});
+    historyServerInput.value=result.url;setHistoryServerLink(result.url);historyServerMessage.textContent='Adresse gespeichert.';
+  }catch(error){historyServerMessage.className='message error';historyServerMessage.textContent='Nicht gespeichert: '+error.message;}
+  finally{historyServerInput.disabled=false;historyServerForm.querySelector('button').disabled=false;}
+});
+loadHistoryServer();
 const updateForm=document.getElementById('update-form');
 const githubForm=document.getElementById('github-update-form'),releaseMessage=document.getElementById('release-message');
 const releaseDownload=document.getElementById('release-download'),releaseDownloadLink=document.getElementById('release-download-link');
@@ -1622,18 +1663,19 @@ updateForm.addEventListener('submit',async event=>{
     message.className='message error';message.textContent='Update nicht abgeschlossen: '+(error.message||'Verbindung unterbrochen')+'. Bitte Status prüfen und erneut versuchen.';
   }finally{button.disabled=false;}
 });
+const sensorStatusMarkup='<span class="sensor-status" data-state="unknown" role="img" aria-label="Sensorstatus unbekannt" title="Sensorstatus unbekannt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path class="sensor-status-mark" d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4M12 16h.01"/></svg></span>';
 function createPanel(c){
   const section=document.createElement('section');
   section.dataset.sensorId=String(c.id);
   if(!c.hasSettings||c.id!==0){
-    section.innerHTML='<h2></h2><div class="readings"><output class="temperature">—</output></div>';
+    section.innerHTML=`<div class="sensor-heading"><h2></h2>${sensorStatusMarkup}</div><div class="readings"><output class="temperature">—</output></div>`;
     section.querySelector('h2').textContent=c.name;
     const sparkline=addTemperatureSparkline(section,c);
     root.appendChild(section);
     return {section,sparkline,form:null,isDirty:()=>false};
   }
   const limits=c.limits;
-  section.innerHTML=`<div class="heading"><h2></h2><span class="badge">Sensor: —</span></div>
+  section.innerHTML=`<div class="sensor-heading"><h2></h2>${sensorStatusMarkup}</div>
     <div class="readings"><output class="temperature">—</output></div>
     <form><div><label for="target-${c.id}">Einlagerung ab (68–72 °C)</label><div class="stepper"><button type="button" data-field="target" data-direction="-1">−</button><input id="target-${c.id}" name="target" type="number" inputmode="numeric" step="1" required><button type="button" data-field="target" data-direction="1">+</button></div></div>
     <input name="hysteresis" type="hidden">
@@ -1694,6 +1736,11 @@ function showTemperature(p,c){
   const detail=c?'Sensorfehler'+(c.sensorError?': '+c.sensorError:'')+(c.fault?' (0x'+c.fault.toString(16).toUpperCase()+')':''):'—';
   output.textContent=valid?temperatureNumber.format(c.temperature)+' °C':detail;
   output.className='temperature'+(c&&!valid?' error':'');
+  const status=p.section.querySelector('.sensor-status');
+  const state=!c?'unknown':valid?'ok':'error';
+  const label=state==='ok'?'Sensor: OK':state==='error'?'Sensorfehler':'Sensorstatus unbekannt';
+  status.dataset.state=state;status.setAttribute('aria-label',label);status.setAttribute('title',label);
+  status.querySelector('.sensor-status-mark').setAttribute('d',state==='ok'?'M8 12l2.5 2.5L16.5 9':state==='error'?'M9 9l6 6M15 9l-6 6':'M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4M12 16h.01');
 }
 function drawSparkline(chart,id,name){
   const svg=chart.querySelector('svg'),path=svg.querySelector('path'),dots=svg.querySelector('g');
@@ -1872,7 +1919,6 @@ async function refresh(){
       configError.hidden=c.configValid;
       configError.textContent=c.configValid?'':'Konfigurationsfehler: Grenzen oder Standardwerte im Sketch prüfen.';
       p.form.querySelectorAll('input,button').forEach(e=>e.disabled=!c.configValid||(e.tagName==='BUTTON'&&saving));
-      const badge=p.section.querySelector('.badge');badge.textContent=c.valid?'Sensor: OK':'Sensorfehler';badge.className='badge'+(c.valid?' on':'');
       p.section.querySelector('.rule').textContent=data.pump.manual?'Manuelle Steuerung: Starttemperatur ohne Wirkung. Ölbrennersperre gilt.':'Starttemperatur für den gewählten Kombifühler.';
       p.form.elements.target.dataset.savedValue=c.target;
       p.form.elements.hysteresis.dataset.savedValue=c.hysteresis;
@@ -1896,7 +1942,7 @@ async function refresh(){
     roofBadge.textContent='Status unbekannt';roofBadge.className='badge';
     roofDetail.textContent='Keine aktuellen Daten vom Haupt-ESP.';
     setConnectionStatus(false);
-    panels.forEach(p=>{showTemperature(p,null);const badge=p.section.querySelector('.badge');if(badge){badge.textContent='Sensor: unbekannt';badge.className='badge';}});
+    panels.forEach(p=>showTemperature(p,null));
   }finally{setTimeout(refresh,pumpState&&pumpState.switching?250:2000);}
 }
 const historyNames=['Kombispeicher oben','Kombispeicher Mitte','Pufferspeicher oben','Kombispeicher unten','Solarpanel'];

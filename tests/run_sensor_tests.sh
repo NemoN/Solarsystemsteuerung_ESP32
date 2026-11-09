@@ -37,6 +37,13 @@ python3 "$project_dir/tests/test_automatic_settings.py"
 "$test_dir/history-tests"
 
 "${CXX:-c++}" -std=c++11 -Wall -Wextra -Werror -fsanitize=address,undefined \
+  "$project_dir/tests/test_history_server_url.cpp" -o "$test_dir/history-server-url-tests"
+"$test_dir/history-server-url-tests"
+python3 "$project_dir/tests/test_history_server_settings.py"
+node "$project_dir/tests/test_history_server_ui.js"
+node "$project_dir/tests/test_sensor_status_ui.js"
+
+"${CXX:-c++}" -std=c++11 -Wall -Wextra -Werror -fsanitize=address,undefined \
   -I"$project_dir/Backload" "$project_dir/tests/test_recovery_ap_policy.cpp" \
   -o "$test_dir/recovery-ap-tests"
 "$test_dir/recovery-ap-tests"
