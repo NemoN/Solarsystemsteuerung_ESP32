@@ -275,7 +275,6 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
       <li><strong>Verbinden:</strong> Unter Einstellungen → Relaiserweiterungen einen freien Platz wählen, die Karte suchen und die Einrichtung starten. Anschließend IO0 drei Sekunden gedrückt halten.</li>
       <li><strong>Verwenden:</strong> Relais in den Einstellungen beschriften und auf der Startseite schalten. Auch im Testmodus schalten die WLAN-Relais tatsächlich.</li>
     </ol>
-    <p class="muted">Die Versorgung über Adapter-5V wird auch in einem <a href="https://prilchen.de/esp32-4-kanal-relais-entwicklungsplatine/">Erfahrungsbericht zur ESP32 Relay X4 V1.1</a> beschrieben; das beiliegende Datenblatt macht zum 5V-Pin beim Programmieren widersprüchliche Angaben. Bei separater 5-V-Versorgung Adapter-5V nicht verbinden, GND jedoch gemeinsam anschließen.</p>
     <p class="muted">Relais 1–4: GPIO 32, 33, 25 und 26; HIGH schaltet ein. Firmware-Updates sind nach der Erstinstallation über die Einstellungen möglich.</p>
   </div><figure><img src="/assets/relaiserweiterung.svg" width="1715" height="1772" loading="lazy" alt="Vierkanal-Relaiserweiterung mit ESP32, Programmierleiste sowie Tasten EN und IO0"><figcaption>Relaiserweiterung RBS16467 · Vorderseite</figcaption></figure></div>
 </div>
