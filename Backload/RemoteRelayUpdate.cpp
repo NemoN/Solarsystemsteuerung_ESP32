@@ -49,7 +49,7 @@ void hexDigest(const uint8_t bytes[32], char out[65]) {
 int exchange(const RemoteRelayConfig& cfg, const char* path, const String* body, String& response) {
   IPAddress target;
   if (!target.fromString(cfg.address) || !compatibleNetwork(target)) return -1;
-  WiFiClient client; HTTPClient http; http.setConnectTimeout(1500); http.setTimeout(2000); http.setReuse(false);
+  WiFiClient client; HTTPClient http; http.setConnectTimeout(4000); http.setTimeout(5000); http.setReuse(false);
   if (!http.begin(client, "http://" + String(cfg.address) + path)) return -1;
   http.addHeader("X-Relay-Key", cfg.key);
   if (body) http.addHeader("Content-Type", "application/x-www-form-urlencoded");
@@ -58,12 +58,12 @@ int exchange(const RemoteRelayConfig& cfg, const char* path, const String* body,
   if (code == 200 && http.getSize() >= 0 && http.getSize() <= 128) response = http.getString();
   http.end(); return code;
 }
-bool requestWithRetry(const RemoteRelayConfig& cfg, const char* path, const String& body, const String& expected) {
-  for (int attempt = 0; attempt < 3; ++attempt) {
-    String reply; const int code = exchange(cfg, path, &body, reply);
+bool requestWithRetry(const RemoteRelayConfig& cfg, const char* path, const String& body, const String& expected, int& lastCode) {
+  for (int attempt = 0; attempt < 5; ++attempt) {
+    String reply; const int code = exchange(cfg, path, &body, reply); lastCode = code;
     if (code == 200 && reply == expected) return true;
     if (code >= 400 && code < 500) return false;
-    vTaskDelay(pdMS_TO_TICKS(250));
+    if (attempt < 4) vTaskDelay(pdMS_TO_TICKS(250 * (attempt + 1)));
   }
   return false;
 }
@@ -237,8 +237,17 @@ void RemoteRelayUpdate::task() {
       String reply; exchange(config_, "/api/ota/abort", &abortBody, reply); finishTask(FAILED, "Datenblock konnte nicht vorbereitet werden."); vTaskDelete(nullptr); return;
     }
     const String body = "token=" + String(token_) + "&offset=" + String(offset) + "&data=" + encodeForm(String(reinterpret_cast<char*>(encoded)));
-    if (!requestWithRetry(config_, "/api/ota/chunk", body, "RECEIVED:" + String(offset + length))) {
-      String reply; exchange(config_, "/api/ota/abort", &abortBody, reply); finishTask(FAILED, "Übertragung zur Relaiskarte fehlgeschlagen."); vTaskDelete(nullptr); return;
+    int blockCode = -1;
+    if (!requestWithRetry(config_, "/api/ota/chunk", body, "RECEIVED:" + String(offset + length), blockCode)) {
+      String reply; exchange(config_, "/api/ota/abort", &abortBody, reply);
+      char message[144];
+      if (blockCode <= 0)
+        snprintf(message, sizeof(message), "Übertragung bei %u von %u Bytes: Verbindungsfehler %d.", unsigned(offset), unsigned(size_), blockCode);
+      else if (blockCode == 200)
+        snprintf(message, sizeof(message), "Übertragung bei %u von %u Bytes: unerwartete Antwort.", unsigned(offset), unsigned(size_));
+      else
+        snprintf(message, sizeof(message), "Übertragung bei %u von %u Bytes: HTTP %d.", unsigned(offset), unsigned(size_), blockCode);
+      finishTask(FAILED, message); vTaskDelete(nullptr); return;
     }
     xSemaphoreTake(lock_, portMAX_DELAY); sent_ = offset + length; xSemaphoreGive(lock_);
   }

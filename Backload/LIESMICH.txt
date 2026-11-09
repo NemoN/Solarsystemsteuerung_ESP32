@@ -1,4 +1,4 @@
-Backload 2.7.1 – automatische und manuelle Pumpensteuerung
+Backload 2.7.2 – automatische und manuelle Pumpensteuerung
 
 Sensoren und Relais
 Fünf MAX31865-Sensoren mit gemeinsamer Software-SPI-Verbindung:

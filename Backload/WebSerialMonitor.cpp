@@ -252,7 +252,10 @@ void beginWebSerialMonitor() {
     req->send(response);
   });
   dashboard.server().on("/assets/relaiserweiterung.jpg", HTTP_GET, [](AsyncWebServerRequest* req) {
-    AsyncWebServerResponse* response = req->beginResponse_P(200, "image/jpeg", RELAY_BOARD_PHOTO, sizeof(RELAY_BOARD_PHOTO));
+    req->redirect("/assets/relaiserweiterung.svg");
+  });
+  dashboard.server().on("/assets/relaiserweiterung.svg", HTTP_GET, [](AsyncWebServerRequest* req) {
+    AsyncWebServerResponse* response = req->beginResponse_P(200, "image/svg+xml", reinterpret_cast<const uint8_t*>(RELAY_BOARD_PHOTO), sizeof(RELAY_BOARD_PHOTO) - 1);
     response->addHeader("Cache-Control", "public, max-age=86400"); req->send(response);
   });
   dashboard.server().on("/webserial", HTTP_GET, [](AsyncWebServerRequest* req) {

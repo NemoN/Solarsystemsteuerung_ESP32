@@ -22,6 +22,7 @@ TaskFunction_t mockTask=nullptr;
 void* mockTaskArg=nullptr;
 RelayOta board;
 bool lostChunk=false,lostFinish=false,failedChunk=false,booted=false,rollbackBoot=false;
+unsigned transientChunkFailures=0;
 unsigned chunkCalls=0;uint32_t bootAt=0;
 void mockAdvance(uint32_t ms){
  mockMillis+=ms;
@@ -37,6 +38,7 @@ int mockHttp(const String& url,const String* body,String& response){
  else if(u.find("/api/ota/chunk")!=std::string::npos){
   ++chunkCalls;
   if(failedChunk)return -1;
+  if(transientChunkFailures){--transientChunkFailures;return -1;}
   board.chunk(s);
   if(lostChunk){lostChunk=false;return -1;}
  }
@@ -63,6 +65,12 @@ int main(int argc,char** argv){
  assert(uploader.status(token,st)&&std::string(st.state)=="done"&&st.sent==f.size());
  assert(!uploader.active()&&Update.finished&&Update.image==f&&Update.writes==2&&chunkCalls==3);
  assert(booted&&mockRunningAddress==0x150000&&mockMillis-bootAt>=10000);
+ // Auch vier kurzzeitige Verbindungsfehler lassen sich ohne doppeltes Schreiben überbrücken.
+ board=RelayOta();Update=MockUpdate();ESP.restarts=0;mockRunningAddress=0x10000;booted=false;mockTask=nullptr;chunkCalls=0;
+ transientChunkFailures=4;
+ assert(uploader.prepare(f.size(),relay(),token));assert(uploader.chunk(token,0,b64(f.data(),f.size())));
+ assert(uploader.start(token));mockTask(mockTaskArg);
+ assert(uploader.status(token,st)&&std::string(st.state)=="done"&&Update.image==f&&Update.writes==2&&chunkCalls==6);
  // Falsches Image wird verworfen, bevor die Relaiskarte eine Anfrage erhält.
  board=RelayOta();Update=MockUpdate();ESP.restarts=0;mockRunningAddress=0x10000;booted=false;mockTask=nullptr;chunkCalls=0;
  auto bad=f;bad[12]=9;
@@ -74,6 +82,7 @@ int main(int argc,char** argv){
  assert(uploader.prepare(f.size(),relay(),token));assert(uploader.chunk(token,0,b64(f.data(),f.size())));
  assert(uploader.start(token));mockTask(mockTaskArg);
  assert(uploader.status(token,st)&&std::string(st.state)=="failed"&&!board.active()&&!Update.running&&!Update.finished);
+ assert(std::string(st.error).find("Verbindungsfehler -1")!=std::string::npos);
  failedChunk=false;
  // Rückfall auf den alten Slot wird nicht als erfolgreich angezeigt.
  board=RelayOta();Update=MockUpdate();ESP.restarts=0;mockRunningAddress=0x10000;booted=false;mockTask=nullptr;rollbackBoot=true;
