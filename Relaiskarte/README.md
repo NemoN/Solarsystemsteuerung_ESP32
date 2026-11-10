@@ -137,13 +137,21 @@ Unter **Einstellungen → Relaiskarte aktualisieren** gibt es zwei Möglichkeite
   `Relaiskarte.ino.bin` erzeugen. Das Partitionsschema muss zwei OTA-App-Slots
   enthalten; das Standardschema mit zwei Slots zu je 1,25 MB ist geeignet.
 
-Die installierte Version und die Release Notes stehen ebenfalls dort. Ältere
+Die installierte Version und die Hinweise zur Relaiskarten-Firmware stehen
+ebenfalls dort. Die auswählbaren Releases tragen die gemeinsame Release-Nummer;
+die Versionsnummer der Relaiskarten-Firmware kann davon abweichen. Ältere
 Karten melden ihre Version erst nach einem Firmware-Update.
 
 Der Haupt-ESP lädt oder empfängt die Datei, puffert sie im PSRAM und überträgt
 sie im Hintergrund an die Karte. Bei zu wenig PSRAM wird das Update abgelehnt.
 Die Heizungsregelung läuft weiter. Für die GitHub-Suche muss bei einem künftigen
 Release die kompilierte Datei exakt als `Relaiskarte.ino.bin` angehängt werden.
+Die Release Notes benötigen für die Anzeige in diesem Bereich einen eigenen
+Abschnitt `### Relaiskarte`. Darin die Änderungen der Relaiskarten-Firmware
+beschreiben oder, wenn nur die Versionsnummer geändert wurde, zum Beispiel
+`Funktional unverändert zur Vorversion; die Versionsnummer wurde aktualisiert.`
+eintragen. Ohne diesen Abschnitt zeigt die Oberfläche für neue Releases an,
+dass keine eigenen Hinweise zur Relaiskarte vorliegen.
 
 Die Karte prüft Zielgerät, Größe und SHA-256-Prüfsumme vor dem Neustart. Während
 der Übertragung bleiben die Relais unverändert und lassen sich nicht schalten.

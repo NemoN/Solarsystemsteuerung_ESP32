@@ -416,7 +416,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <p id="relay-installed-version" class="muted">Installierte Firmware wird ermittelt …</p>
 <details class="release-notes"><summary>Änderungen der installierten Version</summary><p id="relay-installed-notes" class="release-notes-text" role="status">Release Notes werden geladen …</p></details>
 <button id="remote-release-check" type="button">GitHub-Releases suchen</button><p id="remote-release-message" class="message" role="status">Noch nicht nach Updates gesucht.</p>
-<form id="remote-github-form"><label>Firmware-Version<select name="release" required disabled><option value="">Bitte zuerst Releases suchen</option></select></label><button type="submit" disabled>Ausgewählte Version installieren</button></form>
+<form id="remote-github-form"><label>Release mit Relaiskarten-Firmware<select name="release" required disabled><option value="">Bitte zuerst Releases suchen</option></select></label><button type="submit" disabled>Ausgewählte Version installieren</button></form>
 <div id="relay-selected-notes-wrap" class="release-notes" hidden><h3>Änderungen der ausgewählten Version</h3><p id="relay-selected-notes" class="release-notes-text"></p></div>
 <details><summary>Firmwaredatei manuell hochladen</summary><form id="remote-relay-update-form"><label>Firmwaredatei (.bin)<input name="firmware" type="file" accept=".bin,application/octet-stream" required></label><button type="submit" disabled>Relaiskarte aktualisieren</button></form></details>
 <progress id="remote-relay-update-progress" max="100" value="0" hidden></progress><p id="remote-relay-update-message" class="message" role="status"></p>
@@ -1345,12 +1345,27 @@ let installedReleaseCatalog=null,installedReleaseLoadState='loading';
 function releaseNotesText(release){
   return release&&typeof release.body==='string'&&release.body.trim()?release.body.trim().slice(0,12000):'Für diese Version sind keine Release Notes vorhanden.';
 }
-function installedReleaseText(version){
+function relayReleaseNotesText(release){
+  const body=typeof release.body==='string'?release.body:'';
+  const section=/^#{2,3}[ \t]+Relaiskarte[ \t]*\r?\n([\s\S]*?)(?=^#{1,3}[ \t]+|(?![\s\S]))/im.exec(body);
+  if(section&&section[1].trim())return section[1].trim().slice(0,12000);
+  // Historische Releases hatten noch keinen eigenen Abschnitt für die Relaiskarte.
+  const known={
+    '2.7.0':'Die Relaiskarte meldet ihre Firmware-Version.',
+    '2.7.1':'Die WLAN-Verbindung der Relaiskarte wurde verbessert.',
+    '2.7.2':'Funktional unverändert zur Vorversion; die Versionsnummer wurde aktualisiert.',
+    '2.8.0':'Funktional unverändert zur Vorversion; die Versionsnummer wurde aktualisiert.',
+    '2.9.0':'Funktional unverändert zur Vorversion; die Versionsnummer wurde aktualisiert.'
+  };
+  const version=(release.tag_name||release.tag||'').replace(/^v/i,'');
+  return known[version]||'Für die Relaiskarte sind keine eigenen Release Notes vorhanden.';
+}
+function installedReleaseText(version,relay=false){
   if(!version)return 'Die installierte Version ist nicht bekannt.';
   if(installedReleaseLoadState==='loading')return 'Release Notes werden geladen …';
   if(installedReleaseLoadState==='error')return 'Release Notes nicht verfügbar. Internetverbindung zu GitHub prüfen.';
   const release=installedReleaseCatalog.find(item=>item.tag_name.replace(/^v/i,'')===version.replace(/^v/i,''));
-  return release?releaseNotesText(release):'Für diese Version wurden keine Release Notes auf GitHub gefunden.';
+  return release?(relay?relayReleaseNotesText(release):releaseNotesText(release)):'Für diese Version wurden keine Release Notes auf GitHub gefunden.';
 }
 function renderInstalledMainRelease(){
   document.getElementById('main-installed-version').textContent=currentFirmwareVersion?'Installierte Firmware: '+currentFirmwareVersion:'Installierte Firmware wird ermittelt …';
@@ -1359,12 +1374,12 @@ function renderInstalledMainRelease(){
 function renderInstalledRelayRelease(target){
   const version=target&&target.online&&target.version||'';
   document.getElementById('relay-installed-version').textContent=!target||!target.configured?'Keine Erweiterung ausgewählt.':!target.online?'Relaiserweiterung nicht erreichbar.':version?'Installierte Firmware: '+version:'Firmware-Version nicht verfügbar; ältere Versionen melden sie nicht.';
-  document.getElementById('relay-installed-notes').textContent=version?installedReleaseText(version):'Ohne gemeldete Firmware-Version lassen sich keine Release Notes zuordnen.';
+  document.getElementById('relay-installed-notes').textContent=version?installedReleaseText(version,true):'Ohne gemeldete Firmware-Version lassen sich keine Release Notes zuordnen.';
 }
 function renderSelectedReleaseNotes(prefix,release){
   const container=document.getElementById(prefix+'-selected-notes-wrap');
   container.hidden=!release;
-  document.getElementById(prefix+'-selected-notes').textContent=release?releaseNotesText(release):'';
+  document.getElementById(prefix+'-selected-notes').textContent=release?(prefix==='relay'?relayReleaseNotesText(release):releaseNotesText(release)):'';
 }
 async function loadInstalledReleaseNotes(){
   installedReleaseLoadState='loading';
@@ -1429,7 +1444,7 @@ remoteGithubForm.addEventListener('submit',async event=>{
   const selected=remoteGithubForm.elements.release.value,release=selected===''?null:remoteRelayReleases[Number(selected)];
   const target=remoteRelayCards[Number(remoteUpdateBoard.value)]||remoteRelayState;
   if(!release||remoteRelayUploadBusy||!target||!target.online)return;
-  if(!confirm('Version '+release.tag+' auf der Relaiskarte installieren? Beim Neustart sind die Relais kurz aus und stellen danach ihre gespeicherten Zustände wieder her.'))return;
+  if(!confirm('Relaiskarten-Firmware aus Release '+release.tag+' installieren? Beim Neustart sind die Relais kurz aus und stellen danach ihre gespeicherten Zustände wieder her.'))return;
   remoteRelayUploadBusy=true;remoteGithubForm.querySelector('button').disabled=true;remoteRelayUpdateForm.querySelector('button').disabled=true;
   remoteRelayUpdateProgress.hidden=false;remoteRelayUpdateProgress.value=0;remoteRelayUpdateMessage.className='message';remoteRelayUpdateMessage.textContent='GitHub-Download wird gestartet …';
   const post=(path,values)=>request('/api/remote-relay/update/'+path,{method:'POST',headers:{'X-Requested-With':'HeatingUI','Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams(values)});
