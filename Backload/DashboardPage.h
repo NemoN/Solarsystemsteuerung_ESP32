@@ -1343,7 +1343,9 @@ document.getElementById('remote-relay-switches').addEventListener('click',switch
 remoteExtraGroups.addEventListener('click',switchRemoteRelay);
 let installedReleaseCatalog=null,installedReleaseLoadState='loading';
 function releaseNotesText(release){
-  return release&&typeof release.body==='string'&&release.body.trim()?release.body.trim().slice(0,12000):'Für diese Version sind keine Release Notes vorhanden.';
+  const body=release&&typeof release.body==='string'?release.body:'';
+  const section=/^#{2,3}[ \t]+Haupt-ESP[ \t]*\r?\n([\s\S]*?)(?=^#{1,3}[ \t]+|(?![\s\S]))/im.exec(body);
+  return section&&section[1].trim()?section[1].trim().slice(0,12000):'Für den Haupt-ESP sind keine eigenen Release Notes vorhanden.';
 }
 function relayReleaseNotesText(release){
   const body=typeof release.body==='string'?release.body:'';

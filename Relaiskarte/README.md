@@ -146,8 +146,10 @@ Der Haupt-ESP lädt oder empfängt die Datei, puffert sie im PSRAM und überträ
 sie im Hintergrund an die Karte. Bei zu wenig PSRAM wird das Update abgelehnt.
 Die Heizungsregelung läuft weiter. Für die GitHub-Suche muss bei einem künftigen
 Release die kompilierte Datei exakt als `Relaiskarte.ino.bin` angehängt werden.
-Die Release Notes benötigen für die Anzeige in diesem Bereich einen eigenen
-Abschnitt `### Relaiskarte`. Darin die Änderungen der Relaiskarten-Firmware
+Die Release Notes benötigen für die Anzeige getrennte Abschnitte `### Haupt-ESP`
+und `### Relaiskarte`. Ältere Releases ohne diese Abschnitte zeigen in den
+jeweiligen Bereichen keine allgemeinen Release Notes an. Im Abschnitt zur
+Relaiskarte die Änderungen der Relaiskarten-Firmware
 beschreiben oder, wenn nur die Versionsnummer geändert wurde, zum Beispiel
 `Funktional unverändert zur Vorversion; die Versionsnummer wurde aktualisiert.`
 eintragen. Ohne diesen Abschnitt zeigt die Oberfläche für neue Releases an,

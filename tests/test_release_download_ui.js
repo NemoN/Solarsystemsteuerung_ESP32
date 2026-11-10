@@ -23,7 +23,7 @@ const document = {getElementById: id => ({'github-update-form': form, 'release-m
   'main-selected-notes':selectedNotes,'main-selected-notes-wrap':selectedNotesWrap})[id]};
 const asset = {name: 'Backload.ino.bin', digest: 'sha256:' + 'a'.repeat(64), size: 1200000};
 let installedVersion = '1.11.5', fail = false, releases = [
-  {tag_name: 'v1.11.5', name: 'Version 1.11.5', published_at: '2026-10-31',body:'- Verbesserte Steuerung', assets: [asset, {...asset, name: 'Backload-1.11.5.bin'}]},
+  {tag_name: 'v1.11.5', name: 'Version 1.11.5', published_at: '2026-10-31',body:'### Haupt-ESP\n- Verbesserte Steuerung\n\n### Relaiskarte\nNicht anzeigen', assets: [asset, {...asset, name: 'Backload-1.11.5.bin'}]},
   {tag_name: 'v1.11.4', name: 'Version 1.11.4', published_at: '2026-10-30', assets: [asset, {...asset, name: 'Backload-1.11.4.bin', digest: 'sha256:'+'b'.repeat(64)}]},
   {tag_name: 'v1.11.3', name: 'Version 1.11.3', published_at: '2026-10-29', assets: [asset]},
 ];
