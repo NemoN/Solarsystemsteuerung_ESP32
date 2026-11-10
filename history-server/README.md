@@ -80,8 +80,27 @@ sudoedit /etc/systemd/system/backload-history.service
 ```
 
 In der Datei `BENUTZER`, alle Vorkommen von `/pfad/zu/history-server` und die
-ESP32-Adresse anpassen. Das Datenverzeichnis muss bereits existieren und für
-`BENUTZER` beschreibbar sein. Danach den Dienst aktivieren:
+ESP32-Adresse anpassen. Das Datenverzeichnis sowie eine bereits vorhandene
+Datenbank und Sperrdatei müssen für den Dienstbenutzer beschreibbar sein. Das
+Verzeichnis benötigt außerdem Suchrechte, damit SQLite dort Journaldateien
+anlegen kann. Bei der obigen Einrichtung beispielsweise (hier `BENUTZER` durch
+den in der Dienstdatei eingetragenen Benutzer ersetzen):
+
+```sh
+sudo chown BENUTZER data
+sudo chmod u+rwx data
+for datei in data/temperatures.sqlite3 data/temperatures.lock; do
+  if [ -e "$datei" ]; then
+    sudo chown BENUTZER "$datei"
+    sudo chmod u+rw "$datei"
+  fi
+done
+```
+
+Bei einem anderen `DATABASE_PATH` das zugehörige Verzeichnis und die Dateien
+entsprechend anpassen. Bei einem bereits geladenen Dienst zeigt
+`systemctl show backload-history.service -p User` den eingestellten Benutzer.
+Danach den Dienst aktivieren:
 
 ```sh
 sudo systemctl daemon-reload
