@@ -366,10 +366,10 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <h2 id="update-heading">Firmware aktualisieren</h2>
 <p class="muted">Beim Update bleibt die Pumpe aus. Der ESP startet neu und der Temperaturverlauf wird gelöscht.</p>
 <p id="main-installed-version" class="muted">Installierte Firmware wird ermittelt …</p>
-<details class="release-notes"><summary>Änderungen der installierten Version</summary><p id="main-installed-notes" class="release-notes-text" role="status">Release Notes werden geladen …</p></details>
+<details class="release-notes"><summary>Änderungen der installierten Version</summary><div id="main-installed-notes" class="release-notes-text" role="status">Release Notes werden geladen …</div></details>
 <button id="release-check" type="button">GitHub-Releases suchen</button><p id="release-message" class="message" role="status">Noch nicht nach Updates gesucht.</p>
 <form id="github-update-form"><label>Firmware-Version<select name="release" required disabled><option value="">Bitte zuerst Releases suchen</option></select></label><button type="submit" disabled>Ausgewählte Version installieren</button><p id="release-download" hidden><a id="release-download-link" target="_blank" rel="noopener noreferrer">Ausgewählte Firmware herunterladen (.bin)</a></p></form>
-<div id="main-selected-notes-wrap" class="release-notes" hidden><h3>Änderungen der ausgewählten Version</h3><p id="main-selected-notes" class="release-notes-text"></p></div>
+<div id="main-selected-notes-wrap" class="release-notes" hidden><h3>Änderungen der ausgewählten Version</h3><div id="main-selected-notes" class="release-notes-text"></div></div>
 <progress id="update-progress" max="100" value="0" hidden></progress><p id="update-message" class="message" role="status"></p>
 <details><summary>Firmware-Datei manuell hochladen</summary><p>Eine für dieses ESP32-S3-Board kompilierte Datei (.bin) auswählen.</p><form id="update-form"><label>Firmware-Datei<input name="firmware" type="file" accept=".bin,application/octet-stream" required></label><button type="submit">Datei hochladen</button></form></details>
 </section>
@@ -414,10 +414,10 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <p id="remote-update-availability" class="muted" role="status"></p>
 <label>Erweiterung<select id="remote-update-board"><option value="0">Relaiserweiterung 1</option><option value="1">Relaiserweiterung 2</option><option value="2">Relaiserweiterung 3</option><option value="3">Relaiserweiterung 4</option></select></label>
 <p id="relay-installed-version" class="muted">Installierte Firmware wird ermittelt …</p>
-<details class="release-notes"><summary>Änderungen der installierten Version</summary><p id="relay-installed-notes" class="release-notes-text" role="status">Release Notes werden geladen …</p></details>
+<details class="release-notes"><summary>Änderungen der installierten Version</summary><div id="relay-installed-notes" class="release-notes-text" role="status">Release Notes werden geladen …</div></details>
 <button id="remote-release-check" type="button">GitHub-Releases suchen</button><p id="remote-release-message" class="message" role="status">Noch nicht nach Updates gesucht.</p>
 <form id="remote-github-form"><label>Release mit Relaiskarten-Firmware<select name="release" required disabled><option value="">Bitte zuerst Releases suchen</option></select></label><button type="submit" disabled>Ausgewählte Version installieren</button></form>
-<div id="relay-selected-notes-wrap" class="release-notes" hidden><h3>Änderungen der ausgewählten Version</h3><p id="relay-selected-notes" class="release-notes-text"></p></div>
+<div id="relay-selected-notes-wrap" class="release-notes" hidden><h3>Änderungen der ausgewählten Version</h3><div id="relay-selected-notes" class="release-notes-text"></div></div>
 <details><summary>Firmwaredatei manuell hochladen</summary><form id="remote-relay-update-form"><label>Firmwaredatei (.bin)<input name="firmware" type="file" accept=".bin,application/octet-stream" required></label><button type="submit" disabled>Relaiskarte aktualisieren</button></form></details>
 <progress id="remote-relay-update-progress" max="100" value="0" hidden></progress><p id="remote-relay-update-message" class="message" role="status"></p>
 </section>
