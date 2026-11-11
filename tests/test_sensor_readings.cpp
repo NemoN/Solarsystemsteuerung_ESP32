@@ -25,6 +25,21 @@ void expectRelayOff(Adafruit_MAX31865& sensor) {
 }
 
 int main() {
+  SensorFaultDelay delay;
+  assert(!delay.pending(100));
+  delay.observe(true, 100);
+  assert(delay.pending(100));
+  delay.observe(true, 50000);
+  assert(delay.pending(60099));
+  assert(!delay.pending(60100));
+  delay.observe(false, 60101);
+  assert(!delay.pending(60101));
+  delay.observe(true, UINT32_MAX - 30);
+  assert(delay.pending(20));
+  assert(!delay.pending(60000));
+  delay.observe(false, 60001);
+  delay.observe(true, 60002);
+  assert(delay.pending(60002));
   Adafruit_MAX31865 sensor;
   sensor.rawRtd = 0;
   sensor.temperature = -242.02f;

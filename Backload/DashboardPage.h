@@ -192,7 +192,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <div><label for="solar-start">Einschaltdifferenz (3–10 K)</label><div class="stepper"><button type="button" data-direction="-1" aria-label="Solar-Einschaltdifferenz senken">−</button><input id="solar-start" type="number" name="start" min="3" max="10" step="0.1" inputmode="decimal" required><button type="button" data-direction="1" aria-label="Solar-Einschaltdifferenz erhöhen">+</button></div></div>
 <button type="submit">Solarregelung speichern</button>
 </form>
-<p class="muted">Automatik: Einschalten ab eingestellter Differenz; Ausschalten bei höchstens 1 K oder Sensorfehler.</p>
+<p class="muted">Automatik: Einschalten ab eingestellter Differenz; Ausschalten bei höchstens 1 K oder Sensorfehler. Einzelne Panel-Fehler werden bei laufender Pumpe kurz überbrückt.</p>
 <p id="solar-message" class="message" role="status"></p>
 </section>
 
@@ -228,7 +228,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
   <p class="muted">Die Solarpumpe an Relais 3 arbeitet unabhängig von der Backloadpumpe.</p>
   <dl class="org-solar-values"><div><dt>Solarpanel</dt><dd id="org-solar-panel">—</dd></div><div><dt>Kombispeicher unten</dt><dd id="org-solar-tank">—</dd></div><div><dt>Aktuelle Differenz</dt><dd id="org-solar-difference">—</dd></div></dl>
   <p><strong>Start:</strong> Solarpanel − Kombi unten ≥ <strong id="org-solar-start">— K</strong> <span class="muted">(einstellbar: 3–10 K)</span>.</p>
-  <p><strong>Stopp:</strong> Differenz ≤ <strong id="org-solar-stop">— K</strong> oder Fehler eines der beiden Sensoren.</p>
+  <p><strong>Stopp:</strong> Differenz ≤ <strong id="org-solar-stop">— K</strong> oder Sensorfehler. Einzelne Panel-Fehler werden bei laufender Pumpe kurz überbrückt.</p>
   <p class="org-solar-note muted">Im Handbetrieb werden Temperaturregelung und Sensorfehler übergangen. Bei Update oder Neustart ist die Pumpe ausgeschaltet; im Testmodus wird nur der Zustand simuliert.</p>
 </div>
 <div class="org-led-guide" id="org-led-guide" aria-labelledby="org-led-heading">
@@ -678,11 +678,12 @@ function updateSolarDiagram(state,simulation,controllers){
   const diagram=document.getElementById('solar-pump-diagram'),wires=document.querySelector('.burner-pipes');
   const sensor=Array.isArray(controllers)?controllers.find(c=>c.id===4):null;
   const validSensor=!!state&&state.sensorsValid&&sensor&&sensor.valid===true&&typeof sensor.temperature==='number'&&Number.isFinite(sensor.temperature);
-  const panel=validSensor?'Solarpanel: '+temperatureNumber.format(sensor.temperature)+' °C':sensor&&!sensor.valid?'Solarpanel: Sensorfehler':'Solarpanel: keine aktuellen Daten';
-  const issue=state&&(state.paused?'Pausiert':!state.manual&&!state.configValid?'Einstellung ungültig':!state.manual&&!state.sensorsValid?'Sensorfehler':null);
+  const panel=validSensor?'Solarpanel: '+temperatureNumber.format(sensor.temperature)+' °C':sensor&&sensor.sensorFaultPending?'Solarpanel: Messwert vorübergehend nicht verfügbar':sensor&&!sensor.valid?'Solarpanel: Sensorfehler':'Solarpanel: keine aktuellen Daten';
+  const grace=!!(state&&state.sensorGrace&&state.on&&!state.manual);
+  const issue=state&&(state.paused?'Pausiert':!state.manual&&!state.configValid?'Einstellung ungültig':!state.manual&&!state.sensorsValid&&!grace?(state.sensorFaultPending?'Messwert fehlt':'Sensorfehler'):null);
   const active=!!(state&&!issue&&state.on);
   const label=!state?'Status unbekannt':issue?issue+' · AUS':active?(simulation?'EIN (simuliert)':'EIN'):(simulation?'AUS (simuliert)':'AUS');
-  const detail=!state?'Keine aktuellen Daten':(simulation?'Relais 3: AUS · Testmodus':'Relais 3: '+(state.relayOn?'AN':'AUS'))+(state.manual?' · Handbetrieb':'');
+  const detail=!state?'Keine aktuellen Daten':(simulation?'Relais 3: AUS · Testmodus':'Relais 3: '+(state.relayOn?'AN':'AUS'))+(state.manual?' · Handbetrieb':grace?(state.sensorFaultPending?' · letzter Panelwert wird kurz verwendet':' · Panel-Fehler kurz überbrückt'):'');
   diagram.classList.toggle('running',active);
   wires.classList.toggle('solar-active',active);
   document.getElementById('solar-diagram-state').textContent=label;
@@ -923,11 +924,12 @@ function updateSolar(state,simulation){
   solarManualSwitch.setAttribute('aria-checked',String(manual));solarManualSwitch.setAttribute('data-state',!state?'unknown':manual?'on':'off');
   solarPowerSwitch.setAttribute('aria-checked',String(requested));solarPowerSwitch.setAttribute('data-state',!state?'unknown':requested?'on':'off');
   if(!state){badge.className='badge';badge.textContent='Status unbekannt';detail.textContent='Keine aktuellen Daten.';return;}
-  const issue=state.paused?'Pausiert':!manual&&!state.configValid?'Einstellung ungültig':!manual&&!state.sensorsValid?'Sensorfehler':null;
+  const grace=!!(state.sensorGrace&&state.on&&!manual);
+  const issue=state.paused?'Pausiert':!manual&&!state.configValid?'Einstellung ungültig':!manual&&!state.sensorsValid&&!grace?(state.sensorFaultPending?'Messwert fehlt':'Sensorfehler'):null;
   badge.className='badge'+(issue?' waiting':state.on?' on':'');
   badge.textContent=issue?issue+' · AUS':state.on?(simulation?'EIN · simuliert':'EIN'):(simulation?'AUS · simuliert':'AUS');
   detail.textContent=(manual?'Handbetrieb aktiv. ':'Automatik aktiv. ')+(Number.isFinite(state.difference)?'Aktuelle Differenz: '+setpointNumber.format(state.difference)+' K. ':'Differenz nicht verfügbar. ')+
-    (state.paused?'Update oder Neustart läuft.':manual&&!state.sensorsValid?'Sensorfehler wird im Handbetrieb übergangen.':!state.configValid?'Bitte Einschaltdifferenz erneut speichern.':!state.sensorsValid?'Solarpanel und Kombispeicher unten prüfen.':'');
+    (state.paused?'Update oder Neustart läuft.':manual&&!state.sensorsValid?(state.sensorFaultPending?'Panel-Messwert vorübergehend nicht verfügbar.':'Sensorfehler wird im Handbetrieb übergangen.'):!state.configValid?'Bitte Einschaltdifferenz erneut speichern.':grace?(state.sensorFaultPending?'Panel-Messwert vorübergehend nicht verfügbar; letzter gültiger Wert wird höchstens 10 Sekunden verwendet.':'Panel-Sensorfehler: Lauf wird mit letztem gültigen Wert höchstens 10 Sekunden überbrückt.'):!state.sensorsValid?(state.sensorFaultPending?'Panel-Messwert vorübergehend nicht verfügbar.':'Solarpanel und Kombispeicher unten prüfen.'):'');
   if(!solarDirty&&!solarBusy&&!solarForm.contains(document.activeElement)&&Number.isFinite(state.differenceStart))solarForm.elements.start.value=inputNumber(state.differenceStart);
 }
 async function changeSolarControl(action){
@@ -1749,13 +1751,14 @@ function addTemperatureSparkline(section,c){
 }
 function showTemperature(p,c){
   const valid=c&&c.valid===true&&typeof c.temperature==='number'&&Number.isFinite(c.temperature);
+  const pending=!!(c&&!valid&&c.sensorFaultPending);
   const output=p.section.querySelector('.temperature');
-  const detail=c?'Sensorfehler'+(c.sensorError?': '+c.sensorError:'')+(c.fault?' (0x'+c.fault.toString(16).toUpperCase()+')':''):'—';
+  const detail=!c?'—':pending?'Messwert vorübergehend nicht verfügbar':'Sensorfehler'+(c.sensorError?': '+c.sensorError:'')+(c.fault?' (0x'+c.fault.toString(16).toUpperCase()+')':'');
   output.textContent=valid?temperatureNumber.format(c.temperature)+' °C':detail;
-  output.className='temperature'+(c&&!valid?' error':'');
+  output.className='temperature'+(c&&!valid&&!pending?' error':'');
   const status=p.section.querySelector('.sensor-status');
-  const state=!c?'unknown':valid?'ok':'error';
-  const label=state==='ok'?'Sensor: OK':state==='error'?'Sensorfehler':'Sensorstatus unbekannt';
+  const state=!c||pending?'unknown':valid?'ok':'error';
+  const label=pending?'Messwert vorübergehend nicht verfügbar':state==='ok'?'Sensor: OK':state==='error'?'Sensorfehler':'Sensorstatus unbekannt';
   status.dataset.state=state;status.setAttribute('aria-label',label);status.setAttribute('title',label);
   status.querySelector('.sensor-status-mark').setAttribute('d',state==='ok'?'M8 12l2.5 2.5L16.5 9':state==='error'?'M9 9l6 6M15 9l-6 6':'M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4M12 16h.01');
 }
@@ -1879,9 +1882,10 @@ function updateOrganigram(data){
   }
   const solar=data&&data.solar;
   const solarBadge=document.getElementById('org-solar-state');
-  const solarIssue=solar&&(solar.paused?'Pausiert':!solar.manual&&!solar.configValid?'Einstellung ungültig':!solar.manual&&!solar.sensorsValid?'Sensorfehler':null);
+  const solarGrace=!!(solar&&solar.sensorGrace&&solar.on&&!solar.manual);
+  const solarIssue=solar&&(solar.paused?'Pausiert':!solar.manual&&!solar.configValid?'Einstellung ungültig':!solar.manual&&!solar.sensorsValid&&!solarGrace?(solar.sensorFaultPending?'Messwert fehlt':'Sensorfehler'):null);
   solarBadge.className='badge'+(solarIssue?' waiting':solar&&solar.on?' on':'');
-  solarBadge.textContent=!solar?'Status unbekannt':solarIssue?solarIssue+' · AUS':solar.on?(data.simulation?'EIN · simuliert':'EIN'):(data.simulation?'AUS · simuliert':'AUS');
+  solarBadge.textContent=!solar?'Status unbekannt':solarIssue?solarIssue+' · AUS':solarGrace?(solar.sensorFaultPending?'EIN · Panelwert vorübergehend nicht verfügbar':'EIN · Sensorfehler überbrückt'):solar.on?(data.simulation?'EIN · simuliert':'EIN'):(data.simulation?'AUS · simuliert':'AUS');
   for(const [id,index] of [['org-solar-panel',4],['org-solar-tank',3]]){
     const sensor=controllers.find(c=>c.id===index);
     document.getElementById(id).textContent=sensor&&sensor.valid&&Number.isFinite(sensor.temperature)?setpointNumber.format(sensor.temperature)+' °C':'—';

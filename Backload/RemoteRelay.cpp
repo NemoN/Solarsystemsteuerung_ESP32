@@ -1,5 +1,6 @@
 #include "RemoteRelay.h"
 #include "RemoteRelayProtocol.h"
+#include "RelayResponse.h"
 #include <WiFi.h>
 #include <HTTPClient.h>
 
@@ -27,6 +28,12 @@ bool compatibleNetwork(IPAddress target) {
   for (int i = 0; i < 4; ++i) if ((target[i] & mask[i]) != (local[i] & mask[i])) return false;
   return true;
 }
+bool readResponse(HTTPClient& http, char* out, size_t capacity) {
+  const int size = http.getSize();
+  WiFiClient* stream = http.getStreamPtr();
+  return size > 0 && stream && readRelayResponse(*stream, size_t(size), out, capacity,
+    []() { return millis(); }, []() { vTaskDelay(pdMS_TO_TICKS(10)); });
+}
 bool exchange(const RemoteRelayConfig& cfg, unsigned id, bool value, uint8_t& mask) {
   IPAddress ip;
   if (!ip.fromString(cfg.address) || !compatibleNetwork(ip)) return false;
@@ -41,10 +48,11 @@ bool exchange(const RemoteRelayConfig& cfg, unsigned id, bool value, uint8_t& ma
     http.addHeader("Content-Type", "application/x-www-form-urlencoded");
     code = http.POST("id=" + String(id) + "&value=" + String(value ? 1 : 0));
   } else code = http.GET();
-  String body;
-  if (code == 200 && http.getSize() >= 6 && http.getSize() <= 7) body = http.getString();
+  char body[8] = {};
+  const int size = http.getSize();
+  const bool complete = code == 200 && size >= 6 && size <= 7 && readResponse(http, body, sizeof(body));
   http.end();
-  return parseRemoteRelayState(body.c_str(), body.length(), mask);
+  return complete && parseRemoteRelayState(body, size_t(size), mask);
 }
 bool exchangeVersion(const RemoteRelayConfig& cfg, char version[32]) {
   IPAddress ip;
@@ -54,8 +62,10 @@ bool exchangeVersion(const RemoteRelayConfig& cfg, char version[32]) {
   if (!http.begin(client, "http://" + String(cfg.address) + "/api/version")) return false;
   http.addHeader("X-Relay-Key", cfg.key);
   const int code = http.GET();
-  String body; if (code == 200 && http.getSize() > 8 && http.getSize() < 40) body = http.getString();
-  http.end(); return parseRemoteRelayVersion(body.c_str(), body.length(), version);
+  char body[40] = {};
+  const int size = http.getSize();
+  const bool complete = code == 200 && size > 8 && size < 40 && readResponse(http, body, sizeof(body));
+  http.end(); return complete && parseRemoteRelayVersion(body, size_t(size), version);
 }
 // One request only: a lost reply may mean that the card has already reset.
 RemoteRelay::ForgetState resetCard(const RemoteRelayConfig& cfg) {
@@ -66,9 +76,10 @@ RemoteRelay::ForgetState resetCard(const RemoteRelayConfig& cfg) {
   if (!http.begin(client, "http://" + String(cfg.address) + "/api/factory-reset")) return RemoteRelay::FORGET_FAILED;
   http.addHeader("X-Relay-Key", cfg.key);
   const int code = http.POST("");
-  String body; if (code == 200 && http.getSize() == 9) body = http.getString();
+  char body[10] = {};
+  const bool complete = code == 200 && http.getSize() == 9 && readResponse(http, body, sizeof(body));
   http.end();
-  if (code == 200 && body == "RESET1:OK") return RemoteRelay::FORGET_DONE;
+  if (complete && !strcmp(body, "RESET1:OK")) return RemoteRelay::FORGET_DONE;
   return code < 0 || code == 200 || code >= 500 ? RemoteRelay::FORGET_UNCERTAIN : RemoteRelay::FORGET_FAILED;
 }
 }

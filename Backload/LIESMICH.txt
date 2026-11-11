@@ -1,4 +1,4 @@
-Backload 2.8.0 – automatische und manuelle Pumpensteuerung
+Backload 2.9.5 – automatische und manuelle Pumpensteuerung
 
 Sensoren und Relais
 Fünf MAX31865-Sensoren mit gemeinsamer Software-SPI-Verbindung:
@@ -8,6 +8,11 @@ Fünf MAX31865-Sensoren mit gemeinsamer Software-SPI-Verbindung:
   CS GPIO 7: Pufferspeicher oben     (API-ID 2)
   CS GPIO 15: Solarpanel            (API-ID 4, Solarregelung)
   SPI: CLK GPIO 38, MOSI GPIO 11, MISO GPIO 13.
+Alle MAX31865 werden für Zweidrahtbetrieb initialisiert. Der Sketch rechnet
+mit PT1000 (1000 Ohm bei 0 °C) und 4300 Ohm Referenzwiderstand. Zweidraht- und
+Vierdrahtbetrieb verwenden dasselbe MAX31865-Konfigurationsbit; passende
+Brücken und Anschlüsse auf dem tatsächlich verwendeten Modul müssen daher
+zusätzlich anhand seiner Dokumentation geprüft werden.
 Die ursprünglichen drei Sensor-IDs bleiben gleich; das vorhandene
 Temperaturarchiv erfasst weiterhin diese drei Sensoren.
 
@@ -44,6 +49,13 @@ Anlagen- und Testmodus.
 EIN: Solarpanel − Kombi unten >= gespeicherte Einschaltdifferenz.
 AUS: Solarpanel − Kombi unten <= 1 K, Fehler eines Fühlers oder veraltete
 Messwerte (älter als 10 Sekunden).
+Bei laufender Pumpe werden die Panel-Fehler 0x08, 0x10 und 0x18 mit dem letzten
+gültigen Panelwert höchstens 10 Sekunden ab dessen Messung überbrückt. Die
+Stoppdifferenz und ein Fehler am Speicherfühler schalten weiterhin ab; mit
+einem alten Panelwert wird die Pumpe nicht gestartet. Die Weboberfläche zeigt
+einen fehlenden Panelmesswert zunächst ohne Fehlermeldung und meldet einen
+ununterbrochenen Fehler nach 60 Sekunden. API, Log und Status-LED zeigen den
+Fehler weiterhin sofort; die Pumpenregelung wird nicht verzögert.
 Zwischen den Grenzen bleibt der vorherige Pumpenzustand erhalten. Im eigenen
 Handbetrieb kann die Solarpumpe ein- und ausgeschaltet werden; Temperaturregelung
 und Sensorfehler werden dabei übergangen. Beim Aktivieren bleibt sie zunächst

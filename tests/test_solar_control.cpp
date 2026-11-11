@@ -4,6 +4,16 @@
 #include <cstdio>
 
 int main() {
+  SolarPanelGrace grace;
+  assert(!grace.canHold(0,true,0x10,true));
+  grace.record(60,UINT32_MAX-5);
+  assert(grace.canHold(5,true,0x08,true) && grace.temperature()==60);
+  assert(grace.canHold(5,true,0x18,true));
+  assert(!grace.canHold(5,false,0x10,true));
+  assert(!grace.canHold(5,true,0x10,false));
+  assert(!grace.canHold(5,true,0x04,true));
+  assert(!grace.canHold(5,true,0x11,true));
+  assert(!grace.canHold(10000,true,0x10,true));
   SolarControl pump;
   assert(!SolarControl::validStart(2.99f) && !SolarControl::validStart(10.01f));
   assert(SolarControl::validStart(3) && SolarControl::validStart(10) && SolarControl::validStart(5.5f));

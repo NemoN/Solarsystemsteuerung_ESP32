@@ -74,7 +74,24 @@ Vorgabe sind 5 K.
 | Solarpanel − Kombi unten ≥ Einschaltdifferenz | Pumpe EIN |
 | Solarpanel − Kombi unten ≤ 1 K | Pumpe AUS |
 | Differenz zwischen den Grenzen | vorheriger Zustand bleibt erhalten |
-| Fehler eines Solarfühlers, Messwerte älter als 10 Sekunden oder ungültige Einstellungen | Automatik: Pumpe AUS |
+| Bestimmte kurzzeitige Panel-Fehler (`0x08`, `0x10`, `0x18`) bei laufender Pumpe | Letzten gültigen Panelwert höchstens 10 Sekunden ab dessen Messung verwenden |
+| Sonstiger Sensorfehler, veraltete Messwerte oder ungültige Einstellungen | Automatik: Pumpe AUS |
+
+Die Überbrückung startet eine ausgeschaltete Pumpe nicht. Der Fühler im Kombi
+unten muss weiterhin gültig sein; mit seinem aktuellen Wert und dem letzten
+gültigen Panelwert gilt auch die Stoppdifferenz. Nach zehn Sekunden ohne gültigen
+Panelwert schaltet die Pumpe ab. Ein neuer gültiger Panelwert beendet die
+Überbrückung und erlaubt wieder den normalen Automatikbetrieb. Die API meldet
+den Fehler weiterhin über `sensorsValid: false` und den überbrückten Lauf über
+`sensorGrace: true`.
+
+Die Weboberfläche meldet einen Solarpanel-Sensorfehler erst nach 60 Sekunden
+ununterbrochen ungültiger Messungen. Bis dahin zeigt sie einen vorübergehend
+fehlenden Messwert; ein alter Wert wird nicht als aktuell ausgegeben. Jede
+gültige Panelmessung setzt den Anzeige-Timer zurück. Die Verzögerung verändert
+die Regelung und die zehnsekündige Überbrückung nicht. Fehlerdetails in API und
+Log sowie die Fehleranzeige der Status-LED bleiben sofort verfügbar. Die API
+kennzeichnet die Wartezeit mit `sensorFaultPending`.
 
 Die Solarpumpe hat einen eigenen Handbetrieb. Beim Einschalten des Handbetriebs
 ist sie zunächst aus und kann anschließend ein- und ausgeschaltet werden. Im

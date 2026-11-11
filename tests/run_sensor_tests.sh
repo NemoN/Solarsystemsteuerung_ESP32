@@ -80,6 +80,10 @@ python3 "$project_dir/tests/test_heating_integration.py"
 "$test_dir/remote-relay-protocol-tests"
 
 "${CXX:-c++}" -std=c++11 -Wall -Wextra -Werror -fsanitize=address,undefined \
+  "$project_dir/tests/test_relay_response.cpp" -o "$test_dir/relay-response-tests"
+"$test_dir/relay-response-tests"
+
+"${CXX:-c++}" -std=c++11 -Wall -Wextra -Werror -fsanitize=address,undefined \
   -I"$project_dir/tests/relay_ota_mocks" \
   "$project_dir/Relaiskarte/RelayOta.cpp" "$project_dir/tests/test_relay_ota.cpp" \
   -o "$test_dir/relay-ota-tests"

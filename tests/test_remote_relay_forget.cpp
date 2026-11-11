@@ -9,16 +9,18 @@ uint32_t mockMillis=2000;
 ESPClass ESP; WiFiClass WiFi;
 TaskFunction_t mockTask=nullptr; void* mockTaskArg=nullptr;
 std::vector<uint8_t> mockGithubImage; size_t mockGithubOffset=0,mockGithubStopAfter=size_t(-1);
-int mockGithubAttempts=0,mockGithubFailures=0,mockGithubCode=200; long mockGithubReportedSize=-1;
+int mockGithubAttempts=0,mockGithubFailures=0,mockGithubCode=200; long mockGithubReportedSize=-1,mockRelayReportedSize=-1;
 std::map<std::string,std::vector<unsigned char>> mockPreferences;
 int mockPreferenceFailures=0;
 struct EndIteration{};
-void mockAdvance(uint32_t n){mockMillis+=n;throw EndIteration{};}
-int resetCode=200,resetCalls=0,versionCode=200,versionCalls=0,stateCode=200;
+void mockAdvance(uint32_t n){mockMillis+=n;if(n!=10)throw EndIteration{};}
+int resetCode=200,resetCalls=0,versionCode=200,versionCalls=0,stateCode=200,commandCalls=0;
+bool incompleteBody=false;
 int mockHttp(const String& url,const String* body,String& response){
  if(std::string(url.c_str()).find("/api/factory-reset")!=std::string::npos){assert(body);++resetCalls;if(resetCode==200)response="RESET1:OK";return resetCode;}
  if(std::string(url.c_str()).find("/api/version")!=std::string::npos){++versionCalls;if(versionCode==200)response="RLYVER1:2.7.0";return versionCode;}
- if(stateCode==200)response="RLY1:0";
+ if(body)++commandCalls;
+ if(stateCode==200)response=incompleteBody?"RLY1:":"RLY1:0";
  return stateCode;
 }
 void oneIteration(){try{mockTask(mockTaskArg);assert(false);}catch(const EndIteration&) {}}
@@ -31,6 +33,11 @@ int main(){
  stateCode=200;oneIteration();assert(card.snapshot().online&&!std::strcmp(card.snapshot().version,"2.7.0"));
  assert(card.command(1,true));stateCode=503;oneIteration();assert(!card.snapshot().online);
  stateCode=200;oneIteration();assert(card.snapshot().online);
+ assert(card.command(1,true));incompleteBody=true;mockRelayReportedSize=6;
+ const int beforeCommand=commandCalls;const uint32_t beforeWait=mockMillis;oneIteration();
+ assert(mockMillis-beforeWait>=2500 && !card.snapshot().busy && !card.snapshot().online && commandCalls==beforeCommand+1);
+ incompleteBody=false;mockRelayReportedSize=-1;mockMillis+=2000;oneIteration();
+ assert(card.snapshot().online && !card.snapshot().busy && commandCalls==beforeCommand+1);
  const int previousVersionCalls=versionCalls;
  oneIteration();assert(versionCalls==previousVersionCalls); // Die Version wird nicht bei jeder Zustandsabfrage angefordert.
  versionCode=404;mockMillis+=10001;oneIteration();assert(card.snapshot().online&&!card.snapshot().version[0]&&versionCalls==previousVersionCalls+1);

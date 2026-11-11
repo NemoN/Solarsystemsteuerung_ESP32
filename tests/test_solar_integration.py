@@ -35,8 +35,10 @@ uint32_t now=0,lastSolarMeasurement=0;bool solarMeasurementReady=true;
 constexpr uint32_t SOLAR_MAX_MEASUREMENT_AGE=10000;
 uint32_t millis(){return now;}
 SolarControl solarControl;
-struct TemperatureController {bool valid;float currentTemp;};
-TemperatureController controllers[5]={{},{},{},{true,40},{true,45}};
+SolarPanelGrace solarPanelGrace;
+bool solarGraceActive=false;
+struct TemperatureController {bool valid;float currentTemp;uint8_t fault;const char* sensorError;};
+TemperatureController controllers[5]={{},{},{},{true,40,0,nullptr},{true,45,0,nullptr}};
 int pin=HIGH,writes=0;
 void digitalWrite(int gpio,int value){assert(gpio==18);pin=value;++writes;}
 struct Log {template<typename... T> void printf(const char*,T...){} void println(const char*){}} FirmwareLog;
@@ -65,7 +67,30 @@ std::string solarStatusJson(){return "ok";}
 harness += '\n'.join(function(sig) for sig in ('bool solarSensorsFresh()', 'void serviceSolarPump()', 'void loadSolarSettings()', 'void saveSolarSettings()', 'void controlSolarPump()'))
 harness += r'''
 int main(){
+  solarPanelGrace.record(45,now);
   serviceSolarPump();assert(solarControl.on() && pin==LOW && runtimeSolarOn);
+  controllers[4].valid=false;controllers[4].currentTemp=NAN;controllers[4].fault=0x10;
+  controllers[4].sensorError="MAX31865 meldet einen Sensorfehler";
+  now=5000;lastSolarMeasurement=now;serviceSolarPump();assert(solarControl.on()&&solarGraceActive&&pin==LOW);
+  controllers[3].valid=false;serviceSolarPump();assert(!solarControl.on()&&!solarGraceActive);
+  controllers[3].valid=true;serviceSolarPump();assert(!solarControl.on());
+  controllers[4].valid=true;controllers[4].currentTemp=45;solarPanelGrace.record(45,now);
+  serviceSolarPump();assert(solarControl.on());
+  controllers[4].valid=false;controllers[4].currentTemp=NAN;serviceSolarPump();assert(solarGraceActive);
+  controllers[3].currentTemp=44;serviceSolarPump();assert(!solarControl.on()&&!solarGraceActive&&pin==HIGH);
+  controllers[3].currentTemp=40;serviceSolarPump();assert(!solarControl.on()); // Kein Neustart mit altem Wert
+  controllers[4].valid=true;controllers[4].currentTemp=45;serviceSolarPump();assert(solarControl.on());
+  controllers[4].valid=false;controllers[4].fault=0x18;now=15000;lastSolarMeasurement=now;
+  serviceSolarPump();assert(solarControl.on()&&solarGraceActive);
+  now=15001;serviceSolarPump();assert(!solarControl.on()&&!solarGraceActive&&pin==HIGH);
+  controllers[4].valid=true;controllers[4].currentTemp=45;now=0;lastSolarMeasurement=0;
+  solarPanelGrace.record(45,now);serviceSolarPump();assert(solarControl.on());
+  controllers[4].valid=false;controllers[4].fault=0x14;serviceSolarPump();assert(!solarControl.on());
+  controllers[4].valid=true;serviceSolarPump();assert(solarControl.on());
+  controllers[4].valid=false;controllers[4].fault=0x08;controllers[4].sensorError="MAX31865-Konfiguration nicht lesbar";
+  serviceSolarPump();assert(!solarControl.on());
+  controllers[4].valid=true;controllers[4].fault=0;controllers[4].sensorError=nullptr;
+  serviceSolarPump();assert(solarControl.on());
   controllers[4].currentTemp=42;serviceSolarPump();assert(solarControl.on() && pin==LOW);
   controllers[3].valid=false;serviceSolarPump();assert(!solarControl.on() && pin==HIGH);
   controllers[3].valid=true;controllers[4].currentTemp=45;serviceSolarPump();assert(solarControl.on());

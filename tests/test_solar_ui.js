@@ -21,6 +21,13 @@ context.updateSolar({on:true,configValid:true,sensorsValid:true,paused:false,dif
 assert.equal(get('solar-badge').textContent,'EIN');assert.match(get('solar-detail').textContent,/6 K/);
 context.updateSolar({on:false,configValid:true,sensorsValid:false,paused:false,differenceStart:5,difference:null},false);
 assert.equal(get('solar-badge').textContent,'Sensorfehler · AUS');
+context.updateSolar({on:true,configValid:true,sensorsValid:false,sensorGrace:true,paused:false,difference:null},false);
+assert.equal(get('solar-badge').textContent,'EIN');assert.match(get('solar-detail').textContent,/Panel-Sensorfehler.*10 Sekunden/);
+context.updateSolar({on:true,configValid:true,sensorsValid:false,sensorGrace:true,sensorFaultPending:true,paused:false},false);
+assert.equal(get('solar-badge').textContent,'EIN');assert.match(get('solar-detail').textContent,/vorübergehend nicht verfügbar/);
+assert.doesNotMatch(get('solar-detail').textContent,/Sensorfehler/);
+context.updateSolar({on:false,configValid:true,sensorsValid:false,sensorFaultPending:true,paused:false},false);
+assert.equal(get('solar-badge').textContent,'Messwert fehlt · AUS');
 context.updateSolar({on:false,configValid:false,sensorsValid:true,paused:false,differenceStart:null},false);
 assert.equal(get('solar-badge').textContent,'Einstellung ungültig · AUS');
 context.updateSolar(null,false);assert.equal(get('solar-badge').textContent,'Status unbekannt');

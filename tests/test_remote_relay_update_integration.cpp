@@ -17,7 +17,7 @@ WiFiClass WiFi;
 std::vector<uint8_t> mockGithubImage;
 size_t mockGithubOffset=0, mockGithubStopAfter=size_t(-1);
 int mockGithubAttempts=0, mockGithubFailures=0, mockGithubCode=200;
-long mockGithubReportedSize=-1;
+long mockGithubReportedSize=-1,mockRelayReportedSize=-1;
 TaskFunction_t mockTask=nullptr;
 void* mockTaskArg=nullptr;
 RelayOta board;

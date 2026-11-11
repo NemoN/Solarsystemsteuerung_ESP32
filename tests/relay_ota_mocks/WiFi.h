@@ -28,7 +28,9 @@ extern WiFiClass WiFi;
 extern std::vector<uint8_t> mockGithubImage;
 extern size_t mockGithubOffset, mockGithubStopAfter;
 class WiFiClient {
+ String relayResponse; size_t relayOffset=0; bool relayMode=false;
 public:
- int available() { return mockGithubOffset < mockGithubImage.size() && mockGithubOffset < mockGithubStopAfter ? int(std::min(size_t(1024), std::min(mockGithubImage.size() - mockGithubOffset, mockGithubStopAfter - mockGithubOffset))) : 0; }
- int read(uint8_t* dest,size_t count) { size_t n=std::min(count,size_t(available())); if(!n)return 0;std::memcpy(dest,mockGithubImage.data()+mockGithubOffset,n);mockGithubOffset+=n;return static_cast<int>(n); }
+ void setRelayResponse(const String& response) { relayResponse=response;relayOffset=0;relayMode=true; }
+ int available() { if(relayMode)return int(relayResponse.length()-relayOffset);return mockGithubOffset < mockGithubImage.size() && mockGithubOffset < mockGithubStopAfter ? int(std::min(size_t(1024), std::min(mockGithubImage.size() - mockGithubOffset, mockGithubStopAfter - mockGithubOffset))) : 0; }
+ int read(uint8_t* dest,size_t count) { size_t n=std::min(count,size_t(available())); if(!n)return 0;if(relayMode){std::memcpy(dest,relayResponse.c_str()+relayOffset,n);relayOffset+=n;}else{std::memcpy(dest,mockGithubImage.data()+mockGithubOffset,n);mockGithubOffset+=n;}return static_cast<int>(n); }
 };
