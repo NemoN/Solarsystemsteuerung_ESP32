@@ -13,7 +13,7 @@
 #include "RelayFactoryReset.h"
 
 constexpr uint8_t RELAY_PINS[] = {32, 33, 25, 26};
-constexpr char RELAY_FIRMWARE_VERSION[] = "2.9.0";
+constexpr char RELAY_FIRMWARE_VERSION[] = "3.1.0";
 constexpr uint32_t RETRY_MS = 30000;
 struct Config { char ssid[33]; char password[64]; char key[33]; char apPassword[17]; };
 Config config = {};
@@ -29,8 +29,8 @@ uint32_t connectAt = 0, lastAttempt = 0, reconnectAt = 0;
 RelayState relayState;
 RelayOta relayOta;
 bool bootVerificationPending = false;
-bool factoryResetPending = false;
-uint32_t factoryResetAt = 0;
+bool factoryResetPending = false, rebootPending = false;
+uint32_t factoryResetAt = 0, rebootAt = 0;
 uint32_t bootVerificationStarted = 0;
 // Neue OTA-Firmware erst nach der eigenen Startprüfung bestätigen.
 extern "C" bool verifyRollbackLater() { return true; }
@@ -76,7 +76,7 @@ void sendState() {
 }
 void changeRelay() {
   if (!authorized()) { server.send(403, "text/plain", "Forbidden"); return; }
-  if (relayOta.active() || bootVerificationPending || factoryResetPending) { server.send(409, "text/plain", "Update busy"); return; }
+  if (relayOta.active() || bootVerificationPending || factoryResetPending || rebootPending) { server.send(409, "text/plain", "Update busy"); return; }
   const String id = server.arg("id"), value = server.arg("value");
   if (id.length() != 1 || id[0] < '1' || id[0] > '4' || (value != "0" && value != "1")) {
     server.send(400, "text/plain", "Invalid command"); return;
@@ -88,6 +88,13 @@ void changeRelay() {
     [](unsigned channel, bool enabled) { digitalWrite(RELAY_PINS[channel], enabled ? HIGH : LOW); });
   if (!changed) { server.send(503, "text/plain", "Relay state could not be saved"); return; }
   sendState();
+}
+void rebootRelayBoard() {
+  if (!authorized()) { server.send(403, "text/plain", "Forbidden"); return; }
+  if (server.args()) { server.send(400, "text/plain", "Invalid request"); return; }
+  if (relayOta.active() || bootVerificationPending || factoryResetPending || rebootPending || pairConnecting || reconnect) { server.send(409, "text/plain", "Busy"); return; }
+  rebootPending = true; rebootAt = millis();
+  server.sendHeader("Cache-Control", "no-store"); server.send(200, "text/plain", "REBOOT1:OK");
 }
 bool importPairedWifi(const String& reply) {
   if (!reply.startsWith("PAIR1:") || reply.length() > 160) return false;
@@ -208,15 +215,16 @@ void setup() {
     server.sendHeader("Cache-Control", "no-store"); server.send(200, "text/plain", String("RLYVER1:") + RELAY_FIRMWARE_VERSION);
   });
   server.on("/api/relay", HTTP_POST, changeRelay);
+  server.on("/api/reboot", HTTP_POST, rebootRelayBoard);
   server.on("/api/factory-reset", HTTP_POST, []() {
     if (!authorized()) { server.send(403, "text/plain", "Forbidden"); return; }
-    if (server.args() || relayOta.active() || bootVerificationPending || factoryResetPending) { server.send(409, "text/plain", "Busy"); return; }
+    if (server.args() || relayOta.active() || bootVerificationPending || factoryResetPending || rebootPending) { server.send(409, "text/plain", "Busy"); return; }
     if (!relayFactoryReset(prefs, [](){ setAllOff(); })) { server.send(500, "text/plain", "Reset storage failed"); return; }
     config = {}; factoryResetPending = true; factoryResetAt = millis();
     server.sendHeader("Cache-Control", "no-store"); server.send(200, "text/plain", "RESET1:OK");
   });
   server.on("/api/ota/info", HTTP_GET, []() { if (!authorized()) { server.send(403, "text/plain", "Forbidden"); return; } relayOta.info(server, bootVerificationPending); });
-  server.on("/api/ota/prepare", HTTP_POST, []() { if (!authorized()) { server.send(403, "text/plain", "Forbidden"); return; } if (bootVerificationPending) { server.send(409, "text/plain", "Boot check pending"); return; } relayOta.prepare(server); });
+  server.on("/api/ota/prepare", HTTP_POST, []() { if (!authorized()) { server.send(403, "text/plain", "Forbidden"); return; } if (bootVerificationPending || factoryResetPending || rebootPending) { server.send(409, "text/plain", "Boot check pending"); return; } relayOta.prepare(server); });
   server.on("/api/ota/chunk", HTTP_POST, []() { if (!authorized()) { server.send(403, "text/plain", "Forbidden"); return; } relayOta.chunk(server); });
   server.on("/api/ota/finish", HTTP_POST, []() { if (!authorized()) { server.send(403, "text/plain", "Forbidden"); return; } relayOta.finish(server); });
   server.on("/api/ota/abort", HTTP_POST, []() { if (!authorized()) { server.send(403, "text/plain", "Forbidden"); return; } relayOta.abort(server); });
@@ -227,6 +235,7 @@ void setup() {
 void loop() {
   const uint32_t now = millis(); server.handleClient(); relayOta.loop(); updatePairButton(now);
   if (factoryResetPending) { if (now - factoryResetAt >= 500) ESP.restart(); delay(1); return; }
+  if (rebootPending) { if (now - rebootAt >= 500) ESP.restart(); delay(1); return; }
   if (bootVerificationPending && now - bootVerificationStarted >= 10000) {
     if (!storeReady || esp_ota_mark_app_valid_cancel_rollback() != ESP_OK) {
       Serial.println("Startprüfung fehlgeschlagen; Firmware-Rückfall wird ausgelöst.");

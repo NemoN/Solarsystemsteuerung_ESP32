@@ -67,6 +67,22 @@ bool exchangeVersion(const RemoteRelayConfig& cfg, char version[32]) {
   const bool complete = code == 200 && size > 8 && size < 40 && readResponse(http, body, sizeof(body));
   http.end(); return complete && parseRemoteRelayVersion(body, size_t(size), version);
 }
+// A lost reply can mean that the reboot has already been scheduled: never retry it.
+RemoteRelay::RebootState rebootCard(const RemoteRelayConfig& cfg) {
+  IPAddress ip;
+  if (!ip.fromString(cfg.address) || !compatibleNetwork(ip)) return RemoteRelay::REBOOT_FAILED;
+  WiFiClient client; HTTPClient http;
+  http.setConnectTimeout(1500); http.setTimeout(2500); http.setReuse(false);
+  if (!http.begin(client, "http://" + String(cfg.address) + "/api/reboot")) return RemoteRelay::REBOOT_FAILED;
+  http.addHeader("X-Relay-Key", cfg.key);
+  const int code = http.POST("");
+  char body[11] = {};
+  const bool complete = code == 200 && http.getSize() == 10 && readResponse(http, body, sizeof(body));
+  http.end();
+  if (complete && !strcmp(body, "REBOOT1:OK")) return RemoteRelay::REBOOT_SENT;
+  if (code == 404) return RemoteRelay::REBOOT_UNSUPPORTED;
+  return code < 0 || code == 200 || code >= 500 ? RemoteRelay::REBOOT_UNCERTAIN : RemoteRelay::REBOOT_FAILED;
+}
 // One request only: a lost reply may mean that the card has already reset.
 RemoteRelay::ForgetState resetCard(const RemoteRelayConfig& cfg) {
   IPAddress ip;
@@ -105,7 +121,7 @@ RemoteRelaySnapshot RemoteRelay::snapshot() {
   RemoteRelaySnapshot result = {};
   if (!lock_) return result;
   xSemaphoreTake(lock_, portMAX_DELAY);
-  result.config = config_; result.online = online_ && millis() - lastContact_ <= 6500 && WiFi.status() == WL_CONNECTED; result.busy = busy_; result.mask = mask_; result.forgetState = forgetState_; if (result.online) strlcpy(result.version, version_, sizeof(result.version));
+  result.config = config_; result.online = online_ && millis() - lastContact_ <= 6500 && WiFi.status() == WL_CONNECTED; result.busy = busy_; result.mask = mask_; result.forgetState = forgetState_; result.rebootState = rebootState_; if (result.online) strlcpy(result.version, version_, sizeof(result.version));
   xSemaphoreGive(lock_); return result;
 }
 bool RemoteRelay::configure(const String& address, const String& key, const String labels[4]) {
@@ -123,7 +139,7 @@ bool RemoteRelay::configure(const String& address, const String& key, const Stri
   if (busy_) { xSemaphoreGive(lock_); return false; }
   if (preferences_.putBytes(storageKey_, &next, sizeof(next)) != sizeof(next)) { xSemaphoreGive(lock_); return false; }
   const bool sameConnection = !strcmp(config_.address, next.address) && !strcmp(config_.key, next.key);
-  config_ = next; if (!sameConnection) { online_ = false; version_[0] = 0; versionChecked_ = false; } forgetState_ = FORGET_IDLE;
+  config_ = next; if (!sameConnection) { online_ = false; version_[0] = 0; versionChecked_ = false; } forgetState_ = FORGET_IDLE; rebootState_ = REBOOT_IDLE;
   xSemaphoreGive(lock_); return true;
 }
 bool RemoteRelay::forget() {
@@ -133,6 +149,13 @@ bool RemoteRelay::forget() {
   if (accepted) { pendingId_ = 255; busy_ = true; forgetState_ = FORGET_PENDING; }
   xSemaphoreGive(lock_); return accepted;
 }
+bool RemoteRelay::reboot() {
+  if (!lock_) return false;
+  xSemaphoreTake(lock_, portMAX_DELAY);
+  const bool accepted = config_.address[0] && online_ && millis() - lastContact_ <= 6500 && WiFi.status() == WL_CONNECTED && !busy_;
+  if (accepted) { pendingId_ = 254; busy_ = true; rebootState_ = REBOOT_PENDING; }
+  xSemaphoreGive(lock_); return accepted;
+}
 bool RemoteRelay::clearAssociation() {
   if (!lock_ || !storageReady_) return false;
   xSemaphoreTake(lock_, portMAX_DELAY);
@@ -140,7 +163,7 @@ bool RemoteRelay::clearAssociation() {
   RemoteRelayConfig cleared = {};
   for (int i = 0; i < 4; ++i) snprintf(cleared.labels[i], sizeof(cleared.labels[i]), "Relais %d", i + 1);
   const bool saved = preferences_.putBytes(storageKey_, &cleared, sizeof(cleared)) == sizeof(cleared);
-  if (saved) { config_ = cleared; online_ = false; mask_ = 0; version_[0] = 0; versionChecked_ = false; forgetState_ = FORGET_IDLE; }
+  if (saved) { config_ = cleared; online_ = false; mask_ = 0; version_[0] = 0; versionChecked_ = false; forgetState_ = FORGET_IDLE; rebootState_ = REBOOT_IDLE; }
   xSemaphoreGive(lock_); return saved;
 }
 bool RemoteRelay::command(unsigned id, bool on) {
@@ -159,7 +182,14 @@ void RemoteRelay::task() {
     xSemaphoreTake(lock_, portMAX_DELAY);
     cfg = config_; id = pendingId_; value = pendingValue_; pendingId_ = 0;
     xSemaphoreGive(lock_);
-    if (id == 255) {
+    if (id == 254) {
+      const RebootState result = rebootCard(cfg);
+      xSemaphoreTake(lock_, portMAX_DELAY);
+      rebootState_ = result; rebootSentAt_ = millis();
+      if (result == REBOOT_SENT || result == REBOOT_UNCERTAIN) { online_ = false; version_[0] = 0; versionChecked_ = false; }
+      busy_ = false;
+      xSemaphoreGive(lock_); lastPoll = millis();
+    } else if (id == 255) {
       const ForgetState result = resetCard(cfg);
       xSemaphoreTake(lock_, portMAX_DELAY);
       if (result == FORGET_DONE) {
@@ -179,8 +209,10 @@ void RemoteRelay::task() {
       if (memcmp(&cfg, &config_, sizeof(cfg)) == 0) {
         if (ok) {
           online_ = true; mask_ = nextMask; lastContact_ = millis();
+          if (rebootState_ == REBOOT_SENT) rebootState_ = REBOOT_ONLINE;
           if (!id && (!versionChecked_ || millis() - lastVersionCheck_ >= 10000)) { versionChecked_ = true; lastVersionCheck_ = millis(); checkVersion = true; }
         } else if (id || millis() - lastContact_ > 6500) {
+          if (rebootState_ == REBOOT_SENT && uint32_t(millis() - rebootSentAt_) >= 30000) rebootState_ = REBOOT_UNCERTAIN;
           // Einzelne fehlgeschlagene Statusabfragen überbrücken, aber einen
           // nicht bestätigten Schaltauftrag sofort als unbekannt melden.
           online_ = false; version_[0] = 0; versionChecked_ = false;

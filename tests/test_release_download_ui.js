@@ -17,8 +17,9 @@ const select = {
 const install = {}, download = {hidden: true}, link = {removeAttribute() { delete this.href; }};
 const form = {elements: {release: select}, querySelector: () => install};
 const message = {}, check = {addEventListener: (name, fn) => { listeners.check = fn; }};
-const selectedNotes={textContent:''},selectedNotesWrap={hidden:true};
-const document = {getElementById: id => ({'github-update-form': form, 'release-message': message,
+class NoteNode {constructor(tag='div'){this.tagName=tag.toUpperCase();this.children=[];this._text='';}get textContent(){return this.children.length?this.children.map(c=>c.textContent).join(''):this._text;}set textContent(v){this._text=String(v);this.children=[];}appendChild(c){this.children.push(c);}replaceChildren(...c){this._text='';this.children=c;}}
+const selectedNotes=new NoteNode(),selectedNotesWrap={hidden:true};
+const document = {createElement: tag=>new NoteNode(tag),getElementById: id => ({'github-update-form': form, 'release-message': message,
   'release-download': download, 'release-download-link': link, 'release-check': check,
   'main-selected-notes':selectedNotes,'main-selected-notes-wrap':selectedNotesWrap})[id]};
 const asset = {name: 'Backload.ino.bin', digest: 'sha256:' + 'a'.repeat(64), size: 1200000};
@@ -42,7 +43,7 @@ vm.runInContext(sketch.slice(notesStart,notesEnd)+sketch.slice(start, end), cont
   await listeners.check({currentTarget: check});
   assert.equal(download.hidden, true);
   select.value = '0'; listeners.change();
-  assert.equal(selectedNotesWrap.hidden,false);assert.equal(selectedNotes.textContent,'- Verbesserte Steuerung');
+  assert.equal(selectedNotesWrap.hidden,false);assert.equal(selectedNotes.textContent,'Verbesserte Steuerung');assert.equal(selectedNotes.children[0].tagName,'UL');
   assert.equal(download.hidden, false);
   assert.equal(link.href, 'https://github.com/NemoN/Solarsystemsteuerung_ESP32/releases/download/v1.11.5/Backload-1.11.5.bin');
   select.value = '1'; listeners.change();

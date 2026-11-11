@@ -119,6 +119,16 @@ Vor dem Anschließen von Verbrauchern die Pinbelegung, die tatsächliche
 Schaltlogik und das Verhalten beim Start an der vorliegenden Karte prüfen.
 Insbesondere können gespeicherte Relais beim Neustart wieder einschalten.
 
+## Relaiskarte neu starten
+
+Unter **Einstellungen → Relaiserweiterungen** kann eine eingerichtete Karte
+gezielt neu gestartet werden. Die Ausgänge schalten während des Neustarts kurz
+aus und stellen anschließend die gespeicherten Zustände wieder her. Der Befehl
+benötigt Relaiskarten-Firmware 3.1.0 oder neuer. Ältere Karten müssen zuerst
+über die Firmware-Aktualisierung auf eine unterstützte Version gebracht werden.
+Eine unterbrochene Antwort bestätigt den Neustart nicht; den Kartenstatus und
+die Relaiszustände anschließend prüfen.
+
 ## Firmware über den Haupt-ESP aktualisieren
 
 Die hier enthaltene Firmware mit Updatefunktion muss zunächst einmal über den

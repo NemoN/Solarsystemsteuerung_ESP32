@@ -43,7 +43,7 @@
 #include <time.h>
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
-const char* FIRMWARE_VERSION = "3.0.0";
+const char* FIRMWARE_VERSION = "3.1.0";
 // Der AP wird nur für Einrichtung und Wiederherstellung benötigt.
 constexpr bool AP_RECOVERY_ONLY = true;
 
@@ -1100,12 +1100,13 @@ String pumpRuntimeJson() {
 String remoteRelayStatusJson(unsigned board = 0) {
   const RemoteRelaySnapshot state = remoteRelays[board].snapshot();
   static const char* forgetNames[] = {"idle", "pending", "done", "failed", "uncertain", "save_failed"};
+  static const char* rebootNames[] = {"idle", "pending", "sent", "online", "unsupported", "uncertain", "failed"};
   String json = "{\"id\":" + String(board) + ",\"ready\":" + String(remoteRelayCardReady[board] ? "true" : "false") +
     ",\"configured\":" + String(state.config.address[0] ? "true" : "false") +
     ",\"online\":" + String(state.online ? "true" : "false") +
     ",\"busy\":" + String(state.busy ? "true" : "false") +
     ",\"updating\":" + String(remoteRelayUpdate.active() ? "true" : "false") +
-    ",\"mask\":" + String(state.mask) + ",\"forget\":" + jsonString(forgetNames[state.forgetState]) + ",\"address\":" + jsonString(state.config.address) + ",\"version\":" + jsonString(state.version) + ",\"labels\":[";
+    ",\"mask\":" + String(state.mask) + ",\"forget\":" + jsonString(forgetNames[state.forgetState]) + ",\"reboot\":" + jsonString(rebootNames[state.rebootState]) + ",\"address\":" + jsonString(state.config.address) + ",\"version\":" + jsonString(state.version) + ",\"labels\":[";
   for (int i = 0; i < 4; ++i) { if (i) json += ','; json += jsonString(state.config.labels[i]); }
   return json + "]}";
 }
@@ -1198,6 +1199,14 @@ void saveRemoteRelayCommand() {
   const String id = server.arg("id"), value = server.arg("value");
   if (id.length() != 1 || id[0] < '1' || id[0] > '4' || (value != "0" && value != "1")) { server.send(400, "text/plain", "Ungültiger Schaltauftrag."); return; }
   if (!remoteRelays[board].command(id[0] - '0', value == "1")) { server.send(409, "text/plain; charset=utf-8", "Relaiskarte nicht erreichbar oder beschäftigt."); return; }
+  server.send(202, "application/json", "{\"accepted\":true}");
+}
+void rebootRemoteRelay() {
+  if (!remoteRelayPostAllowed()) return;
+  if (remoteRelayUpdate.active() || relayProvisioning.active()) { server.send(409, "text/plain", "Einrichtung oder Update läuft."); return; }
+  unsigned board = 0; if (!remoteRelayBoardArgument(board)) return;
+  if (server.args() != 1 || !server.hasArg("board")) { server.send(400, "text/plain", "Ungültige Auswahl."); return; }
+  if (!remoteRelays[board].reboot()) { server.send(409, "text/plain; charset=utf-8", "Relaiserweiterung nicht erreichbar oder beschäftigt."); return; }
   server.send(202, "application/json", "{\"accepted\":true}");
 }
 void forgetRemoteRelay() {
@@ -1568,6 +1577,22 @@ void savePumpControl() {
   }
   server.sendHeader("Cache-Control", "no-store");
   server.send(200, "application/json", pumpStatusJson());
+}
+
+void rebootController() {
+  if (server.header("X-Requested-With") != "HeatingUI") { server.send(403, "text/plain; charset=utf-8", "Bitte das Webinterface verwenden."); return; }
+  if (server.args() != 0) { server.send(400, "text/plain; charset=utf-8", "Ungültige Anfrage."); return; }
+  if (otaActive || otaVerificationPending || modeTransition || remoteRelayAnyBusy() || remoteRelayUpdate.active() || relayProvisioning.active()) {
+    server.send(409, "text/plain; charset=utf-8", "Steuerung ist beschäftigt."); return;
+  }
+  modeTransition = true;
+  manualControl = false; manualPumpOn = false; automaticControl.reset();
+  pump.command(false, pump.direction(), millis());
+  servicePump(); // Schaltet beide Pumpen und die Ölbrennerfreigabe ab.
+  modeRestartAt = millis();
+  FirmwareLog.println("Neustart angefordert. Pumpen AUS, Neustart nach 2,5 Sekunden.");
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(202, "application/json", "{\"restarting\":true}");
 }
 
 void setTestMode() {
@@ -2085,6 +2110,7 @@ void setup() {
   server.on("/api/remote-relay/pair/scan", HTTP_GET, sendRelayPairScan);
   server.on("/api/remote-relay/pair/cancel", HTTP_POST, cancelRelayProvisioning);
   server.on("/api/remote-relay/command", HTTP_POST, saveRemoteRelayCommand);
+  server.on("/api/remote-relay/reboot", HTTP_POST, rebootRemoteRelay);
   server.on("/api/remote-relay/forget", HTTP_POST, forgetRemoteRelay);
   server.on("/api/remote-relay/discard", HTTP_POST, discardRemoteRelay);
   server.on("/api/remote-relay/update/prepare", HTTP_POST, prepareRemoteRelayUpdate);
@@ -2098,6 +2124,7 @@ void setup() {
   server.on("/api/solar/control", HTTP_POST, controlSolarPump);
   server.on("/api/heating", HTTP_POST, saveHeatingMode);
   server.on("/api/test-mode", HTTP_POST, setTestMode);
+  server.on("/api/reboot", HTTP_POST, rebootController);
   server.on("/api/update/prepare", HTTP_POST, prepareOta);
   server.on("/api/update/chunk", HTTP_POST, writeOtaChunk);
   server.on("/api/update/finish", HTTP_POST, finishOta);

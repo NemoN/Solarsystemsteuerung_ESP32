@@ -6,7 +6,7 @@ const labels=Array.from({length:4},()=>({textContent:''}));
 const buttons=labels.map((label,i)=>({dataset:{relay:String(i+1)},disabled:true,attributes:{},setAttribute(k,v){this.attributes[k]=v;},querySelector(){return label;}}));
 const nodes={
  'remote-relay-status':{},'remote-relay-detail':{},
- 'relay-installed-version':{},'relay-installed-notes':{},'remote-update-availability':{},
+ 'relay-installed-version':{},'relay-installed-notes':{replaceChildren(){}},'remote-update-availability':{},
  'remote-relay-switches':{addEventListener(type,fn){calls.click=fn;}},
 };
 const form={elements:{address:{value:''},key:{value:''},label1:{value:''},label2:{value:''},label3:{value:''},label4:{value:''}},
@@ -26,13 +26,13 @@ const remoteGithubForm={elements:{release:remoteSelect},querySelector:()=>github
 const updateButton={disabled:true};
 const updateForm={elements:{firmware:{files:[]}},querySelector:()=>updateButton,addEventListener(type,fn){calls.update=fn;}};
 let posted=null;
-const context=vm.createContext({document:{getElementById:id=>nodes[id],querySelectorAll:()=>buttons,activeElement:null},
+const context=vm.createContext({document:{getElementById:id=>nodes[id],createElement:tag=>({tagName:tag.toUpperCase(),textContent:'',appendChild(){}}),querySelectorAll:()=>buttons,activeElement:null},
  remoteReleaseCheck,remoteReleaseMessage,remoteGithubForm,remoteRelaySearchBusy:false,remoteRelayReleases:[],simulationEnabled:false,
  remoteRelayBoard,remoteUpdateBoard,remoteRelayForget,remoteRelayForgetMessage,remoteRelaySlotStatus,remoteRelayDiscard,relayForgetRecovery,remoteExtraGroups,relayDiscoverySelect,relayDiscoverySearch,relayDiscoveryMessage,
  relayPairForm,relayPairScan,relayPairCancel,relayPairScanMessage,relayPairMessage,relayPairActive:false,relayPairScanBusy:false,
  remoteRelayCards:[],relayDiscoverySignature:'',remoteExtraCards:new Map(),wifiBusy:false,wifiScanning:false,confirm:()=>true,
  remoteRelayUpdateForm:updateForm,remoteRelayUpdateMessage:{},remoteRelayUpdateProgress:{},remoteRelayUploadBusy:false,
- remoteRelayForm:form,remoteRelayMessage:{},remoteRelayConfigMessage:{},remoteRelayDirty:false,remoteRelayBusy:false,remoteRelayRevision:0,remoteRelayState:null,pendingRemoteAction:null,URLSearchParams,
+ updateRelayReboot:()=>{},remoteRelayForm:form,remoteRelayMessage:{},remoteRelayConfigMessage:{},remoteRelayDirty:false,remoteRelayBusy:false,remoteRelayRevision:0,remoteRelayState:null,pendingRemoteAction:null,URLSearchParams,
  request:async(url,options)=>{posted={url,values:options.body};return {accepted:true};}});
 const start=sketch.indexOf('function updateRemoteRelay(state,simulation)');
 const end=sketch.indexOf('async function request(url,options={})',start);

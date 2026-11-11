@@ -1,4 +1,4 @@
-Backload 3.0.0 – automatische und manuelle Pumpensteuerung
+Backload 3.1.0 – automatische und manuelle Pumpensteuerung
 
 Sensoren und Relais
 Fünf MAX31865-Sensoren mit gemeinsamer Software-SPI-Verbindung:
@@ -30,6 +30,15 @@ PumpDirection::BufferToCombi ändern und die Firmware erneut hochladen.
 GPIO 3 ist ein ESP32-S3-Strapping-Pin. Das Verhalten des Relais beim
 Einschalten und Reset am realen Aufbau prüfen; die Software übernimmt die
 Steuerung erst nach Beginn von setup().
+
+Neustart
+Unter Einstellungen kann die Steuerung neu gestartet werden. Vorher werden
+beide Pumpen und die Ölbrennerfreigabe ausgeschaltet; nach mindestens 2,5 s
+startet der ESP neu. Einstellungen bleiben gespeichert, der Temperaturverlauf
+im RAM geht verloren. Eingerichtete Relaiserweiterungen lassen sich dort einzeln
+neu starten; dafür muss auf der jeweiligen Karte Firmware 3.1.0 oder neuer laufen.
+Während ihres Neustarts sind die Relais kurz aus und stellen danach ihre zuletzt
+gespeicherten Zustände wieder her.
 
 WLAN-Relaiskarte
 Bis zu vier Relaiserweiterungen mit je vier Schaltern stehen auf der Startseite.

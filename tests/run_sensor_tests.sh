@@ -106,6 +106,11 @@ python3 "$project_dir/tests/test_heating_integration.py"
 "${CXX:-c++}" -std=c++11 -Wall -Wextra -Werror -fsanitize=address,undefined \
   -DMOCK_PREF_FAILURE -I"$project_dir/tests/relay_ota_mocks" -I"$project_dir/Backload" \
   "$project_dir/Backload/RemoteRelay.cpp" "$project_dir/tests/test_remote_relay_forget.cpp" -o "$test_dir/remote-forget-tests"
+"${CXX:-c++}" -std=c++11 -Wall -Wextra -Werror -fsanitize=address,undefined \
+  -DMOCK_PREF_FAILURE -I"$project_dir/tests/relay_ota_mocks" -I"$project_dir/Backload" \
+  "$project_dir/Backload/RemoteRelay.cpp" "$project_dir/tests/test_remote_relay_reboot.cpp" -o "$test_dir/remote-reboot-tests"
+"$test_dir/remote-reboot-tests"
+python3 "$project_dir/tests/test_reboot_integration.py"
 "$test_dir/remote-forget-tests"
 "${CXX:-c++}" -std=c++11 -Wall -Wextra -Werror -fsanitize=address,undefined \
   "$project_dir/tests/test_relay_factory_reset.cpp" -o "$test_dir/relay-factory-reset-tests"

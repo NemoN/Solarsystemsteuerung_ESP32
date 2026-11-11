@@ -83,6 +83,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
     <a href="#remote-relay-settings">Relaiserweiterungen</a>
     <a href="#remote-relay-update-section">Relaiskarte aktualisieren</a>
     <a href="#update-section">Firmware aktualisieren</a>
+    <a href="#restart-section">Neustart</a>
     <a href="#simulation-settings">Testwerte</a>
   </div>
   </div>
@@ -116,13 +117,16 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <svg class="pump-flow stopped" viewBox="0 0 440 280" role="img" aria-labelledby="pump-flow-title" aria-describedby="pump-flow-desc">
 <title id="pump-flow-title">Förderrichtung wird geladen</title>
 <desc id="pump-flow-desc">Speichertemperaturen werden geladen.</desc>
-<defs><marker id="flow-arrowhead" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="currentColor"/></marker></defs>
+<defs><marker id="flow-arrowhead" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="currentColor"/></marker>
+<linearGradient id="tank-fill-gradient" x1="0" y1="0" x2="1" y2="0"><stop class="tank-fill-start" offset="0%" stop-color="#06334b"/><stop class="tank-fill-end" offset="100%" stop-color="#084966"/></linearGradient>
+<linearGradient id="tank-surface-gradient" x1="0" y1="0" x2="1" y2="0"><stop class="tank-surface-start" offset="0%" stop-color="#08749c"/><stop class="tank-surface-end" offset="100%" stop-color="#0a8ab3"/></linearGradient></defs>
 <g class="storage">
 <text class="tank-name" x="96" y="24" text-anchor="middle">Kombispeicher</text>
 <text class="tank-name" x="344" y="24" text-anchor="middle">Pufferspeicher</text>
 <rect class="tank" x="14" y="42" width="164" height="218" rx="42"/>
 <rect class="tank" x="262" y="42" width="164" height="218" rx="42"/>
-<path class="tank-water-surface" d="M16 76 Q16 42 56 42 H136 Q176 42 176 76 Q96 96 16 76Z M264 76 Q264 42 304 42 H384 Q424 42 424 76 Q344 96 264 76Z"/>
+<path class="tank-water-surface" d="M16 76 Q16 42 56 42 H136 Q176 42 176 76 Q96 96 16 76Z"/>
+<path class="tank-water-surface" d="M264 76 Q264 42 304 42 H384 Q424 42 424 76 Q344 96 264 76Z"/>
 <path class="tank-rim" d="M16 76 Q96 96 176 76 M264 76 Q344 96 424 76 M16 226 Q96 246 176 226 M264 226 Q344 246 424 226"/>
 <text class="sensor-label" x="28" y="118">Oben</text><text class="sensor-value" id="diagram-temp-0" x="163" y="118" text-anchor="end">—</text>
 <text class="sensor-label" x="28" y="168">Mitte</text><text class="sensor-value" id="diagram-temp-1" x="163" y="168" text-anchor="end">—</text>
@@ -417,6 +421,9 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <label>IP-Adresse<input name="address" maxlength="15" placeholder="192.168.1.100" autocomplete="off"></label>
 <label>Verbindungsschlüssel<input name="key" type="password" maxlength="32" autocomplete="new-password" spellcheck="false"></label></details>
 <button type="submit">Änderungen speichern</button></form><p id="remote-relay-config-message" class="message" role="status"></p>
+<p class="muted">Ein Neustart schaltet die Relais kurz aus; anschließend gelten ihre gespeicherten Zustände. Benötigt Relaiskarten-Firmware 3.1.0 oder neuer.</p>
+<button id="remote-relay-reboot" type="button" class="secondary-button" disabled>Ausgewählte Erweiterung neu starten</button>
+<p id="remote-relay-reboot-message" class="message" role="status"></p>
 <button id="remote-relay-forget" type="button" class="secondary-button" hidden>Erweiterung vergessen</button><p id="remote-relay-forget-message" class="message" role="status"></p>
 <details id="relay-forget-recovery" hidden><summary>Probleme beim Zurücksetzen?</summary><p class="muted">Falls die Rückmeldung verloren ging, lässt sich die Zuordnung hier entfernen. Die Karte wird dabei nicht zurückgesetzt und kann noch WLAN-Zugangsdaten besitzen.</p><button id="remote-relay-discard" type="button" class="secondary-button">Nur Zuordnung entfernen</button></details>
 </section>
@@ -431,6 +438,12 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <div id="relay-selected-notes-wrap" class="release-notes" hidden><h3>Änderungen der ausgewählten Version</h3><div id="relay-selected-notes" class="release-notes-text"></div></div>
 <details><summary>Firmwaredatei manuell hochladen</summary><form id="remote-relay-update-form"><label>Firmwaredatei (.bin)<input name="firmware" type="file" accept=".bin,application/octet-stream" required></label><button type="submit" disabled>Relaiskarte aktualisieren</button></form></details>
 <progress id="remote-relay-update-progress" max="100" value="0" hidden></progress><p id="remote-relay-update-message" class="message" role="status"></p>
+</section>
+<section id="restart-section" aria-labelledby="restart-heading">
+<h2 id="restart-heading">Steuerung neu starten</h2>
+<p class="muted">Die Pumpen und die Ölbrennerfreigabe werden während des Neustarts ausgeschaltet. Der Temperaturverlauf wird gelöscht; die gespeicherten Einstellungen bleiben erhalten.</p>
+<button id="controller-reboot" type="button" class="secondary-button">Steuerung neu starten</button>
+<p id="controller-reboot-message" class="message" role="status"></p>
 </section>
 <section id="simulation-settings" aria-labelledby="simulation-heading">
 <h2 id="simulation-heading">Testwerte für die Sensoren</h2>
@@ -1140,6 +1153,42 @@ async function saveHostnameSetting(reset){
 }
 hostnameForm.addEventListener('submit',event=>{event.preventDefault();saveHostnameSetting(false);});
 hostnameReset.addEventListener('click',()=>saveHostnameSetting(true));
+let controllerRebootBusy=false,relayRebootBusy=false;
+function updateRelayReboot(selected){
+  const button=document.getElementById('remote-relay-reboot'),message=document.getElementById('remote-relay-reboot-message');
+  const state=selected&&selected.reboot;
+  button.disabled=!selected||!selected.configured||!selected.online||selected.busy||selected.updating||relayPairActive||remoteRelayBusy||relayRebootBusy||state==='pending'||state==='sent';
+  const messages={pending:'Neustartauftrag wird an die Erweiterung gesendet …',sent:'Neustart angefordert. Warte auf die Erweiterung …',online:'Neustart angefordert; die Erweiterung ist wieder erreichbar.',unsupported:'Diese Firmware unterstützt keinen Neustart. Bitte die Relaiskarte aktualisieren.',uncertain:'Neustart nicht bestätigt. Bitte die Erweiterung und ihre Relaiszustände prüfen.',failed:'Neustart wurde von der Erweiterung nicht angenommen.'};
+  message.textContent=messages[state]||'';
+}
+async function rebootSelectedRelay(){
+  const board=Number(remoteRelayBoard.value),state=remoteRelayCards[board];
+  if(relayRebootBusy||remoteRelayBusy||relayPairActive||!state||!state.configured||!state.online||state.busy||state.updating||state.reboot==='pending'||state.reboot==='sent')return;
+  if(!confirm('Relaiserweiterung '+(board+1)+' neu starten? Die Relais schalten kurz aus und stellen danach ihre gespeicherten Zustände wieder her.'))return;
+  const button=document.getElementById('remote-relay-reboot'),message=document.getElementById('remote-relay-reboot-message');
+  relayRebootBusy=true;remoteRelayRevision++;button.disabled=true;message.textContent='Neustartauftrag wird vorbereitet …';
+  try{
+    await request('/api/remote-relay/reboot',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'HeatingUI'},body:new URLSearchParams({board:String(board)})});
+    message.textContent='Neustartauftrag angenommen. Status wird geprüft …';
+  }catch(error){message.textContent=error.status?'Neustart nicht angenommen: '+error.message:'Neustart nicht bestätigt. Bitte die Erweiterung und ihre Relaiszustände prüfen.';}
+  finally{relayRebootBusy=false;}
+}
+document.getElementById('remote-relay-reboot').addEventListener('click',rebootSelectedRelay);
+async function rebootMainController(){
+  if(controllerRebootBusy)return;
+  if(!confirm('Steuerung neu starten? Die Pumpen und die Ölbrennerfreigabe werden ausgeschaltet. Der Temperaturverlauf wird gelöscht.'))return;
+  const button=document.getElementById('controller-reboot'),message=document.getElementById('controller-reboot-message');
+  controllerRebootBusy=true;button.disabled=true;message.textContent='Neustart wird angefordert …';
+  try{
+    await request('/api/reboot',{method:'POST',headers:{'X-Requested-With':'HeatingUI'}});
+    message.textContent='Neustart angefordert. Die Verbindung wird nach dem Neustart wieder aufgebaut.';
+    setTimeout(()=>{controllerRebootBusy=false;button.disabled=false;},30000);
+  }catch(error){
+    message.textContent=error.status?'Neustart nicht angenommen: '+error.message:'Neustart nicht bestätigt. Bitte die Verbindung und den Zustand der Steuerung prüfen.';
+    controllerRebootBusy=false;button.disabled=false;
+  }
+}
+document.getElementById('controller-reboot').addEventListener('click',rebootMainController);
 let saving=false;
 function updateRemoteRelay(state,simulation){
   remoteRelayState=state;
@@ -1172,6 +1221,7 @@ function updateRemoteRelay(state,simulation){
     button.querySelector('span:last-child').textContent=(state&&state.labels&&state.labels[index]||'Relais '+(index+1))+(online?(on?' · EIN':' · AUS'):' · unbekannt');
   }
   const selected=remoteRelayCards[Number(remoteRelayBoard.value)]||state;
+  updateRelayReboot(remoteRelayCards[Number(remoteRelayBoard.value)]||null);
   if(remoteRelayBoard.options)for(let i=0;i<remoteRelayBoard.options.length;i++){
     const card=remoteRelayCards[i];
     remoteRelayBoard.options[i].textContent='Relaiserweiterung '+(i+1)+(card?(card.configured?(card.online?' · verbunden':' · nicht erreichbar'):' · frei'):'');
@@ -1364,6 +1414,24 @@ async function switchRemoteRelay(event){
 document.getElementById('remote-relay-switches').addEventListener('click',switchRemoteRelay);
 remoteExtraGroups.addEventListener('click',switchRemoteRelay);
 let installedReleaseCatalog=null,installedReleaseLoadState='loading';
+const renderedReleaseNotes=new WeakMap();
+function renderReleaseNotes(target,text){
+  if(renderedReleaseNotes.get(target)===text)return;
+  renderedReleaseNotes.set(target,text);
+  const nodes=[];let paragraph=[],list=null,lastItem=null;
+  const flushParagraph=()=>{if(!paragraph.length)return;const p=document.createElement('p');p.textContent=paragraph.join('\n');nodes.push(p);paragraph=[];};
+  for(const line of text.replace(/\r\n?/g,'\n').split('\n')){
+    const match=/^ {0,3}([-*+]|\d+[.)])\s+(.+)$/.exec(line);
+    if(match){
+      flushParagraph();const kind=/^\d/.test(match[1])?'ol':'ul';
+      if(!list||list.tagName.toLowerCase()!==kind){list=document.createElement(kind);nodes.push(list);}
+      lastItem=document.createElement('li');lastItem.textContent=match[2];list.appendChild(lastItem);
+    }else if(!line.trim()){flushParagraph();list=null;lastItem=null;}
+    else if(list&&lastItem&&/^\s+/.test(line)){lastItem.textContent+='\n'+line.trim();}
+    else{list=null;lastItem=null;paragraph.push(line);}
+  }
+  flushParagraph();target.replaceChildren(...nodes);
+}
 function releaseNotesText(release){
   const body=release&&typeof release.body==='string'?release.body:'';
   const section=/^#{2,3}[ \t]+Haupt-ESP[ \t]*\r?\n([\s\S]*?)(?=^#{1,3}[ \t]+|(?![\s\S]))/im.exec(body);
@@ -1393,17 +1461,17 @@ function installedReleaseText(version,relay=false){
 }
 function renderInstalledMainRelease(){
   document.getElementById('main-installed-version').textContent=currentFirmwareVersion?'Installierte Firmware: '+currentFirmwareVersion:'Installierte Firmware wird ermittelt …';
-  document.getElementById('main-installed-notes').textContent=installedReleaseText(currentFirmwareVersion);
+  renderReleaseNotes(document.getElementById('main-installed-notes'),installedReleaseText(currentFirmwareVersion));
 }
 function renderInstalledRelayRelease(target){
   const version=target&&target.online&&target.version||'';
   document.getElementById('relay-installed-version').textContent=!target||!target.configured?'Keine Erweiterung ausgewählt.':!target.online?'Relaiserweiterung nicht erreichbar.':version?'Installierte Firmware: '+version:'Firmware-Version nicht verfügbar; ältere Versionen melden sie nicht.';
-  document.getElementById('relay-installed-notes').textContent=version?installedReleaseText(version,true):'Ohne gemeldete Firmware-Version lassen sich keine Release Notes zuordnen.';
+  renderReleaseNotes(document.getElementById('relay-installed-notes'),version?installedReleaseText(version,true):'Ohne gemeldete Firmware-Version lassen sich keine Release Notes zuordnen.');
 }
 function renderSelectedReleaseNotes(prefix,release){
   const container=document.getElementById(prefix+'-selected-notes-wrap');
   container.hidden=!release;
-  document.getElementById(prefix+'-selected-notes').textContent=release?(prefix==='relay'?relayReleaseNotesText(release):releaseNotesText(release)):'';
+  renderReleaseNotes(document.getElementById(prefix+'-selected-notes'),release?(prefix==='relay'?relayReleaseNotesText(release):releaseNotesText(release)):'');
 }
 async function loadInstalledReleaseNotes(){
   installedReleaseLoadState='loading';

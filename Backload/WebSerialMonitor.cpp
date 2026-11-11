@@ -272,6 +272,7 @@ void beginWebSerialMonitor() {
   dashboard.server().on("/api/remote-relay/pair/scan", HTTP_GET, proxyRequest);
   dashboard.server().on("/api/remote-relay/pair/cancel", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/remote-relay/command", HTTP_POST, proxyRequest);
+  dashboard.server().on("/api/remote-relay/reboot", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/remote-relay/forget", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/remote-relay/discard", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/remote-relay/update/prepare", HTTP_POST, proxyRequest);
@@ -285,6 +286,7 @@ void beginWebSerialMonitor() {
   dashboard.server().on("/api/solar/control", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/heating", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/test-mode", HTTP_POST, proxyRequest);
+  dashboard.server().on("/api/reboot", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/simulation", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/hostname", HTTP_POST, proxyRequest);
   dashboard.server().on("/api/history-server", HTTP_GET | HTTP_POST, proxyRequest);
