@@ -18,7 +18,7 @@ const data={simulation:true,heating:{winter:true,configValid:true},
   automatic:{configValid:true,differenceStart:8,minimumCombi:35,minimumBuffer:40,differenceStop:3},
   controllers:[{id:0,csPin:4,configValid:true,target:68},{id:1,csPin:5},{id:2,csPin:6},{id:3,csPin:7,valid:true,temperature:40},{id:4,csPin:15,valid:true,temperature:46}],
   solar:{on:true,configValid:true,sensorsValid:true,paused:false,differenceStart:5,differenceStop:1,difference:6},
-  hardware:{clk:38,mosi:11,miso:13,pump:3,direction:8,solar:9,oil:10,led:2,rgbLed:48,directionOff:0}};
+  hardware:{clk:38,mosi:11,miso:13,pump:3,direction:8,solar:18,oil:17,led:2,rgbLed:48,directionOff:0}};
 context.updateOrganigram(data);
 assert.equal(get('org-status').textContent,'Testmodus · Winter · Kombi Mitte');
 assert.equal(get('org-solar-state').textContent,'EIN · simuliert');
@@ -41,7 +41,7 @@ assert.equal(get('org-min-combi').textContent,'35 °C');
 assert.equal(get('org-min-buffer').textContent,'40 °C');
 assert(starts.every(n=>n.textContent==='8 K') && stops.every(n=>n.textContent==='3 K'));
 assert.deepEqual([0,1,2,3,4].map(i=>get('org-cs-'+i).textContent),['4','5','6','7','15']);
-assert.deepEqual(['pump','direction','solar','oil'].map(n=>get('org-relay-'+n).textContent),['3','8','9','10']);
+assert.deepEqual(['pump','direction','solar','oil'].map(n=>get('org-relay-'+n).textContent),['3','8','18','17']);
 assert.deepEqual(['clk','mosi','miso'].map(n=>get('org-spi-'+n).textContent),['38','11','13']);
 assert.equal(get('org-direction-off').textContent,'Kombi → Puffer');
 assert.equal(get('org-led').textContent,'2');

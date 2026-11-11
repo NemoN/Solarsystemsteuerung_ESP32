@@ -43,7 +43,7 @@
 #include <time.h>
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
-const char* FIRMWARE_VERSION = "2.9.3";
+const char* FIRMWARE_VERSION = "2.9.4";
 // Der AP wird nur für Einrichtung und Wiederherstellung benötigt.
 constexpr bool AP_RECOVERY_ONLY = true;
 
@@ -104,14 +104,16 @@ constexpr uint8_t RGB_STATUS_PIN = 48;
 // Vier Active-Low-Relais: LOW = Relais AN, HIGH = Relais AUS.
 const uint8_t PUMP_ENABLE_PIN = 3;
 const uint8_t PUMP_DIRECTION_PIN = 8;
-const uint8_t SOLAR_PUMP_PIN = 9;  // Relais 3: Solarpumpe, Active Low.
-const uint8_t OIL_BURNER_PIN = 10; // Relais 4: manuelle Ölbrennerfreigabe.
+const uint8_t SOLAR_PUMP_PIN = 18; // Relais 3: Solarpumpe, Active Low.
+const uint8_t OIL_BURNER_PIN = 17; // Relais 4: manuelle Ölbrennerfreigabe.
 static_assert(RGB_STATUS_PIN != SPI_CLK && RGB_STATUS_PIN != SPI_MOSI && RGB_STATUS_PIN != SPI_MISO &&
   RGB_STATUS_PIN != LED_PIN && RGB_STATUS_PIN != PUMP_ENABLE_PIN && RGB_STATUS_PIN != PUMP_DIRECTION_PIN &&
   RGB_STATUS_PIN != SOLAR_PUMP_PIN && RGB_STATUS_PIN != OIL_BURNER_PIN, "RGB-LED benötigt einen eigenen GPIO.");
 // Vorgesehene Belegung; an die tatsächliche Verdrahtung des Relaisboards anpassen.
-static_assert(OIL_BURNER_PIN != PUMP_ENABLE_PIN && OIL_BURNER_PIN != PUMP_DIRECTION_PIN &&
-  OIL_BURNER_PIN != SOLAR_PUMP_PIN, "Relais benötigen unterschiedliche GPIOs.");
+static_assert(PUMP_ENABLE_PIN != PUMP_DIRECTION_PIN && PUMP_ENABLE_PIN != SOLAR_PUMP_PIN &&
+  PUMP_ENABLE_PIN != OIL_BURNER_PIN && PUMP_DIRECTION_PIN != SOLAR_PUMP_PIN &&
+  PUMP_DIRECTION_PIN != OIL_BURNER_PIN && SOLAR_PUMP_PIN != OIL_BURNER_PIN,
+  "Relais benötigen unterschiedliche GPIOs.");
 // An die fertige Umpolschaltung anpassen: Förderrichtung bei Richtungsrelais AUS.
 const PumpDirection DIRECTION_RELAY_OFF_DIRECTION = PumpDirection::CombiToBuffer;
 PumpControl pump(DIRECTION_RELAY_OFF_DIRECTION);

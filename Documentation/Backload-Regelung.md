@@ -107,10 +107,10 @@ der Startprüfung und eines angeforderten Neustarts bleibt die echte
 | --- | --- | --- |
 | 1 | 3 | Backloadpumpe EIN/AUS |
 | 2 | 8 | Pumprichtung |
-| 3 | 9 | Solarpumpe EIN/AUS |
-| 4 | 10 | Ölbrennerfreigabe |
+| 3 | 18 | Solarpumpe EIN/AUS |
+| 4 | 17 | Ölbrennerfreigabe |
 
-GPIO 9/10 müssen zur tatsächlichen Verdrahtung passen. Die Relais sind Active
+GPIO 18/17 müssen zur tatsächlichen Verdrahtung passen. Die Relais sind Active
 Low. Richtungsrelais AUS bedeutet im Sketch vorläufig Kombi → Puffer; die
 Zuordnung muss an der tatsächlichen Umpolschaltung geprüft werden. GPIO 3 ist
 ein ESP32-S3-Strapping-Pin; das Relaisverhalten beim Einschalten prüfen.

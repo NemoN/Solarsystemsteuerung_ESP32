@@ -13,9 +13,9 @@ Temperaturarchiv erfasst weiterhin diese drei Sensoren.
 
   Relais 1: GPIO 3 – Backloadpumpe EIN/AUS, Active Low.
   Relais 2: GPIO 8 – Pumprichtung über externe Umpolschaltung, Active Low.
-  Relais 3: GPIO 9 – Solarpumpe EIN/AUS, Active Low.
-  Relais 4: GPIO 10 – manuelle Ölbrennerfreigabe, Active Low.
-GPIO 9/10 sind im Sketch anpassbar; sie müssen
+  Relais 3: GPIO 18 – Solarpumpe EIN/AUS, Active Low.
+  Relais 4: GPIO 17 – manuelle Ölbrennerfreigabe, Active Low.
+GPIO 18/17 sind im Sketch anpassbar; sie müssen
 zur tatsächlichen Verdrahtung passen.
 
 Vorläufig angenommene Zuordnung: Richtungsrelais AUS = Kombi → Puffer.

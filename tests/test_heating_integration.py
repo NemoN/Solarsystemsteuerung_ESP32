@@ -1,11 +1,14 @@
 """Hosttest der echten Sketch-Funktionen mit GPIO-Protokoll und Sensorwerten."""
 from pathlib import Path
 import os
+import re
 import subprocess
 import tempfile
 
 ROOT = Path(__file__).resolve().parents[1]
 sketch = (ROOT / "Backload/Backload.ino").read_text()
+for name, pin in (("PUMP_ENABLE_PIN", 3), ("PUMP_DIRECTION_PIN", 8), ("OIL_BURNER_PIN", 17)):
+    assert re.search(rf'\b{name}\s*=\s*{pin}\s*;', sketch)
 
 
 def function(signature):
@@ -23,7 +26,7 @@ harness = r'''
 #include <utility>
 
 constexpr int LOW = 0, HIGH = 1;
-constexpr int PUMP_ENABLE_PIN = 3, PUMP_DIRECTION_PIN = 8, OIL_BURNER_PIN = 10;
+constexpr int PUMP_ENABLE_PIN = 3, PUMP_DIRECTION_PIN = 8, OIL_BURNER_PIN = 17;
 constexpr PumpDirection DIRECTION_RELAY_OFF_DIRECTION = PumpDirection::CombiToBuffer;
 PumpControl pump;
 AutomaticControl automaticControl;
@@ -38,7 +41,7 @@ PumpDirection runtimePumpDirection=PumpDirection::CombiToBuffer;
 void trackPumpRuntime(bool = false) {}
 uint32_t now=0;
 uint32_t millis() { return now; }
-int pins[16];
+int pins[40];
 std::vector<std::pair<int,int>> writes;
 void digitalWrite(int pin,int value) {
   pins[pin]=value; writes.emplace_back(pin,value);

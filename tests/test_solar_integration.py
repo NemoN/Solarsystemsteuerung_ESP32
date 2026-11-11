@@ -2,10 +2,12 @@
 from pathlib import Path
 import subprocess
 import tempfile
+import re
 
 root = Path(__file__).resolve().parents[1]
 sketch = (root / 'Backload/Backload.ino').read_text()
 proxy = (root / 'Backload/WebSerialMonitor.cpp').read_text()
+assert re.search(r'\bSOLAR_PUMP_PIN\s*=\s*18\s*;', sketch)
 assert 'server.on("/api/solar/control", HTTP_POST, controlSolarPump)' in sketch
 assert 'dashboard.server().on("/api/solar/control", HTTP_POST, proxyRequest)' in proxy
 def function(signature):
@@ -24,7 +26,7 @@ harness = r'''
 #include <map>
 #include <vector>
 using String=std::string;
-constexpr int HIGH=1,LOW=0,SOLAR_PUMP_PIN=9;
+constexpr int HIGH=1,LOW=0,SOLAR_PUMP_PIN=18;
 bool storageReady=true,solarSettingsValid=true,modeTransition=false,otaActive=false,otaVerificationPending=false,SIMULATION_MODE=false;
 bool runtimeSolarOn=false;
 void trackPumpRuntime(bool = false) {}
@@ -36,7 +38,7 @@ SolarControl solarControl;
 struct TemperatureController {bool valid;float currentTemp;};
 TemperatureController controllers[5]={{},{},{},{true,40},{true,45}};
 int pin=HIGH,writes=0;
-void digitalWrite(int gpio,int value){assert(gpio==9);pin=value;++writes;}
+void digitalWrite(int gpio,int value){assert(gpio==18);pin=value;++writes;}
 struct Log {template<typename... T> void printf(const char*,T...){} void println(const char*){}} FirmwareLog;
 struct Prefs {
   std::vector<unsigned char> data;
