@@ -18,8 +18,36 @@ assert.match(server, /server\(\)\.onNotFound\([\s\S]*?send\(404/);
 assert.match(styles, /body\.settings-page \.backload #wifi-section/);
 assert.match(styles, /body\.settings-page \.backload #update-section/);
 assert.match(styles, /a\[aria-current="page"\]/);
+// Mobile Navigation und CSS müssen denselben Umschaltpunkt verwenden.
+const navigationNodes={
+  'nav-toggle':{hidden:false,attributes:{},events:{},setAttribute(k,v){this.attributes[k]=v;},getAttribute(k){return this.attributes[k];},addEventListener(k,fn){this.events[k]=fn;},focus(){this.focused=true;}},
+  'nav-links':{hidden:false,events:{},addEventListener(k,fn){this.events[k]=fn;}}
+};
+let mediaChange;
+const compact={matches:true,addEventListener(name,fn){assert.equal(name,'change');mediaChange=fn;}};
+const responsiveContext=vm.createContext({document:{getElementById:id=>navigationNodes[id]},window:{matchMedia(query){assert.equal(query,'(max-width: 760px)');return compact;}}});
+const responsiveStart=sketch.indexOf("const navToggle=document.getElementById('nav-toggle')");
+const responsiveEnd=sketch.indexOf("const settingsSubnav=",responsiveStart);
+assert(responsiveStart>=0 && responsiveEnd>responsiveStart);
+vm.runInContext(sketch.slice(responsiveStart,responsiveEnd),responsiveContext);
+assert.match(styles, /@media\(max-width:760px\).*\.backload \.page-nav/);
+assert.equal(navigationNodes['nav-toggle'].hidden,false);assert.equal(navigationNodes['nav-links'].hidden,true);
+navigationNodes['nav-toggle'].events.click();
+assert.equal(navigationNodes['nav-links'].hidden,false);assert.equal(navigationNodes['nav-toggle'].attributes['aria-expanded'],'true');
+navigationNodes['nav-links'].events.keydown({key:'Escape'});
+assert.equal(navigationNodes['nav-links'].hidden,true);assert.equal(navigationNodes['nav-toggle'].focused,true);
+compact.matches=false;mediaChange();
+assert.equal(navigationNodes['nav-toggle'].hidden,true);assert.equal(navigationNodes['nav-links'].hidden,false);
 for (const cls of ['dashboard', 'history', 'organigram', 'info', 'settings'])
   assert(!styles.includes('.' + cls + '-link{display:none}'));
+assert(sketch.indexOf('id="sim-banner"') > sketch.indexOf('id="sensor-grid"'), 'Testmodus steht nach den Sensoren');
+assert.match(sketch, /<header id="history-intro"[^>]*><h1>Verlauf<\/h1><\/header>\s*<section id="history-section"/);
+assert.match(sketch, /<header id="info-intro"[^>]*><h1 id="info-heading">ESP-Informationen<\/h1><\/header>\s*<section id="info-section"/);
+const passwordFormMarkup=sketch.slice(sketch.indexOf('<form id="password-form">'),sketch.indexOf('</form>',sketch.indexOf('<form id="password-form">')));
+assert.match(passwordFormMarkup, /class="password-actions"[\s\S]*Passwort speichern[\s\S]*id="password-remove"/);
+const relayFormMarkup=sketch.slice(sketch.indexOf('<form id="remote-relay-form">'),sketch.indexOf('</form>',sketch.indexOf('<form id="remote-relay-form">')));
+assert.match(relayFormMarkup, /<details id="relay-edit-details"><summary>Relais beschriften<\/summary>[\s\S]*?<\/details>\s*<details class="relay-manual-settings"><summary>Verbindung manuell einrichten<\/summary>/);
+for(const field of ['address','key','label1','label2','label3','label4'])assert(relayFormMarkup.includes('name="'+field+'"'),field+' bleibt im gemeinsamen Formular');
 assert(sketch.indexOf('id="settings-intro"') < sketch.indexOf('id="wifi-section"'));
 assert(sketch.indexOf('id="wifi-section"') < sketch.indexOf('id="update-section"'));
 const hostSection = sketch.slice(sketch.indexOf('<section id="hostname-section"'), sketch.indexOf('<section id="wifi-section"'));
@@ -27,6 +55,9 @@ const hostnamePattern = hostSection.match(/pattern="([^"]+)"/)[1];
 const hostnameRegex = new RegExp(`^(?:${hostnamePattern})$`, 'v');
 for (const value of ['a', 'backload-test', 'a'.repeat(31)]) assert(hostnameRegex.test(value));
 for (const value of ['-backload', 'backload-', 'has space', 'a'.repeat(32)]) assert(!hostnameRegex.test(value));
+const updateFormMarkup=sketch.slice(sketch.indexOf('<form id="update-form">'),sketch.indexOf('</form>',sketch.indexOf('<form id="update-form">')));
+assert.match(updateFormMarkup, /<button type="submit">Steuerung aktualisieren<\/button>/);
+assert.match(styles, /#update-form button[^}]*background:#fff0b5/);
 const wifiSection = sketch.slice(sketch.indexOf('<section id="wifi-section"'), sketch.indexOf('<section id="update-section"'));
 assert(hostSection.includes('id="hostname-form"') && !wifiSection.includes('id="hostname-form"'));
 for (const id of ['appearance-section','security-section','hostname-section','wifi-section','update-section','simulation-settings'])

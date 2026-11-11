@@ -12,6 +12,19 @@ assert.match(styles, /\.sensor-heading\{display:flex;justify-content:space-betwe
 assert.match(page, /role="img" aria-label="Sensorstatus unbekannt"/);
 
 const context = vm.createContext({temperatureNumber:new Intl.NumberFormat('de-DE', {minimumFractionDigits:1, maximumFractionDigits:1})});
+const iconStart = page.indexOf('function sensorIconMarkup(id)');
+assert(iconStart > 0 && iconStart < panelStart);
+vm.runInContext(page.slice(iconStart, panelStart), context);
+for (const [id, level] of [[0,7], [1,12], [2,7], [3,17]]) {
+  const icon = context.sensorIconMarkup(id);
+  assert.match(icon, /sensor-icon-tank/);
+  assert.match(icon, new RegExp(`cy="${level}"`), 'Markierung zeigt die Position des Fühlers');
+  assert.match(icon, /aria-hidden="true"/);
+}
+assert.match(context.sensorIconMarkup(4), /sensor-icon-sun/);
+assert.match(context.sensorIconMarkup(4), /<circle/);
+assert.equal((panel.match(/\$\{sensorIconMarkup\(c\.id\)\}/g) || []).length, 2, 'Beide Kacheltypen erhalten ein passendes Symbol');
+
 const start = page.indexOf('function showTemperature(p,c)');
 const end = page.indexOf('function drawSparkline(', start);
 assert(start > 0 && end > start);

@@ -12,6 +12,7 @@ extern const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 h1{font-size:clamp(1.7rem,5vw,2.4rem);margin:0 0 12px}h2{font-size:1.25rem;margin:0}
 .dashboard-header{display:flex;align-items:center;justify-content:space-between;gap:18px 28px;flex-wrap:wrap}.header-status{margin-left:auto;text-align:right}
 .page-nav a{display:inline-flex;align-items:center;gap:7px}.nav-icon{width:18px;height:18px;flex:none}body:not(.organigram-page) #organigram-section{display:none}body.organigram-page main>:not(#organigram-section):not(.page-nav):not(script):not(#test-message){display:none}
+.nav-brand{display:flex;align-items:center;gap:8px}.nav-brand svg{width:40px;height:40px}.nav-wordmark{display:flex;flex-direction:column;line-height:1}.sensor-title{display:flex;align-items:flex-start;gap:10px;min-width:0}.sensor-icon{width:22px;height:22px;flex:none;color:#00877b}.sensor-icon-sun{color:#936000}.section-icon{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;vertical-align:middle;margin-right:10px}.tank-water-surface{fill:#a2dbee;stroke:#0087ad;stroke-width:1.8}
 p{line-height:1.6}header{margin-bottom:30px}.muted{color:#4e6268}
 section{border-top:1px solid #b9c8c9;padding:26px 0} .heading,.readings{display:flex;gap:18px;justify-content:space-between;align-items:center;flex-wrap:wrap}
 .readings{justify-content:flex-start;margin:20px 0;font-variant-numeric:tabular-nums}.temperature{font-size:1.7rem;font-weight:650}
@@ -61,6 +62,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <script>document.body.classList.toggle('settings-page',['/einstellungen','/testwerte','/sicherheit'].includes(location.pathname));document.body.classList.toggle('history-page',location.pathname==='/verlauf');document.body.classList.toggle('info-page',location.pathname==='/info');document.body.classList.toggle('organigram-page',location.pathname==='/regelungsuebersicht');</script>
 <nav class="page-nav" aria-label="Navigation">
   <div class="nav-sticky">
+  <div class="nav-brand"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 23 19 10l15 13v18H4z"/><circle class="nav-brand-sun" cx="36" cy="10" r="5"/><path class="nav-brand-sun" d="M36 1v3m0 12v3M27 10h3m12 0h3M30 4l2 2m8 8 2 2m0-12-2 2"/></svg><span class="nav-wordmark" aria-label="Backload"><span>BACK</span><span>LOAD</span></span></div>
   <button id="nav-toggle" type="button" aria-controls="nav-links" aria-expanded="false" hidden><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true" focusable="false"><path d="M4 6h16M4 12h16M4 18h16"/></svg>Menü</button>
   <div id="nav-links" class="nav-links">
   <a class="dashboard-link" href="/"><svg class="nav-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z"/><path d="M9 21v-7h6v7"/></svg><span>Steuerung</span></a>
@@ -87,10 +89,9 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
   </div>
 </nav>
 <header class="dashboard-header"><div class="dashboard-title"><h1>Solarsystemsteuerung</h1><p id="firmware-version" class="muted">Version: …</p></div><div class="header-status"><p class="connection-status" role="status"><span id="connection-dot" class="connection-dot" aria-hidden="true"></span><span id="connection">Verbindung wird aufgebaut …</span></p><p id="device-clock" class="muted">ESP32-Zeit wird geladen …</p><p class="wifi-signal-status muted"><svg id="wifi-signal-bars" class="wifi-signal-bars" viewBox="0 0 25 18" role="img" aria-label="WLAN-Signalstärke nicht verfügbar"><rect x="0" y="15" width="3" height="3" rx=".5"/><rect x="5" y="12" width="3" height="6" rx=".5"/><rect x="10" y="9" width="3" height="9" rx=".5"/><rect x="15" y="6" width="3" height="12" rx=".5"/><rect x="20" y="3" width="3" height="15" rx=".5"/></svg><span id="wifi-signal">WLAN-Signal wird geladen …</span></p></div></header>
-<div id="sim-banner" role="status" hidden><strong>Testmodus:</strong> Werte, Verlauf und Pumpe sind simuliert. Relais am Haupt-ESP bleiben aus; WLAN-Relais schalten tatsächlich. <button id="test-stop" type="button">Testmodus beenden</button></div>
 <p id="test-message" class="message" role="status"></p>
 <section aria-labelledby="heating-heading">
-<div class="heading"><h2 id="heating-heading">Sommer / Winter · Ölbrenner</h2><span id="heating-badge" class="badge" role="status">Status wird geladen …</span></div>
+<div class="heading"><h2 id="heating-heading"><svg class="section-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C9 6 5 10 5 15a7 7 0 0 0 14 0c0-5-4-9-7-13Z"/></svg>Sommer / Winter · Ölbrenner</h2><span id="heating-badge" class="badge" role="status">Status wird geladen …</span></div>
 <p>Sommer: Kombi oben, Öl gesperrt. Winter: Kombi Mitte, Öl freigegeben.</p>
 <button id="heating-switch" class="relay-switch" type="button" role="switch" aria-checked="false" aria-describedby="heating-detail" disabled><span class="switch-track" aria-hidden="true"></span><span id="heating-switch-label">Winterbetrieb · Ölbrenner freigeben</span></button>
 <p id="heating-detail" class="muted">Betriebsart wird geladen …</p>
@@ -98,7 +99,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <p id="heating-message" class="message" role="status"></p>
 </section>
 <section aria-labelledby="pump-heading">
-<div class="heading"><h2 id="pump-heading">Backloadpumpe</h2><span id="pump-badge" class="badge" role="status">Status wird geladen …</span></div>
+<div class="heading"><h2 id="pump-heading"><svg class="section-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2"/><path d="M12 10V4m2 9 5 3m-9-3-5 3"/></svg>Backloadpumpe</h2><span id="pump-badge" class="badge" role="status">Status wird geladen …</span></div>
 <div class="storage-overview">
 <svg class="burner-pipes" aria-hidden="true"><path class="pipe-vl"/><path class="pipe-rl"/><path class="solar-link"/><text class="pipe-vl-label">VL</text><text class="pipe-rl-label">RL</text></svg>
 <div id="oil-burner-diagram" class="burner-diagram" role="img" aria-label="Ölbrennerfreigabe: Status unbekannt">
@@ -121,11 +122,12 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <text class="tank-name" x="344" y="24" text-anchor="middle">Pufferspeicher</text>
 <rect class="tank" x="14" y="42" width="164" height="218" rx="42"/>
 <rect class="tank" x="262" y="42" width="164" height="218" rx="42"/>
+<path class="tank-water-surface" d="M16 76 Q16 42 56 42 H136 Q176 42 176 76 Q96 96 16 76Z M264 76 Q264 42 304 42 H384 Q424 42 424 76 Q344 96 264 76Z"/>
 <path class="tank-rim" d="M16 76 Q96 96 176 76 M264 76 Q344 96 424 76 M16 226 Q96 246 176 226 M264 226 Q344 246 424 226"/>
-<text class="sensor-label" x="28" y="98">Oben</text><text class="sensor-value" id="diagram-temp-0" x="163" y="118" text-anchor="end">—</text>
-<text class="sensor-label" x="28" y="148">Mitte</text><text class="sensor-value" id="diagram-temp-1" x="163" y="168" text-anchor="end">—</text>
-<text class="sensor-label" x="28" y="198">Unten</text><text class="sensor-value" id="diagram-temp-3" x="163" y="218" text-anchor="end">—</text>
-<text class="sensor-label" x="276" y="98">Oben</text><text class="sensor-value" id="diagram-temp-2" x="411" y="118" text-anchor="end">—</text>
+<text class="sensor-label" x="28" y="118">Oben</text><text class="sensor-value" id="diagram-temp-0" x="163" y="118" text-anchor="end">—</text>
+<text class="sensor-label" x="28" y="168">Mitte</text><text class="sensor-value" id="diagram-temp-1" x="163" y="168" text-anchor="end">—</text>
+<text class="sensor-label" x="28" y="218">Unten</text><text class="sensor-value" id="diagram-temp-3" x="163" y="218" text-anchor="end">—</text>
+<text class="sensor-label" x="276" y="118">Oben</text><text class="sensor-value" id="diagram-temp-2" x="411" y="118" text-anchor="end">—</text>
 </g>
 <g class="transfer-pump" transform="translate(220 111)" aria-hidden="true">
 <circle class="transfer-pump-body" r="19"/>
@@ -156,7 +158,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <p class="muted">Richtungswechsel: Die Backloadpumpe pausiert 2 Sekunden, auch bei manueller Steuerung.</p>
 </section>
 <section aria-labelledby="auto-heading">
-<h2 id="auto-heading">Automatische Regelung</h2>
+<h2 id="auto-heading"><svg class="section-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M10 2h4l.6 2.2 1.8.8 2-1 2.8 2.8-1 2 .8 1.8 2.2.6v4l-2.2.6-.8 1.8 1 2-2.8 2.8-2-1-1.8.8L14 23h-4l-.6-2.2-1.8-.8-2 1-2.8-2.8 1-2-.8-1.8L1 14v-4l2.2-.6.8-1.8-1-2L5.8 2.8l2 1 1.8-.8L10 2Z" transform="translate(0 -1) scale(.96)"/></svg>Automatische Regelung</h2>
 <p class="muted">Kombi oben im Sommer, Kombi Mitte im Winter; verglichen wird jeweils mit Puffer oben.</p>
 <form id="auto-form">
 <div><label for="auto-start">Startdifferenz zwischen den Speichern (5–10 K)</label><div class="stepper"><button type="button" data-field="start" data-direction="-1" aria-label="Startdifferenz senken">−</button><input id="auto-start" type="number" name="start" min="5" max="10" step="1" inputmode="numeric" required><button type="button" data-field="start" data-direction="1" aria-label="Startdifferenz erhöhen">+</button></div></div>
@@ -179,7 +181,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 </details>
 </section>
 <section id="solar-section" aria-labelledby="solar-heading">
-<div class="heading"><h2 id="solar-heading">Solarpumpe</h2><span id="solar-badge" class="badge" role="status">Status wird geladen …</span></div>
+<div class="heading"><h2 id="solar-heading"><svg class="section-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3M4.2 4.2l2.1 2.1m11.4 11.4 2.1 2.1m0-15.6-2.1 2.1M6.3 17.7l-2.1 2.1"/></svg>Solarpumpe</h2><span id="solar-badge" class="badge" role="status">Status wird geladen …</span></div>
 <p class="muted">Relais 3 regelt unabhängig von der Backloadpumpe anhand von Solarpanel und Kombispeicher unten.</p>
 <p id="solar-detail" class="muted">Werte werden geladen …</p>
 <div class="solar-manual-controls">
@@ -288,15 +290,22 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
   </div><figure><img src="/assets/relaiserweiterung.svg" width="1715" height="1772" loading="lazy" alt="Vierkanal-Relaiserweiterung mit ESP32, Programmierleiste sowie Tasten EN und IO0"><figcaption>Relaiserweiterung RBS16467 · Vorderseite</figcaption></figure></div>
 </div>
 </section>
+<header id="info-intro" class="subpage-intro"><h1 id="info-heading">ESP-Informationen</h1></header>
 <section id="info-section" aria-labelledby="info-heading">
-<h2 id="info-heading">ESP-Informationen</h2><p class="muted">Speicherwerte: Aktualisierung alle 5 Sekunden.</p>
+<p class="muted">Speicherwerte: Aktualisierung alle 5 Sekunden.</p>
 <p id="info-status" class="muted" role="status">Gerätedaten werden geladen …</p>
-<div class="info-grid">
+<div class="info-grid" id="info-device-grid">
 <div><h3>Chip</h3><dl><div><dt>Modell</dt><dd id="info-chip">—</dd></div><div><dt>Revision</dt><dd id="info-revision">—</dd></div><div><dt>CPU-Kerne</dt><dd id="info-cores">—</dd></div><div><dt>CPU-Takt</dt><dd id="info-cpu">—</dd></div><div><dt>Laufzeit</dt><dd id="info-uptime">—</dd></div></dl></div>
 <div><h3>Firmware</h3><dl><div><dt>Version</dt><dd id="info-version">—</dd></div><div><dt>ESP32-Core</dt><dd id="info-core">—</dd></div><div><dt>ESP-IDF</dt><dd id="info-idf">—</dd></div><div><dt>Aktiver Firmware-Slot</dt><dd id="info-slot">—</dd></div><div><dt>Update-Slot</dt><dd id="info-update-slot">—</dd></div></dl></div>
 <div><h3>Speicher</h3><dl><div><dt>Flash</dt><dd id="info-flash">—</dd></div><div><dt>Interner RAM nutzbar</dt><dd id="info-heap">—</dd></div><div><dt>Interner RAM frei</dt><dd id="info-heap-free">—</dd></div><div><dt>PSRAM nutzbar</dt><dd id="info-psram">—</dd></div><div><dt>PSRAM frei</dt><dd id="info-psram-free">—</dd></div></dl><p class="muted">Der Temperaturverlauf reserviert PSRAM; die nutzbare Größe kann unter der verbauten Größe liegen.</p></div>
 <div class="info-wifi"><h3>WLAN</h3><dl><div><dt>Status</dt><dd id="info-wifi-state">—</dd></div><div><dt>Heimnetz (SSID)</dt><dd id="info-wifi-ssid">—</dd></div><div><dt>Hostname / mDNS</dt><dd id="info-wifi-host">—</dd></div><div><dt>Signalstärke</dt><dd id="info-wifi-rssi">—</dd></div><div><dt>Kanal</dt><dd id="info-wifi-channel">—</dd></div><div><dt>WLAN-Sicherheit</dt><dd id="info-wifi-security">—</dd></div><div><dt>WLAN-Standards des Zugangspunkts</dt><dd id="info-wifi-standards">—</dd></div><div><dt>IP-Adresse</dt><dd id="info-wifi-ip">—</dd></div><div><dt>Subnetzmaske</dt><dd id="info-wifi-mask">—</dd></div><div><dt>Gateway</dt><dd id="info-wifi-gateway">—</dd></div><div><dt>DNS-Server</dt><dd id="info-wifi-dns">—</dd></div><div><dt>MAC-Adresse</dt><dd id="info-wifi-mac">—</dd></div><div><dt>Access-Point (BSSID)</dt><dd id="info-wifi-bssid">—</dd></div><div><dt>ESP-Zugang</dt><dd id="info-wifi-ap">—</dd></div><div><dt>ESP-Zugang IP / MAC</dt><dd id="info-wifi-ap-network">—</dd></div><div><dt>Verbundene Geräte</dt><dd id="info-wifi-clients">—</dd></div></dl></div>
+</div>
+<div class="info-relays" aria-labelledby="info-relays-heading">
+<h3 id="info-relays-heading">Relaiserweiterungen</h3>
+<p id="info-relays-status" class="muted" role="status">Erweiterungen werden geladen …</p>
+<div id="info-relays-list" class="info-relay-list"></div>
 </div></section>
+<header id="history-intro" class="subpage-intro"><h1>Verlauf</h1></header>
 <section id="history-section" aria-labelledby="history-heading">
 <h2 id="history-heading">Temperaturverlauf</h2>
 <p class="muted">Eine Messung pro Minute, bis zu einem Jahr. Beim Neustart wird der Verlauf gelöscht. Lange Zeiträume werden für die Anzeige zusammengefasst.</p>
@@ -329,8 +338,8 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <form id="password-form">
 <div class="password-field"><label for="access-password">Neues Passwort</label><div class="password-control"><input id="access-password" type="password" minlength="8" maxlength="128" autocomplete="new-password" required><button class="password-visibility" type="button" aria-label="Neues Passwort anzeigen" aria-pressed="false" aria-controls="access-password" title="Passwort anzeigen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path class="password-eye-slash" d="M3 3l18 18"/></svg></button></div></div>
 <div class="password-field"><label for="access-confirm">Passwort wiederholen</label><div class="password-control"><input id="access-confirm" type="password" minlength="8" maxlength="128" autocomplete="new-password" required><button class="password-visibility" type="button" aria-label="Passwortwiederholung anzeigen" aria-pressed="false" aria-controls="access-confirm" title="Passwort anzeigen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M2 12s3.6-6 10-6 10 6 10 6-3.6 6-10 6S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/><path class="password-eye-slash" d="M3 3l18 18"/></svg></button></div></div>
-<button type="submit">Passwort speichern</button></form>
-<button id="password-remove" class="secondary-button" type="button">Passwortschutz entfernen</button><p id="password-message" class="message" role="status"></p>
+<div class="password-actions"><button type="submit">Passwort speichern</button><button id="password-remove" class="secondary-button" type="button">Passwortschutz entfernen</button></div></form>
+<p id="password-message" class="message" role="status"></p>
 </section>
 <section id="history-server-section" aria-labelledby="history-server-heading">
 <h2 id="history-server-heading">History-Server</h2>
@@ -371,10 +380,10 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <form id="github-update-form"><label>Firmware-Version<select name="release" required disabled><option value="">Bitte zuerst Releases suchen</option></select></label><button type="submit" disabled>Ausgewählte Version installieren</button><p id="release-download" hidden><a id="release-download-link" target="_blank" rel="noopener noreferrer">Ausgewählte Firmware herunterladen (.bin)</a></p></form>
 <div id="main-selected-notes-wrap" class="release-notes" hidden><h3>Änderungen der ausgewählten Version</h3><div id="main-selected-notes" class="release-notes-text"></div></div>
 <progress id="update-progress" max="100" value="0" hidden></progress><p id="update-message" class="message" role="status"></p>
-<details><summary>Firmware-Datei manuell hochladen</summary><p>Eine für dieses ESP32-S3-Board kompilierte Datei (.bin) auswählen.</p><form id="update-form"><label>Firmware-Datei<input name="firmware" type="file" accept=".bin,application/octet-stream" required></label><button type="submit">Datei hochladen</button></form></details>
+<details><summary>Firmware-Datei manuell hochladen</summary><p>Eine für dieses ESP32-S3-Board kompilierte Datei (.bin) auswählen.</p><form id="update-form"><label>Firmware-Datei<input name="firmware" type="file" accept=".bin,application/octet-stream" required></label><button type="submit">Steuerung aktualisieren</button></form></details>
 </section>
 <section id="remote-relay-section" aria-labelledby="remote-relay-heading">
-<div class="heading"><h2 id="remote-relay-heading">WLAN-Relais</h2><span id="remote-relay-status" class="badge" role="status">Status wird geladen …</span></div>
+<div class="heading"><h2 id="remote-relay-heading"><svg class="section-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M2 8a15 15 0 0 1 20 0M5 12a10 10 0 0 1 14 0M8 16a6 6 0 0 1 8 0"/><circle cx="12" cy="20" r="1"/></svg>WLAN-Relais</h2><span id="remote-relay-status" class="badge" role="status">Status wird geladen …</span></div>
 <p id="remote-relay-detail" class="muted">Verbindung zur Relaiserweiterung wird geprüft.</p>
 <h3>Relaiserweiterung 1</h3>
 <div id="remote-relay-switches" class="remote-relay-switches">
@@ -393,19 +402,21 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <button id="relay-pair-scan" type="button">Neue Erweiterungen suchen</button><p id="relay-pair-scan-message" class="message" role="status"></p>
 <form id="relay-pair-form"><label>Einrichtungs-WLAN<select name="ssid" required disabled><option value="">Bitte zuerst suchen</option></select></label><button type="submit" disabled>Erweiterung einrichten</button></form>
 <button id="relay-pair-cancel" type="button" hidden>Einrichtung abbrechen</button><p id="relay-pair-message" class="message" role="status"></p></details>
-<details id="relay-edit-details"><summary>Relais beschriften und Verbindung bearbeiten</summary>
 <form id="remote-relay-form">
+<details id="relay-edit-details"><summary>Relais beschriften</summary>
+<div class="relay-label-grid">
 <label>Relais 1<input name="label1" maxlength="48" required></label>
 <label>Relais 2<input name="label2" maxlength="48" required></label>
 <label>Relais 3<input name="label3" maxlength="48" required></label>
 <label>Relais 4<input name="label4" maxlength="48" required></label>
+</div></details>
 <details class="relay-manual-settings"><summary>Verbindung manuell einrichten</summary>
 <p class="muted">Für bereits im Heimnetz eingerichtete Erweiterungen. Bei unveränderter Adresse bleibt der gespeicherte Schlüssel erhalten.</p>
 <label>Im Heimnetz gefunden<select id="relay-discovery-select"><option value="">Erweiterung auswählen …</option></select></label>
 <button id="relay-discovery-search" type="button">Erweiterungen suchen</button><p id="relay-discovery-message" class="message" role="status">Suche wird vorbereitet …</p>
 <label>IP-Adresse<input name="address" maxlength="15" placeholder="192.168.1.100" autocomplete="off"></label>
 <label>Verbindungsschlüssel<input name="key" type="password" maxlength="32" autocomplete="new-password" spellcheck="false"></label></details>
-<button type="submit">Änderungen speichern</button></form><p id="remote-relay-config-message" class="message" role="status"></p></details>
+<button type="submit">Änderungen speichern</button></form><p id="remote-relay-config-message" class="message" role="status"></p>
 <button id="remote-relay-forget" type="button" class="secondary-button" hidden>Erweiterung vergessen</button><p id="remote-relay-forget-message" class="message" role="status"></p>
 <details id="relay-forget-recovery" hidden><summary>Probleme beim Zurücksetzen?</summary><p class="muted">Falls die Rückmeldung verloren ging, lässt sich die Zuordnung hier entfernen. Die Karte wird dabei nicht zurückgesetzt und kann noch WLAN-Zugangsdaten besitzen.</p><button id="remote-relay-discard" type="button" class="secondary-button">Nur Zuordnung entfernen</button></details>
 </section>
@@ -435,6 +446,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <div class="heading"><h2 id="roof-heading">Dachsensor</h2><span id="roof-badge" class="badge" role="status">Status wird geladen …</span></div>
 <p id="roof-detail" class="muted">Warte auf ein Lebenszeichen aus dem Heimnetz.</p>
 </section></div>
+<div id="sim-banner" role="status" hidden><strong>Testmodus:</strong> Werte, Verlauf und Pumpe sind simuliert. Relais am Haupt-ESP bleiben aus; WLAN-Relais schalten tatsächlich. <button id="test-stop" type="button">Testmodus beenden</button></div>
 <noscript><p>Bitte JavaScript aktivieren, um Messwerte und Einstellungen anzuzeigen.</p></noscript>
 <script>
 const root=document.getElementById('controllers');
@@ -447,7 +459,7 @@ function setConnectionStatus(connected){
   document.getElementById('connection-dot').classList.toggle('offline',!connected);
 }
 const navToggle=document.getElementById('nav-toggle'),navLinks=document.getElementById('nav-links');
-const compactNav=window.matchMedia('(max-width: 999px)');
+const compactNav=window.matchMedia('(max-width: 760px)');
 function syncNavigation(){
   navToggle.hidden=!compactNav.matches;
   navLinks.hidden=compactNav.matches;
@@ -806,6 +818,7 @@ function automaticRuleText(state,controllers,pump){
   if(valuesValid&&buffer.temperature<state.minimumBuffer)below.push('Puffer '+temp(buffer.temperature)+' < '+temp(state.minimumBuffer));
   return {
     sensor:'Fühler: '+combi.name+' und Pufferspeicher oben. Starttemperatur: '+(targetValid?temp(settings.target):'ungültig')+'.',
+    minimumState:pump&&pump.manual?'neutral':!valuesValid?'warning':below.length?'warning':'ok',
     minimumStatus:pump&&pump.manual?'Handbetrieb: Mindesttemperaturen nicht aktiv.':!valuesValid?'Mindesttemperaturen: keine gültigen Fühlerwerte.':below.length?'Automatik gesperrt: '+below.join(' · ')+'.':'Mindesttemperaturen erreicht.',
     status:pump&&pump.manual?'Manuelle Steuerung aktiv · Ölbrennersperre gilt.':
       !combi.valid||!buffer.valid?'Sensorfehler · Automatik hält die Backloadpumpe aus.':'Gespeicherte Einstellungen.',
@@ -818,7 +831,9 @@ function automaticRuleText(state,controllers,pump){
 }
 function updateAutomaticRules(state,controllers,pump){
   const rules=automaticRuleText(state,controllers,pump);
-  document.getElementById('auto-min-status').textContent=rules?rules.minimumStatus:'Mindesttemperaturen: keine gültigen Regelungseinstellungen.';
+  const minimum=document.getElementById('auto-min-status');
+  minimum.textContent=rules?rules.minimumStatus:'Mindesttemperaturen: keine gültigen Regelungseinstellungen.';
+  minimum.className='muted status-highlight state-'+(rules?rules.minimumState:'warning');
   document.getElementById('auto-rules-table').hidden=!rules;
   document.getElementById('auto-rules-sensor').textContent=rules?rules.sensor:'Keine aktuellen, gültigen Regelungseinstellungen verfügbar.';
   document.getElementById('auto-rules-state').textContent=rules?rules.status:'';
@@ -926,9 +941,10 @@ function updateSolar(state,simulation){
   solarPowerSwitch.disabled=!state||solarControlBusy||solarBusy||!!state.paused||!manual;
   solarManualSwitch.setAttribute('aria-checked',String(manual));solarManualSwitch.setAttribute('data-state',!state?'unknown':manual?'on':'off');
   solarPowerSwitch.setAttribute('aria-checked',String(requested));solarPowerSwitch.setAttribute('data-state',!state?'unknown':requested?'on':'off');
-  if(!state){badge.className='badge';badge.textContent='Status unbekannt';detail.textContent='Keine aktuellen Daten.';return;}
+  if(!state){badge.className='badge';badge.textContent='Status unbekannt';detail.className='muted status-highlight state-neutral';detail.textContent='Keine aktuellen Daten.';return;}
   const grace=!!(state.sensorGrace&&state.on&&!manual);
   const issue=state.paused?'Pausiert':!manual&&!state.configValid?'Einstellung ungültig':!manual&&!state.sensorsValid&&!grace&&!state.sensorFaultPending?'Sensorfehler':null;
+  detail.className='muted status-highlight state-'+(issue||(grace&&!state.sensorFaultPending)?'warning':manual||state.sensorFaultPending?'neutral':'ok');
   badge.className='badge'+(issue?' waiting':state.on?' on':'');
   badge.textContent=issue?issue+' · AUS':state.on?(simulation?'EIN · simuliert':'EIN'):(simulation?'AUS · simuliert':'AUS');
   const difference=Number.isFinite(state.difference)?'Aktuelle Differenz: '+setpointNumber.format(state.difference)+' K. ':state.sensorFaultPending&&Number.isFinite(state.lastDifference)?'Differenz mit letztem Panelwert: '+setpointNumber.format(state.lastDifference)+' K. ':state.sensorFaultPending?'':'Differenz nicht verfügbar. ';
@@ -1687,18 +1703,23 @@ updateForm.addEventListener('submit',async event=>{
   }finally{button.disabled=false;}
 });
 const sensorStatusMarkup='<span class="sensor-status" data-state="unknown" role="img" aria-label="Sensorstatus unbekannt" title="Sensorstatus unbekannt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path class="sensor-status-mark" d="M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4M12 16h.01"/></svg></span>';
+function sensorIconMarkup(id){
+  if(id===4)return '<svg class="sensor-icon sensor-icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M4.9 4.9l1.4 1.4m11.4 11.4 1.4 1.4m0-14.2-1.4 1.4M6.3 17.7l-1.4 1.4"/></svg>';
+  const level=id===1?12:id===3?17:7;
+  return `<svg class="sensor-icon sensor-icon-tank" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><rect x="5" y="2" width="14" height="20" rx="4"/><path d="M8 7h3M8 12h3M8 17h3"/><circle cx="15" cy="${level}" r="1.5" fill="currentColor" stroke="none"/></svg>`;
+}
 function createPanel(c){
   const section=document.createElement('section');
   section.dataset.sensorId=String(c.id);
   if(!c.hasSettings||c.id!==0){
-    section.innerHTML=`<div class="sensor-heading"><h2></h2>${sensorStatusMarkup}</div><div class="readings"><output class="temperature">—</output></div>`;
+    section.innerHTML=`<div class="sensor-heading"><div class="sensor-title">${sensorIconMarkup(c.id)}<h2></h2></div>${sensorStatusMarkup}</div><div class="readings"><output class="temperature">—</output></div>`;
     section.querySelector('h2').textContent=c.name;
     const sparkline=addTemperatureSparkline(section,c);
     root.appendChild(section);
     return {section,sparkline,form:null,isDirty:()=>false};
   }
   const limits=c.limits;
-  section.innerHTML=`<div class="sensor-heading"><h2></h2>${sensorStatusMarkup}</div>
+  section.innerHTML=`<div class="sensor-heading"><div class="sensor-title">${sensorIconMarkup(c.id)}<h2></h2></div>${sensorStatusMarkup}</div>
     <div class="readings"><output class="temperature">—</output></div>
     <form><div><label for="target-${c.id}">Einlagerung ab (68–72 °C)</label><div class="stepper"><button type="button" data-field="target" data-direction="-1">−</button><input id="target-${c.id}" name="target" type="number" inputmode="numeric" step="1" required><button type="button" data-field="target" data-direction="1">+</button></div></div>
     <input name="hysteresis" type="hidden">
@@ -1748,7 +1769,7 @@ function createPanel(c){
 let sparkData=null,sparkMessage='Verlauf wird geladen …',sparkLoading=false;
 function addTemperatureSparkline(section,c){
   const chart=document.createElement('div');chart.className='sparkline';
-  chart.innerHTML='<svg viewBox="0 0 360 62" preserveAspectRatio="none" role="img"><path></path><g></g></svg><div class="sparkline-info"><span>Letzte 6 Stunden · 1 Min.</span><span class="sparkline-range"></span></div><div class="sparkline-status"></div>';
+  chart.innerHTML=`<svg viewBox="0 0 360 62" preserveAspectRatio="none" role="img"><defs><linearGradient id="spark-gradient-${c.id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="currentColor" stop-opacity=".22"/><stop offset="100%" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs><path class="sparkline-area" fill="url(#spark-gradient-${c.id})"></path><path class="sparkline-line"></path><g></g></svg><div class="sparkline-info"><span>Letzte 6 Stunden · 1 Min.</span><span class="sparkline-range"></span></div><div class="sparkline-status"></div>`;
   section.querySelector('.readings').after(chart);
   drawSparkline(chart,c.id,c.name);
   return chart;
@@ -1768,11 +1789,11 @@ function showTemperature(p,c){
   status.querySelector('.sensor-status-mark').setAttribute('d',state==='ok'?'M8 12l2.5 2.5L16.5 9':state==='error'?'M9 9l6 6M15 9l-6 6':'M9.5 9a2.5 2.5 0 0 1 5 0c0 2-2.5 2-2.5 4M12 16h.01');
 }
 function drawSparkline(chart,id,name){
-  const svg=chart.querySelector('svg'),path=svg.querySelector('path'),dots=svg.querySelector('g');
+  const svg=chart.querySelector('svg'),path=svg.querySelector('.sparkline-line'),area=svg.querySelector('.sparkline-area'),dots=svg.querySelector('g');
   const status=chart.querySelector('.sparkline-status'),range=chart.querySelector('.sparkline-range');
   const points=sparkData&&Array.isArray(sparkData.points)?sparkData.points:[];
   const valid=points.filter(p=>typeof p[id+1]==='number'&&Number.isFinite(p[id+1]));
-  path.setAttribute('d','');dots.replaceChildren();range.textContent='';
+  path.setAttribute('d','');area.setAttribute('d','');dots.replaceChildren();range.textContent='';
   if(!valid.length){
     svg.setAttribute('hidden','');status.textContent=sparkMessage||'Keine gültigen Werte im Zeitraum.';
     svg.setAttribute('aria-label',name+': '+status.textContent);return;
@@ -1783,9 +1804,14 @@ function drawSparkline(chart,id,name){
   const end=points[points.length-1][0],start=end-359*60;
   const x=t=>Math.max(3,Math.min(357,3+(t-start)/(359*60)*354));
   const y=v=>4+(high-v)/(high-low)*54;
-  let d='',active=false;
-  for(const p of points){const v=p[id+1];if(typeof v!=='number'||!Number.isFinite(v)){active=false;continue;}d+=(active?' L':' M')+x(p[0]).toFixed(1)+' '+y(v).toFixed(1);active=true;}
-  path.setAttribute('d',d);
+  let d='',fill='',segment='',count=0,firstX='',lastX='';
+  const closeSegment=()=>{if(count>1)fill+=segment+' L'+lastX+' 62 L'+firstX+' 62 Z';segment='';count=0;};
+  for(const p of points){
+    const v=p[id+1];if(typeof v!=='number'||!Number.isFinite(v)){closeSegment();continue;}
+    const px=x(p[0]).toFixed(1),point=px+' '+y(v).toFixed(1),command=(count?' L':' M')+point;
+    if(!count)firstX=px;lastX=px;count++;d+=command;segment+=command;
+  }
+  closeSegment();path.setAttribute('d',d);area.setAttribute('d',fill);
   for(let i=0;i<points.length;i++){
     const p=points[i],v=p[id+1],prev=i>0&&typeof points[i-1][id+1]==='number',next=i+1<points.length&&typeof points[i+1][id+1]==='number';
     if(typeof v==='number'&&Number.isFinite(v)&&!prev&&!next){const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');dot.setAttribute('cx',x(p[0]));dot.setAttribute('cy',y(v));dot.setAttribute('r','2.5');dots.appendChild(dot);}
@@ -1922,6 +1948,7 @@ async function refresh(){
     updateWifi(data.wifi);
     updateHostname(data.wifi);
     updateRoof(data.roof,data.wifi);
+    if(document.body.classList.contains('info-page'))renderInfoRelays(Array.isArray(data.remoteRelays)?data.remoteRelays:data.remoteRelay?[data.remoteRelay]:null);
     if(remoteRelayRequestRevision===remoteRelayRevision&&!remoteRelayBusy){
       remoteRelayCards=Array.isArray(data.remoteRelays)?data.remoteRelays:[data.remoteRelay];
       updateRemoteRelay(remoteRelayCards[0],data.simulation);updateExtraRelays(remoteRelayCards,data.simulation);
@@ -1960,6 +1987,7 @@ async function refresh(){
     updateRuntime(null,false);
     remoteRelayCards=[];updateRemoteRelay(null,false);updateExtraRelays([],false);updateRelayDiscovery(null);updateRelayProvisioning(null);
     if(document.body.classList.contains('organigram-page'))updateOrganigram(null);
+    if(document.body.classList.contains('info-page'))renderInfoRelays(null);
     if(!solarControlBusy&&solarRequestRevision===solarRevision){updateSolar(null,false);updateSolarDiagram(null,false,null);}
     if(!pumpBusy&&revision===pumpRevision)unknownPump();
     if(!heatingBusy&&heatingRequestRevision===heatingRevision)unknownHeating();
@@ -2061,9 +2089,38 @@ async function loadDeviceInfo(){
     set('wifi-ap-network',ap?[n.apIp,n.apMac].filter(Boolean).join(' · '):'—');set('wifi-clients',ap?String(n.apClients):'—');
     status.className='muted';status.textContent='Verbunden · Aktualisierung alle 5 Sekunden';
   }catch(error){
-    document.querySelectorAll('#info-section dd').forEach(e=>e.textContent='—');
+    document.querySelectorAll('#info-device-grid dd').forEach(e=>e.textContent='—');
     status.className='error';status.textContent='Gerätedaten nicht erreichbar. Neuer Versuch erfolgt automatisch.';
   }finally{infoBusy=false;}
+}
+let infoRelaySignature;
+function renderInfoRelays(cards){
+  const signature=JSON.stringify(cards);
+  if(signature===infoRelaySignature)return;
+  infoRelaySignature=signature;
+  const status=document.getElementById('info-relays-status'),list=document.getElementById('info-relays-list');
+  if(!Array.isArray(cards)){
+    status.textContent='Keine aktuellen Daten zu den Relaiserweiterungen.';list.replaceChildren();return;
+  }
+  const configured=cards.map((card,index)=>({card,index})).filter(item=>item.card&&item.card.configured);
+  status.textContent=configured.length?'':'Keine Relaiserweiterungen eingerichtet.';
+  const entries=configured.map(({card,index})=>{
+    const entry=document.createElement('article'),heading=document.createElement('h4'),details=document.createElement('dl');
+    const number=Number.isInteger(card.id)&&card.id>=0?card.id+1:index+1;
+    heading.textContent='Relaiserweiterung '+number;
+    const add=(label,value)=>{const row=document.createElement('div'),term=document.createElement('dt'),description=document.createElement('dd');term.textContent=label;description.textContent=value;row.append(term,description);details.appendChild(row);};
+    const online=card.ready!==false&&card.online===true;
+    add('Status',card.ready===false?'Nicht verfügbar':online?'Verbunden':'Nicht erreichbar');
+    add('IP-Adresse',typeof card.address==='string'&&card.address?card.address:'—');
+    add('Firmware',online&&typeof card.version==='string'&&card.version?card.version:'Nicht verfügbar');
+    for(let i=0;i<4;i++){
+      const name=Array.isArray(card.labels)&&typeof card.labels[i]==='string'&&card.labels[i]?card.labels[i]:'Relais '+(i+1);
+      const state=online&&Number.isInteger(card.mask)?(card.mask&(1<<i)?'EIN':'AUS'):'unbekannt';
+      add('Relais '+(i+1),name+' · '+state);
+    }
+    entry.append(heading,details);return entry;
+  });
+  list.replaceChildren(...entries);
 }
 if(document.body.classList.contains('history-page')){
   historyNames.forEach((name,i)=>{const label=document.createElement('label'),input=document.createElement('input'),line=document.createElement('i');input.type='checkbox';input.checked=true;input.addEventListener('change',drawHistory);line.setAttribute('aria-hidden','true');label.append(input,line,document.createTextNode(name));historyLegend.appendChild(label);});
