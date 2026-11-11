@@ -47,11 +47,19 @@ for (const id of [0,1,2,3,4]) {
   assert.equal(p.status.dataset.state,'ok', 'Status erholt sich nach Verbindungsausfall');
 }
 const pending = makePanel();
-context.showTemperature(pending,{id:4,valid:false,sensorFaultPending:true,sensorError:'MAX31865',fault:0x10});
-assert.equal(pending.output.textContent,'Messwert vorübergehend nicht verfügbar');
+context.showTemperature(pending,{id:4,valid:false,sensorFaultPending:true,lastValidTemperature:15.2,sensorError:'MAX31865',fault:0x10});
+assert.equal(pending.output.textContent,'15,2 °C');
 assert.equal(pending.status.dataset.state,'unknown');
-assert.equal(pending.status['aria-label'],'Messwert vorübergehend nicht verfügbar');
+assert.equal(pending.status['aria-label'],'Letzter gültiger Messwert');
+assert.match(pending.mark.d,/M9\.5 9a/);
+context.showTemperature(pending,{id:4,valid:false,sensorFaultPending:true,lastValidTemperature:null});
+assert.equal(pending.output.textContent,'—');
+assert.equal(pending.status.dataset.state,'unknown');
+context.showTemperature(pending,{id:4,valid:false,sensorFaultPending:true,lastValidTemperature:0});
+assert.equal(pending.output.textContent,'0,0 °C');
 context.showTemperature(pending,{id:4,valid:false,sensorFaultPending:false,sensorError:'MAX31865',fault:0x10});
 assert.equal(pending.status.dataset.state,'error');
 assert.match(pending.output.textContent,/Sensorfehler.*0x10/);
+context.showTemperature(pending,{id:4,valid:true,temperature:15.5});
+assert.equal(pending.output.textContent,'15,5 °C');assert.equal(pending.status.dataset.state,'ok');
 console.log('PASS: Sensorstatus für alle Kacheln, Fehler und Verbindungsausfall.');

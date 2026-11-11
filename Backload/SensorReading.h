@@ -10,7 +10,7 @@ class SensorFaultDelay {
     else if (!active_) { active_ = true; since_ = now; }
   }
   bool pending(uint32_t now) const {
-    return active_ && uint32_t(now - since_) < DELAY_MS;
+    return active_ && uint32_t(now - since_) <= DELAY_MS;
   }
  private:
   uint32_t since_ = 0;

@@ -31,7 +31,8 @@ int main() {
   assert(delay.pending(100));
   delay.observe(true, 50000);
   assert(delay.pending(60099));
-  assert(!delay.pending(60100));
+  assert(delay.pending(60100));
+  assert(!delay.pending(60101));
   delay.observe(false, 60101);
   assert(!delay.pending(60101));
   delay.observe(true, UINT32_MAX - 30);

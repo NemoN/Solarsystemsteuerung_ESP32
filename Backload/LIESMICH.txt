@@ -1,4 +1,4 @@
-Backload 2.9.5 – automatische und manuelle Pumpensteuerung
+Backload 2.9.6 – automatische und manuelle Pumpensteuerung
 
 Sensoren und Relais
 Fünf MAX31865-Sensoren mit gemeinsamer Software-SPI-Verbindung:
@@ -48,13 +48,14 @@ Einschaltdifferenz ist von
 Anlagen- und Testmodus.
 EIN: Solarpanel − Kombi unten >= gespeicherte Einschaltdifferenz.
 AUS: Solarpanel − Kombi unten <= 1 K, Fehler eines Fühlers oder veraltete
-Messwerte (älter als 10 Sekunden).
-Bei laufender Pumpe werden die Panel-Fehler 0x08, 0x10 und 0x18 mit dem letzten
-gültigen Panelwert höchstens 10 Sekunden ab dessen Messung überbrückt. Die
+Messzyklen (älter als 60 Sekunden); für den Panelfühler gilt die folgende
+begrenzte Überbrückung.
+Bei laufender Pumpe werden Panel-Sensorfehler mit dem letzten gültigen
+Panelwert höchstens 60 Sekunden ab dessen Messung überbrückt. Die
 Stoppdifferenz und ein Fehler am Speicherfühler schalten weiterhin ab; mit
 einem alten Panelwert wird die Pumpe nicht gestartet. Die Weboberfläche zeigt
-einen fehlenden Panelmesswert zunächst ohne Fehlermeldung und meldet einen
-ununterbrochenen Fehler nach 60 Sekunden. API, Log und Status-LED zeigen den
+bei kurzen Ausfällen den letzten gültigen Panelwert und ein graues Fragezeichen;
+ein ununterbrochener Fehler wird nach mehr als 60 Sekunden gemeldet. API, Log und Status-LED zeigen den
 Fehler weiterhin sofort; die Pumpenregelung wird nicht verzögert.
 Zwischen den Grenzen bleibt der vorherige Pumpenzustand erhalten. Im eigenen
 Handbetrieb kann die Solarpumpe ein- und ausgeschaltet werden; Temperaturregelung
@@ -164,8 +165,9 @@ Die SVG-Speicherübersicht zeigt die vier Speicherfühler direkt am jeweiligen
 Speicher. Die Ölbrenner-SVG daneben zeigt grau gesperrt/pausiert und orange
 freigegeben; im Testmodus steht ausdrücklich „simuliert“. Bei fehlenden Daten
 zeigt sie „Status unbekannt“. Sie zeigt keine Flamme oder echten Brennerlauf.
-Bei Sensorfehler oder Verbindungsabbruch werden keine alten Werte
-als aktuelle Messungen angezeigt; der Solarpanelwert steht separat darunter.
+Bei kurzen Ausfällen des Panel-Sensors wird der letzte gültige Wert mit einem
+grauen Fragezeichen gezeigt. Bei längerem Sensorfehler oder Verbindungsabbruch
+werden keine alten Werte als aktuelle Messungen angezeigt.
 Jede Temperaturkarte zeigt den aktuellen Istwert und darunter eine kleine
 Kurve der letzten sechs Stunden. Die Kurven verwenden den Minutenverlauf im
 PSRAM und zeigen Sensorfehler als Lücken. Die Min-/Max-Werte beziehen sich

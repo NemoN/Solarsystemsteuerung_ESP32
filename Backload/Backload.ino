@@ -43,7 +43,7 @@
 #include <time.h>
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
-const char* FIRMWARE_VERSION = "2.9.5";
+const char* FIRMWARE_VERSION = "2.9.6";
 // Der AP wird nur für Einrichtung und Wiederherstellung benötigt.
 constexpr bool AP_RECOVERY_ONLY = true;
 
@@ -156,7 +156,7 @@ TemperatureHistory temperatureHistory;
 unsigned long lastMeasurement = 0;
 uint32_t lastSolarMeasurement = 0;
 bool solarMeasurementReady = false;
-constexpr uint32_t SOLAR_MAX_MEASUREMENT_AGE = 10000;
+constexpr uint32_t SOLAR_MAX_MEASUREMENT_AGE = 60000;
 unsigned long lastHeartbeat = 0;
 bool ledState = LOW;
 StatusLed statusLed;
@@ -322,8 +322,7 @@ void serviceSolarPump() {
   if (paused) solarControl.setManual(false);
   const bool enabled = !paused && (solarControl.manual() || (storageReady && solarSettingsValid && solarSensorsFresh()));
   const bool hold = !solarControl.manual() && !panel.valid &&
-    solarPanelGrace.canHold(millis(), wasOn, panel.fault,
-      panel.sensorError && strcmp(panel.sensorError, "MAX31865 meldet einen Sensorfehler") == 0);
+    solarPanelGrace.canHold(millis(), wasOn);
   const bool on = solarControl.update(enabled, panel.valid || hold,
     hold ? solarPanelGrace.temperature() : panel.currentTemp, tank.valid, tank.currentTemp, solarStartDifference);
   solarGraceActive = hold && on;
@@ -456,7 +455,7 @@ void measureTemperatures() {
     c.valid = reading.valid();
     if (i == 4) solarPanelFaultDisplay.observe(!c.valid, millis());
     if (i == 4 && c.valid) solarPanelGrace.record(c.currentTemp, millis());
-    // Fehler sofort auswerten; nur bestimmte Panel-Fehler dürfen kurz überbrückt werden.
+    // Fehler sofort auswerten; Panel-Ausfälle dürfen bei laufender Pumpe begrenzt überbrückt werden.
     if (!c.valid && (i == 3 || i == 4)) serviceSolarPump();
 
     // Nur die Ausgabe filtern: Messung und Relaisregelung laufen in jeder Stufe.
@@ -960,6 +959,8 @@ String solarStatusJson() {
     ",\"sensorsValid\":" + String(sensorsValid ? "true" : "false") +
     ",\"sensorGrace\":" + String(solarGraceActive ? "true" : "false") +
     ",\"sensorFaultPending\":" + String(sensorFaultPending ? "true" : "false") +
+    ",\"lastDifference\":" + (sensorFaultPending && solarPanelGrace.hasReading()
+      ? jsonNumber(solarPanelGrace.temperature() - tank.currentTemp) : String("null")) +
     ",\"paused\":" + String((modeTransition || otaActive || otaVerificationPending) ? "true" : "false") +
     ",\"differenceStart\":" + (solarSettingsValid ? jsonNumber(solarStartDifference) : String("null")) +
     ",\"differenceStop\":" + jsonNumber(SolarControl::STOP) +
@@ -1281,6 +1282,8 @@ void sendStatus() {
       ",\"rawRtd\":" + String(c.rawRtd) +
       ",\"sensorError\":" + (c.sensorError ? jsonString(c.sensorError) : String("null")) +
       ",\"sensorFaultPending\":" + String(i == 4 && !c.valid && solarPanelFaultDisplay.pending(millis()) ? "true" : "false") +
+      ",\"lastValidTemperature\":" + (i == 4 && !c.valid && solarPanelFaultDisplay.pending(millis()) && solarPanelGrace.hasReading()
+        ? jsonNumber(solarPanelGrace.temperature()) : String("null")) +
       ",\"hasRelay\":false,\"hasSettings\":" + String(c.settingsSlot >= 0 ? "true" : "false");
     if (c.settingsSlot >= 0) {
       json += ",\"target\":" + jsonNumber(c.targetTemp) + ",\"hysteresis\":" + jsonNumber(c.hysteresis) +

@@ -5,19 +5,18 @@
 // Nur die zuletzt gültige Panelmessung merken, niemals einen Fehler als Messung.
 class SolarPanelGrace {
  public:
-  static constexpr uint32_t MAX_AGE_MS = 10000;
+  static constexpr uint32_t MAX_AGE_MS = 60000;
   void record(float temperature, uint32_t now) {
     if (!isfinite(temperature)) return;
     temperature_ = temperature;
     lastValid_ = now;
     ready_ = true;
   }
-  bool canHold(uint32_t now, bool pumpOn, uint8_t fault, bool sensorFault) const {
-    const uint8_t tolerated = 0x18; // MAX31865 RTDIN-/REFIN- Prüfzyklus
-    return ready_ && pumpOn && sensorFault && fault != 0 &&
-      (fault & ~tolerated) == 0 && uint32_t(now - lastValid_) <= MAX_AGE_MS;
+  bool canHold(uint32_t now, bool pumpOn) const {
+    return ready_ && pumpOn && uint32_t(now - lastValid_) <= MAX_AGE_MS;
   }
   float temperature() const { return temperature_; }
+  bool hasReading() const { return ready_; }
  private:
   float temperature_ = 0;
   uint32_t lastValid_ = 0;

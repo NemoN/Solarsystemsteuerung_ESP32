@@ -8,6 +8,7 @@ root = Path(__file__).resolve().parents[1]
 sketch = (root / 'Backload/Backload.ino').read_text()
 proxy = (root / 'Backload/WebSerialMonitor.cpp').read_text()
 assert re.search(r'\bSOLAR_PUMP_PIN\s*=\s*18\s*;', sketch)
+assert re.search(r'\bSOLAR_MAX_MEASUREMENT_AGE\s*=\s*60000\s*;', sketch)
 assert 'server.on("/api/solar/control", HTTP_POST, controlSolarPump)' in sketch
 assert 'dashboard.server().on("/api/solar/control", HTTP_POST, proxyRequest)' in proxy
 def function(signature):
@@ -32,7 +33,7 @@ bool runtimeSolarOn=false;
 void trackPumpRuntime(bool = false) {}
 float solarStartDifference=SolarControl::DEFAULT_START;
 uint32_t now=0,lastSolarMeasurement=0;bool solarMeasurementReady=true;
-constexpr uint32_t SOLAR_MAX_MEASUREMENT_AGE=10000;
+constexpr uint32_t SOLAR_MAX_MEASUREMENT_AGE=60000;
 uint32_t millis(){return now;}
 SolarControl solarControl;
 SolarPanelGrace solarPanelGrace;
@@ -80,15 +81,23 @@ int main(){
   controllers[3].currentTemp=44;serviceSolarPump();assert(!solarControl.on()&&!solarGraceActive&&pin==HIGH);
   controllers[3].currentTemp=40;serviceSolarPump();assert(!solarControl.on()); // Kein Neustart mit altem Wert
   controllers[4].valid=true;controllers[4].currentTemp=45;serviceSolarPump();assert(solarControl.on());
-  controllers[4].valid=false;controllers[4].fault=0x18;now=15000;lastSolarMeasurement=now;
+  controllers[4].valid=false;controllers[4].fault=0x18;now=64999;lastSolarMeasurement=now;
   serviceSolarPump();assert(solarControl.on()&&solarGraceActive);
-  now=15001;serviceSolarPump();assert(!solarControl.on()&&!solarGraceActive&&pin==HIGH);
+  now=65000;lastSolarMeasurement=now;serviceSolarPump();assert(solarControl.on()&&solarGraceActive);
+  now=65001;lastSolarMeasurement=now;serviceSolarPump();assert(!solarControl.on()&&!solarGraceActive&&pin==HIGH);
+  serviceSolarPump();assert(!solarControl.on()); // Nach Ablauf kein Start mit dem alten Panelwert.
+  now=0;lastSolarMeasurement=0;controllers[4].valid=true;controllers[4].currentTemp=45;
+  solarPanelGrace.record(45,now);serviceSolarPump();assert(solarControl.on());
+  controllers[4].valid=false;serviceSolarPump();assert(solarGraceActive);
+  now=59999;serviceSolarPump();assert(solarControl.on()&&solarGraceActive);
+  now=60000;serviceSolarPump();assert(solarControl.on()&&solarGraceActive);
+  now=60001;serviceSolarPump();assert(!solarControl.on()&&!solarGraceActive); // Keine frischen Messzyklen.
   controllers[4].valid=true;controllers[4].currentTemp=45;now=0;lastSolarMeasurement=0;
   solarPanelGrace.record(45,now);serviceSolarPump();assert(solarControl.on());
-  controllers[4].valid=false;controllers[4].fault=0x14;serviceSolarPump();assert(!solarControl.on());
+  controllers[4].valid=false;controllers[4].fault=0x14;serviceSolarPump();assert(solarControl.on()&&solarGraceActive);
   controllers[4].valid=true;serviceSolarPump();assert(solarControl.on());
   controllers[4].valid=false;controllers[4].fault=0x08;controllers[4].sensorError="MAX31865-Konfiguration nicht lesbar";
-  serviceSolarPump();assert(!solarControl.on());
+  serviceSolarPump();assert(solarControl.on()&&solarGraceActive);
   controllers[4].valid=true;controllers[4].fault=0;controllers[4].sensorError=nullptr;
   serviceSolarPump();assert(solarControl.on());
   controllers[4].currentTemp=42;serviceSolarPump();assert(solarControl.on() && pin==LOW);
@@ -100,8 +109,9 @@ int main(){
   otaVerificationPending=false;modeTransition=true;serviceSolarPump();assert(!solarControl.on() && pin==HIGH);
   modeTransition=false;SIMULATION_MODE=true;pin=HIGH;int before=writes;serviceSolarPump();
   assert(solarControl.on() && pin==HIGH && writes==before && !runtimeSolarOn);
-  controllers[4].valid=false;serviceSolarPump();assert(!solarControl.on() && pin==HIGH && writes==before);
-  controllers[4].valid=true;
+  controllers[4].valid=false;serviceSolarPump();assert(solarControl.on() && solarGraceActive && pin==HIGH && writes==before);
+  controllers[3].valid=false;serviceSolarPump();assert(!solarControl.on() && !solarGraceActive && pin==HIGH && writes==before);
+  controllers[3].valid=true;controllers[4].valid=true;
   server.args_["start"]="7.5";saveSolarSettings();assert(server.status==200 && solarStartDifference==7.5f);
   solarStartDifference=5;loadSolarSettings();assert(solarSettingsValid && solarStartDifference==7.5f);
   preferences.writeOk=false;server.args_["start"]="6";saveSolarSettings();assert(server.status==500 && solarStartDifference==7.5f);
@@ -113,10 +123,13 @@ int main(){
   preferences.data.resize(1);loadSolarSettings();assert(!solarSettingsValid);
   server.args_["start"]="3";saveSolarSettings();assert(server.status==200 && solarSettingsValid && solarControl.on() && pin==LOW);
   storageReady=false;serviceSolarPump();assert(!solarControl.on() && pin==HIGH);
-  storageReady=true;now=10001;serviceSolarPump();assert(!solarControl.on() && pin==HIGH);
+  storageReady=true;now=59999;serviceSolarPump();assert(solarControl.on() && pin==LOW);
+  now=60000;serviceSolarPump();assert(solarControl.on() && pin==LOW);
+  now=60001;serviceSolarPump();assert(!solarControl.on() && pin==HIGH);
   lastSolarMeasurement=now;serviceSolarPump();assert(solarControl.on() && pin==LOW);
   lastSolarMeasurement=UINT32_MAX-5;now=5;assert(solarSensorsFresh());
-  now=10005;serviceSolarPump();assert(!solarControl.on() && pin==HIGH);
+  now=59994;serviceSolarPump();assert(solarControl.on() && pin==LOW);
+  now=59995;serviceSolarPump();assert(!solarControl.on() && pin==HIGH);
   server.args_={{"action","power"},{"value","1"}};controlSolarPump();assert(server.status==409&&!solarControl.on());
   server.args_={{"action","manual"},{"value","1"}};controlSolarPump();assert(server.status==200&&solarControl.manual()&&!solarControl.on()&&pin==HIGH);
   server.args_={{"action","power"},{"value","1"}};controlSolarPump();assert(server.status==200&&solarControl.on()&&pin==LOW&&runtimeSolarOn);
