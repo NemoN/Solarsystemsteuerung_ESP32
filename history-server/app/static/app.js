@@ -276,16 +276,17 @@ loadStatus();
 loadRuntime();
 setInterval(() => {loadStatus(); loadHistory(); loadRuntime();}, 60000);
 
-let updatePolling, checkingUpdates = false, updateBlocked = false, observedUpdate = false;
+let updatePolling, checkingUpdates = false, updateAvailable = false, observedUpdate = false, checkedUpdates = false;
 async function loadUpdateStatus() {
   try {
     const data = await json("/api/update", AbortSignal.timeout(10000));
     const busy = data.state === "running" || data.state === "restarting";
     if (busy) observedUpdate = true;
-    $("update-status").textContent = data.state === "complete" && !observedUpdate
-      ? "Bereit für ein Update." : data.message;
+    const waitingForCheck = !observedUpdate && (data.state === "complete" || data.state === "idle");
+    $("update-status").textContent = waitingForCheck
+      ? (checkedUpdates ? "" : "Bitte auf Updates prüfen.") : data.message;
     $("update-status").classList.toggle("error", data.state === "error");
-    $("update-button").disabled = !data.enabled || busy || checkingUpdates || updateBlocked;
+    $("update-button").disabled = !data.enabled || busy || checkingUpdates || !updateAvailable;
     $("check-update").disabled = !data.enabled || busy || checkingUpdates;
     if (data.state === "running" || data.state === "restarting") {
       clearTimeout(updatePolling);
@@ -293,10 +294,14 @@ async function loadUpdateStatus() {
     }
   } catch {
     $("update-status").textContent = "Server vorübergehend nicht erreichbar. Erneuter Verbindungsversuch …";
+    $("update-button").disabled = true;
+    $("check-update").disabled = true;
     clearTimeout(updatePolling); updatePolling = setTimeout(loadUpdateStatus, 3000);
   }
 }
 $("update-button").addEventListener("click", async () => {
+  updateAvailable = false;
+  checkedUpdates = false;
   $("update-button").disabled = true;
   $("check-update").disabled = true;
   $("update-changelog").hidden = true;
@@ -314,6 +319,10 @@ $("update-button").addEventListener("click", async () => {
 });
 $("check-update").addEventListener("click", async () => {
   checkingUpdates = true;
+  updateAvailable = false;
+  checkedUpdates = true;
+  observedUpdate = false;
+  $("update-status").textContent = "";
   $("check-update").disabled = true;
   $("update-button").disabled = true;
   $("update-changelog").hidden = true;
@@ -323,7 +332,7 @@ $("check-update").addEventListener("click", async () => {
     const response = await fetch("/api/update/check", {method: "POST", headers: {"X-Requested-With": "HistoryUI"}, signal: AbortSignal.timeout(45000)});
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "Update-Prüfung fehlgeschlagen.");
-    updateBlocked = Boolean(data.ahead || data.dirty);
+    updateAvailable = data.can_update === true;
     const warnings = [];
     if (data.ahead) warnings.push("Der lokale Branch enthält eigene Commits.");
     if (data.dirty) warnings.push("Der Checkout enthält lokale Änderungen.");
@@ -349,7 +358,7 @@ $("check-update").addEventListener("click", async () => {
     $("check-status").textContent = error.name === "TimeoutError" ? "Die Update-Prüfung dauert zu lange. Bitte erneut versuchen." : error.message;
   } finally {
     checkingUpdates = false;
-    loadUpdateStatus();
+    await loadUpdateStatus();
   }
 });
 loadUpdateStatus();
