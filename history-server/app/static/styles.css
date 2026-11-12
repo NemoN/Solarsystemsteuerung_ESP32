@@ -128,10 +128,13 @@ footer p + p { margin-top: 4px; }
 /* Farbwelt und seitliche Navigation der aktuellen ESP-Oberfläche. */
 :root { color-scheme: dark; --background: #06131e; --surface: #10212c; --ink: #f2f7fa; --muted: #c0cfd6; --teal: #53dec6; --teal-hover: #00b5a5; --border: #2d414b; background: var(--background); }
 body { padding-right: 16px; }
-main { max-width: 1200px; padding-left: 194px; }
+@media (min-width: 761px) { html { overflow-y: scroll; scrollbar-gutter: stable; } }
+main { max-width: 1200px; padding: 16px 0 24px 194px; }
+.page-header h1 { font-size: 1.9rem; line-height: 1.15; }
 .page-nav { position: fixed; z-index: 5; top: 0; bottom: 0; left: 0; width: calc(180px + max(0px, (100vw - 1232px) / 2)); display: flex; flex-direction: column; align-items: stretch; gap: 3px; padding: 16px 10px 16px max(10px, calc((100vw - 1232px) / 2 + 10px)); margin: 0; border: 0; background: linear-gradient(90deg, #020a12, #133248); }
 .nav-brand { color: var(--ink); margin: 0 0 18px; letter-spacing: .08em; }
 .nav-brand svg { color: #00d8c5; }
+.nav-links { display: flex; flex-direction: column; gap: 3px; }
 .page-nav a { color: var(--ink); min-height: 40px; padding: 8px; gap: 8px; font-size: .8rem; font-weight: 650; }
 .page-nav .nav-icon { width: 16px; height: 16px; flex: none; }
 .page-nav a:hover, button:hover, .secondary:hover { background: #20343f; color: var(--ink); border-color: #49606a; }
@@ -149,9 +152,15 @@ input[type=date] { color: var(--ink); background: #0a1924; }
 :focus-visible { outline-color: #53dec6; }
 @media (max-width: 760px) {
   body { padding-right: 0; }
-  main { padding: 20px 18px 24px; }
-  .page-nav { position: static; width: auto; flex-direction: row; flex-wrap: wrap; gap: 0; padding: 10px; margin: -20px -18px 24px; }
-  .nav-brand { width: 100%; margin-bottom: 4px; }
+  main { padding: 0 14px 24px; }
+  .page-nav { position: sticky; top: 0; width: auto; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 10px; padding: 16px 0; margin: 0 0 20px; }
+  .nav-brand { width: auto; margin: 0; }
+  #nav-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 10px; background: #0b1b26; color: var(--ink); border: 1px solid #49606a; }
+  #nav-toggle:hover { background: #20343f; }
+  .nav-links { flex: 1 1 100%; padding: 8px; border: 1px solid var(--border); border-radius: 12px; background: #04111c; max-height: calc(100dvh - 120px); overflow-y: auto; overscroll-behavior: contain; }
+  .page-nav a { width: 100%; }
+  .page-header h1 { font-size: 1.6rem; }
+  .history h2, .runtime-history h2, .update-section h2 { scroll-margin-top: 90px; }
 }
 
 /* Logo und Wortmarke entsprechen der Navigation der ESP-Oberfläche. */

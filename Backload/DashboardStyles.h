@@ -29,7 +29,7 @@ body.settings-page .backload>*:not(#settings-intro):not(#appearance-section):not
 @media(max-width:560px){.backload #password-form{grid-template-columns:1fr}}
 .backload #history-intro,.backload #history-section,.backload #pump-runtime-section{display:none}body.history-page .backload #history-intro,body.history-page .backload #history-section,body.history-page .backload #pump-runtime-section{display:block}body.history-page .backload>*:not(#history-intro):not(#history-section):not(#pump-runtime-section):not(#test-message):not(.page-nav):not(script){display:none}
 .backload #info-intro,.backload #info-section{display:none}body.info-page .backload #info-intro,body.info-page .backload #info-section{display:block}body.info-page .backload>*:not(#info-intro):not(#info-section):not(#test-message):not(.page-nav):not(script){display:none}
-.backload .subpage-intro{padding-top:8px;margin-bottom:16px}.backload .subpage-intro h1{margin:0}
+.backload .subpage-intro{padding-top:0;margin-bottom:16px}.backload .subpage-intro h1{margin:0}
 .backload #organigram-section{display:none;background:transparent;border:0;padding:0}body.organigram-page .backload #organigram-section{display:block}body.organigram-page .backload>*:not(#organigram-section):not(#test-message):not(.page-nav):not(script){display:none}
 .backload .org-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:0 0 28px}.backload .org-header h1{margin:0}.backload .org-header p{margin:6px 0 0}.backload .org-header .badge{white-space:normal}
 .backload .org-flow{display:grid;gap:16px}.backload .org-icon{display:block;width:22px;height:22px;flex:none;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}.backload .org-section-title,.backload .org-branch-head{display:flex;align-items:center;gap:12px}.backload .org-section-title h2,.backload .org-branch h2{font-size:1.05rem;margin:0}.backload .org-section-title .org-icon{color:var(--acc)}
@@ -114,7 +114,8 @@ html.light{--bg0:#edf4f6;--bg1:#edf4f6;--bg2:#f7fbfc;--bg3:#dcebed;--field:#fff;
 body,html.flat body{padding:0 16px 40px 0;background:var(--bg0);background-image:none}
 html.light body{background-image:none}
 ::selection{background:#0b9f94;color:#fff}
-.grid>.backload{max-width:1200px;padding-left:194px}
+@media(min-width:761px){html{overflow-y:scroll;scrollbar-gutter:stable}}
+.grid>.backload{max-width:1200px;padding:16px 0 0 194px}
 .backload{font-size:15px;line-height:1.45}
 .backload .page-nav{position:fixed;top:0;bottom:0;left:0;z-index:20;width:calc(180px + max(0px,(100vw - 1232px)/2));background:linear-gradient(90deg,var(--nav-gradient-start),var(--nav-gradient-end));border-right:0}
 .backload .nav-sticky{position:static;height:100vh;height:100dvh;max-height:100vh;max-height:100dvh;margin-left:max(0px,calc((100vw - 1232px)/2));padding:16px 10px;gap:18px}
@@ -129,8 +130,8 @@ html.light .backload .nav-brand svg,html.light .backload .nav-wordmark span:last
 .backload .page-nav a:hover{background:var(--glass2)}
 .backload .page-nav a[aria-current="page"]{background:#086f66;color:#fff}
 html.light .backload .page-nav a[aria-current="page"]{background:#c7eae3;color:#07574f}
-.backload .dashboard-header{margin:0 0 12px;padding-top:8px;gap:12px}
-.backload .dashboard-header h1{font-size:1.9rem;line-height:1.15}
+.backload .dashboard-header{margin:0 0 12px;padding-top:0;gap:12px;align-items:flex-start}
+.backload .dashboard-header h1,.backload .subpage-intro h1,.backload #settings-intro h1,.backload .org-header h1{font-size:1.9rem;line-height:1.15;margin:0}
 .backload .header-status{background:var(--glass);font-size:.78rem;padding:8px 12px}
 .backload .dashboard-title #firmware-version{font-size:.78rem}
 .backload section{background:var(--glass);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:10px}
@@ -195,7 +196,7 @@ html.light .backload .sparkline svg,html.light .backload .sensor-icon-tank{color
 .backload .remote-relay-switches .switch-track{width:38px}
 .backload .remote-relay-switches .relay-switch[aria-checked=true] .switch-track::after{transform:translateX(14px)}
 @media(min-width:901px){.backload #sensor-grid #controllers>section,.backload #sensor-grid #controllers>section[data-sensor-id="4"]{grid-column:span 4}.backload #sensor-grid #controllers>section[data-sensor-id="0"],.backload #sensor-grid #controllers>section[data-sensor-id="2"]{grid-column:span 6}.backload #sensor-grid #roof-section{grid-column:span 4}}
-@media(max-width:760px){body,html.flat body{padding:0 14px 40px}.grid>.backload{padding-left:0}.backload .page-nav{position:sticky;top:0;bottom:auto;left:auto;width:auto;background:linear-gradient(90deg,var(--nav-gradient-start),var(--nav-gradient-end));border-right:0}.backload .nav-sticky{height:auto;margin-left:0;padding:8px 0;gap:10px}.backload .nav-brand{flex-direction:row;align-items:center;gap:8px;padding:0;font-size:.9rem}.backload .nav-brand svg{width:28px;height:28px}.backload .nav-links{background:var(--nav-surface)}.backload .dashboard-header{padding-top:0}.backload .dashboard-header h1{font-size:1.6rem}.backload .storage-overview{grid-template-columns:minmax(0,1fr);gap:24px}.backload .pump-controls{gap:12px}}
+@media(max-width:760px){body,html.flat body{padding:0 14px 40px}.grid>.backload{padding:0}.backload .page-nav{position:sticky;top:0;bottom:auto;left:auto;width:auto;background:linear-gradient(90deg,var(--nav-gradient-start),var(--nav-gradient-end));border-right:0}.backload .nav-sticky{height:auto;margin-left:0;padding:8px 0;gap:10px}.backload .nav-brand{flex-direction:row;align-items:center;gap:8px;padding:0;font-size:.9rem}.backload .nav-brand svg{width:28px;height:28px}.backload .nav-links{background:var(--nav-surface)}.backload .dashboard-header{padding-top:0}.backload .dashboard-header h1,.backload .subpage-intro h1,.backload #settings-intro h1,.backload .org-header h1{font-size:1.6rem}.backload .storage-overview{grid-template-columns:minmax(0,1fr);gap:24px}.backload .pump-controls{gap:12px}}
 /* Farbverlauf als transparente Schicht über den zustandsabhängigen Buttonfarben. */
 .backload button:not(.password-visibility){background-image:linear-gradient(180deg,rgba(255,255,255,.03),rgba(0,0,0,.09))!important}
 @media(max-width:560px){.backload section,.backload #sensor-grid #controllers>section{padding:15px}.backload .header-status{margin-left:0;text-align:left}.backload .connection-status,.backload .wifi-signal-status{justify-content:flex-start}.backload .pump-controls .relay-switch{width:100%;min-width:0}.backload .dashboard-header{align-items:flex-start}.backload .stepper{grid-template-columns:42px minmax(0,1fr) 42px}}

@@ -1,6 +1,37 @@
 "use strict";
 
 const $ = (id) => document.getElementById(id);
+const navToggle = $("nav-toggle"), navLinks = $("nav-links");
+const compactNav = window.matchMedia("(max-width: 760px)");
+function syncNavigation() {
+  navToggle.hidden = !compactNav.matches;
+  navLinks.hidden = compactNav.matches;
+  navToggle.setAttribute("aria-expanded", "false");
+}
+navToggle.addEventListener("click", () => {
+  const expanded = navToggle.getAttribute("aria-expanded") === "true";
+  navLinks.hidden = expanded;
+  navToggle.setAttribute("aria-expanded", String(!expanded));
+});
+navLinks.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && compactNav.matches && !navLinks.hidden) {
+    navLinks.hidden = true; navToggle.setAttribute("aria-expanded", "false"); navToggle.focus();
+  }
+});
+navToggle.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && !navLinks.hidden) {
+    navLinks.hidden = true; navToggle.setAttribute("aria-expanded", "false"); navToggle.focus();
+  }
+});
+navLinks.addEventListener("click", (event) => {
+  if (compactNav.matches && event.target.closest("a")) {
+    navLinks.hidden = true; navToggle.setAttribute("aria-expanded", "false");
+  }
+});
+if (compactNav.addEventListener) compactNav.addEventListener("change", syncNavigation);
+else compactNav.addListener(syncNavigation);
+syncNavigation();
+
 const zone = "Europe/Berlin";
 const fullDate = new Intl.DateTimeFormat("de-DE", {timeZone: zone, dateStyle: "short", timeStyle: "short"});
 const tooltipDate = new Intl.DateTimeFormat("de-DE", {timeZone: zone, day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit", timeZoneName: "short"});
