@@ -118,7 +118,7 @@ Bis einschließlich `650px` erhält die Seite `24px 20px` Innenabstand. Der Prod
 
 ## Elevation & Depth
 
-Die Oberfläche verwendet keine Schatten und keine Verläufe. Weiße Diagramm- und Eingabeflächen, feine Ränder und horizontale Trennlinien erzeugen die Gliederung. Lade-, Leer- und Fehlertexte liegen auf einer deckend weißen Fläche innerhalb des Diagrammrahmens.
+Die Oberfläche verwendet keine Schatten. Schaltflächen erhalten wie auf dem ESP einen dezenten transparenten Farbverlauf über ihrer jeweiligen Zustandsfarbe; Textknöpfe bleiben transparent. Diagramm- und Eingabeflächen, feine Ränder und horizontale Trennlinien erzeugen die Gliederung. Lade-, Leer- und Fehlertexte liegen auf einer deckenden Fläche innerhalb des Diagrammrahmens.
 
 ## Shapes
 

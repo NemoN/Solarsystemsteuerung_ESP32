@@ -168,6 +168,10 @@ input[type=date] { color: var(--ink); background: #0a1924; }
 .nav-wordmark { display: flex; flex-direction: column; gap: 3px; line-height: 1; }
 .nav-wordmark span:last-child { color: #00d8c5; }
 .nav-brand-sun { stroke: #f6bd35; }
+/* Wie auf dem ESP: dezenter Verlauf über den jeweiligen Zustandsfarben. */
+button:not(.text-button), .button {
+  background-image: linear-gradient(180deg, rgba(255,255,255,.03), rgba(0,0,0,.09)) !important;
+}
 @media (max-width: 760px) {
   .nav-brand { gap: 8px; padding: 0; font-size: .9rem; }
   .nav-brand svg { width: 28px; height: 28px; }
