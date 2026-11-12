@@ -276,13 +276,15 @@ loadStatus();
 loadRuntime();
 setInterval(() => {loadStatus(); loadHistory(); loadRuntime();}, 60000);
 
-let updatePolling, checkingUpdates = false, updateBlocked = false;
+let updatePolling, checkingUpdates = false, updateBlocked = false, observedUpdate = false;
 async function loadUpdateStatus() {
   try {
     const data = await json("/api/update", AbortSignal.timeout(10000));
-    $("update-status").textContent = data.message;
-    $("update-status").classList.toggle("error", data.state === "error");
     const busy = data.state === "running" || data.state === "restarting";
+    if (busy) observedUpdate = true;
+    $("update-status").textContent = data.state === "complete" && !observedUpdate
+      ? "Bereit für ein Update." : data.message;
+    $("update-status").classList.toggle("error", data.state === "error");
     $("update-button").disabled = !data.enabled || busy || checkingUpdates || updateBlocked;
     $("check-update").disabled = !data.enabled || busy || checkingUpdates;
     if (data.state === "running" || data.state === "restarting") {
@@ -303,6 +305,7 @@ $("update-button").addEventListener("click", async () => {
   try {
     const response = await fetch("/api/update", {method: "POST", headers: {"X-Requested-With": "HistoryUI"}});
     if (!response.ok) { const body = await response.json(); throw new Error(body.detail || "Update konnte nicht gestartet werden."); }
+    observedUpdate = true;
     updatePolling = setTimeout(loadUpdateStatus, 1500);
   } catch (error) {
     $("update-status").textContent = error.message;

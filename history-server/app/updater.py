@@ -70,8 +70,12 @@ def run(database_path):
             if not branch:
                 raise RuntimeError("Kein Git-Branch ausgecheckt.")
             command(["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"])
+            previous_revision = command(["git", "rev-parse", "HEAD"])
             write_status(path, "running", "Änderungen werden geladen …")
             command(["git", "pull", "--ff-only", "--no-rebase"])
+            if command(["git", "rev-parse", "HEAD"]) == previous_revision:
+                write_status(path, "idle", "Der Server ist bereits aktuell.")
+                return
             write_status(path, "running", "Python-Abhängigkeiten werden installiert …")
             command([sys.executable, "-m", "pip", "install", "-r", str(SERVER / "requirements.txt")])
             # Der Status wird vor dem Neustart geschrieben, da systemd den Prozess beenden kann.

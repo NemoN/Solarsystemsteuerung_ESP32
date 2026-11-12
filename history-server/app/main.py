@@ -128,11 +128,14 @@ def create_app(settings=None, *, start_collector=True, client=None, clock=time.t
         if process is not None and process.poll() is None:
             raise HTTPException(409, "Ein Update läuft bereits.")
         try:
+            write_status(status_path(database.path), "running", "Update wird gestartet …")
             app.state.update_process = subprocess.Popen(
                 [sys.executable, "-m", "app.updater", str(database.path)],
                 cwd=STATIC.parent.parent, stdin=subprocess.DEVNULL,
                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
         except OSError as exc:
+            with suppress(OSError):
+                write_status(status_path(database.path), "error", "Updateprozess konnte nicht gestartet werden.")
             raise HTTPException(500, "Updateprozess konnte nicht gestartet werden.") from exc
         return {"state": "running"}
 

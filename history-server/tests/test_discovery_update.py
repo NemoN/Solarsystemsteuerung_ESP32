@@ -60,6 +60,7 @@ def test_update_disabled_origin_check_and_restart_status(tmp_path, monkeypatch):
         with patch("app.main.subprocess.Popen") as popen:
             assert client.post("/api/update", headers={"origin": "http://testserver", "x-requested-with": "HistoryUI"}).status_code == 202
             assert popen.call_count == 1
+            assert client.get("/api/update").json()["state"] == "running"
     write_status(status_path(settings.database_path), "restarting", "Neustart")
     with TestClient(create_app(settings, start_collector=False)) as client:
         assert client.get("/api/update").json()["state"] == "complete"
@@ -67,9 +68,12 @@ def test_update_disabled_origin_check_and_restart_status(tmp_path, monkeypatch):
 
 def test_update_sequence_and_failure_are_reported(tmp_path, monkeypatch):
     calls = []
+    revisions = iter(["before", "after"])
     def command(args, **kwargs):
         calls.append(args)
-        output = "main" if "symbolic-ref" in args else "origin/main" if "rev-parse" in args else ""
+        output = ("main" if "symbolic-ref" in args else
+                  next(revisions) if args == ["git", "rev-parse", "HEAD"] else
+                  "origin/main" if "rev-parse" in args else "")
         return subprocess.CompletedProcess(args, 0, stdout=output)
     monkeypatch.setattr(updater.subprocess, "run", command)
     database = tmp_path / "archive.sqlite3"
@@ -86,3 +90,19 @@ def test_update_sequence_and_failure_are_reported(tmp_path, monkeypatch):
     result = json.loads(status_path(database).read_text())
     assert result["state"] == "error" and "lokale Änderungen" in result["message"]
     assert len(calls) == 1
+
+
+def test_update_without_new_revision_does_not_claim_installation(tmp_path, monkeypatch):
+    calls = []
+    def command(args, **kwargs):
+        calls.append(args)
+        output = ("main" if "symbolic-ref" in args else
+                  "same-revision" if args == ["git", "rev-parse", "HEAD"] else
+                  "origin/main" if "rev-parse" in args else "")
+        return subprocess.CompletedProcess(args, 0, stdout=output)
+    monkeypatch.setattr(updater.subprocess, "run", command)
+    database = tmp_path / "archive.sqlite3"
+    updater.run(database)
+    result = json.loads(status_path(database).read_text())
+    assert result == {"state": "idle", "message": "Der Server ist bereits aktuell."}
+    assert not any("pip" in args or "systemctl" in args for args in calls)
