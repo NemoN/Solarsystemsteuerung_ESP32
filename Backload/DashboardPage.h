@@ -11,7 +11,7 @@ extern const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 *{box-sizing:border-box}body{margin:0}main{max-width:860px;margin:auto;padding:36px 22px}
 h1{font-size:clamp(1.7rem,5vw,2.4rem);margin:0 0 12px}h2{font-size:1.25rem;margin:0}
 .dashboard-header{display:flex;align-items:center;justify-content:space-between;gap:18px 28px;flex-wrap:wrap}.header-status{margin-left:auto;text-align:right}
-.page-nav a{display:inline-flex;align-items:center;gap:7px}.nav-icon{width:18px;height:18px;flex:none}body:not(.organigram-page) #organigram-section{display:none}body.organigram-page main>:not(#organigram-section):not(.page-nav):not(script):not(#test-message){display:none}
+.page-nav a{display:inline-flex;align-items:center;gap:7px}.nav-icon{width:18px;height:18px;flex:none}body:not(.organigram-page) #organigram-section{display:none}body.organigram-page main>:not(#organigram-section):not(.page-nav):not(.site-footer):not(script):not(#test-message){display:none}
 .nav-brand{display:flex;align-items:center;gap:8px}.nav-brand svg{width:40px;height:40px}.nav-wordmark{display:flex;flex-direction:column;line-height:1}.sensor-title{display:flex;align-items:flex-start;gap:10px;min-width:0}.sensor-icon{width:22px;height:22px;flex:none;color:#00877b}.sensor-icon-sun{color:#936000}.section-icon{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;vertical-align:middle;margin-right:10px}.tank-water-surface{fill:#a2dbee;stroke:#0087ad;stroke-width:1.8}
 p{line-height:1.6}header{margin-bottom:30px}.muted{color:#4e6268}
 section{border-top:1px solid #b9c8c9;padding:26px 0} .heading,.readings{display:flex;gap:18px;justify-content:space-between;align-items:center;flex-wrap:wrap}
@@ -44,7 +44,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 #heating-switch[data-state="off"],#heating-switch[data-state="off"]:hover{background:#fff0b5;color:#5c4100;border-color:#c89c28}#heating-switch[data-state="off"] .switch-track{background:#805b00}.badge.summer-active{background:#fff0b5;color:#5c4100}
 .storage-overview{position:relative}.storage-overview>.burner-diagram,.storage-overview>.pump-flow{position:relative;z-index:1}.storage-overview>.burner-pipes{position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none;z-index:0}.burner-pipes path{fill:none;stroke-width:2.5;stroke-linejoin:round}.burner-pipes .pipe-vl{stroke:#e76c58}.burner-pipes .pipe-rl{stroke:#4d9bd5}.burner-pipes text{font:600 10px system-ui,sans-serif;fill:var(--ink1,#192f35);paint-order:stroke;stroke:var(--bg1,#f3f5f4);stroke-width:3px;stroke-linejoin:round}
 @media(max-width:700px){.storage-overview{grid-template-columns:minmax(0,1fr);gap:28px}.storage-overview .pump-flow{grid-row:2;grid-column:1}.burner-diagram{grid-row:1;grid-template-columns:88px minmax(0,1fr);text-align:left;gap:2px 14px;justify-self:start}.burner-icon{width:88px;grid-row:1/span 3;grid-column:1}.burner-diagram>:not(svg){grid-column:2}}
-.message{min-height:1.6em;margin:12px 0 0}.rule{margin:16px 0 0;font-size:.9rem}footer{border-top:1px solid #b9c8c9;padding-top:18px;font-size:.9rem}
+.message{min-height:1.6em;margin:12px 0 0}.rule{margin:16px 0 0;font-size:.9rem}footer{padding-top:18px;font-size:.9rem}
 #wifi-form{grid-template-columns:repeat(2,minmax(0,1fr))}#wifi-form button{grid-column:1/-1;justify-self:start}#wifi-status,#wifi-address{overflow-wrap:anywhere}
 #wifi-networks{display:block;width:100%;min-height:46px;margin:8px 0 16px;padding:10px;border:1px solid #8c9fa3;border-radius:6px;font:inherit;background:white;color:inherit}#wifi-scan-message{margin:10px 0;min-height:1.6em}#wifi-network-label[hidden]{display:none}
 #controllers form{grid-template-columns:minmax(0,1fr) auto}#auto-form{grid-template-columns:minmax(0,var(--setting-stepper-width,1fr)) auto;max-width:640px}#auto-form .full{grid-column:1/-1}#auto-form select{display:block;width:100%;min-height:46px;margin-top:8px;padding:10px;border:1px solid #8c9fa3;border-radius:6px;font:inherit;background:white;color:inherit}#auto-form .check{display:flex;align-items:center;gap:10px;min-height:44px}#auto-form input[type=checkbox]{width:20px;min-height:20px;margin:0;accent-color:#17636b}#auto-form button{justify-self:start}#auto-form .stepper button{justify-self:stretch}
@@ -461,6 +461,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 </section></div>
 <div id="sim-banner" role="status" hidden><strong>Testmodus:</strong> Werte, Verlauf und Pumpe sind simuliert. Relais am Haupt-ESP bleiben aus; WLAN-Relais schalten tatsächlich. <button id="test-stop" type="button">Testmodus beenden</button></div>
 <noscript><p>Bitte JavaScript aktivieren, um Messwerte und Einstellungen anzuzeigen.</p></noscript>
+<footer class="site-footer"><a href="https://nemon.org/" target="_blank" rel="noopener noreferrer">nemon.org</a></footer>
 <script>
 const root=document.getElementById('controllers');
 const connection=document.getElementById('connection');
@@ -957,10 +958,11 @@ function updateSolar(state,simulation){
   if(!state){badge.className='badge';badge.textContent='Status unbekannt';detail.className='muted status-highlight state-neutral';detail.textContent='Keine aktuellen Daten.';return;}
   const grace=!!(state.sensorGrace&&state.on&&!manual);
   const issue=state.paused?'Pausiert':!manual&&!state.configValid?'Einstellung ungültig':!manual&&!state.sensorsValid&&!grace&&!state.sensorFaultPending?'Sensorfehler':null;
-  detail.className='muted status-highlight state-'+(issue||(grace&&!state.sensorFaultPending)?'warning':manual||state.sensorFaultPending?'neutral':'ok');
+  const waitingForPanel=!manual&&state.sensorFaultPending&&Number.isFinite(state.lastDifference)&&Number.isFinite(state.panelReadingAgeMs)&&state.panelReadingAgeMs<60000;
+  detail.className='muted status-highlight state-'+(issue||waitingForPanel||(grace&&!state.sensorFaultPending)?'warning':manual||state.sensorFaultPending?'neutral':'ok');
   badge.className='badge'+(issue?' waiting':state.on?' on':'');
   badge.textContent=issue?issue+' · AUS':state.on?(simulation?'EIN · simuliert':'EIN'):(simulation?'AUS · simuliert':'AUS');
-  const difference=Number.isFinite(state.difference)?'Aktuelle Differenz: '+setpointNumber.format(state.difference)+' K. ':state.sensorFaultPending&&Number.isFinite(state.lastDifference)?'Differenz mit letztem Panelwert: '+setpointNumber.format(state.lastDifference)+' K. ':state.sensorFaultPending?'':'Differenz nicht verfügbar. ';
+  const difference=Number.isFinite(state.difference)?'Aktuelle Differenz: '+setpointNumber.format(state.difference)+' K. ':waitingForPanel?'Aktuelle Differenz: '+setpointNumber.format(state.lastDifference)+' K. Panelwert vorübergehend nicht aktualisiert. ':state.sensorFaultPending&&Number.isFinite(state.lastDifference)?'Differenz mit letztem Panelwert: '+setpointNumber.format(state.lastDifference)+' K. ':state.sensorFaultPending?'':'Differenz nicht verfügbar. ';
   detail.textContent=(manual?'Handbetrieb aktiv. ':'Automatik aktiv. ')+difference+
     (state.paused?'Update oder Neustart läuft.':manual&&!state.sensorsValid&&!state.sensorFaultPending?'Sensorfehler wird im Handbetrieb übergangen.':!state.configValid?'Bitte Einschaltdifferenz erneut speichern.':grace&&!state.sensorFaultPending?'Panel-Sensorfehler: Lauf wird mit letztem gültigen Wert höchstens 60 Sekunden überbrückt.':!state.sensorsValid&&!state.sensorFaultPending?'Solarpanel und Kombispeicher unten prüfen.':'');
   if(!solarDirty&&!solarBusy&&!solarForm.contains(document.activeElement)&&Number.isFinite(state.differenceStart))solarForm.elements.start.value=inputNumber(state.differenceStart);

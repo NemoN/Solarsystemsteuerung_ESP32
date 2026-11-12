@@ -23,6 +23,14 @@ context.updateSolar({on:false,configValid:true,sensorsValid:false,paused:false,d
 assert.equal(get('solar-badge').textContent,'Sensorfehler · AUS');assert.match(get('solar-detail').className,/state-warning/);
 context.updateSolar({on:true,configValid:true,sensorsValid:false,sensorGrace:true,paused:false,difference:null},false);
 assert.equal(get('solar-badge').textContent,'EIN');assert.match(get('solar-detail').textContent,/Panel-Sensorfehler.*60 Sekunden/);
+context.updateSolar({on:true,configValid:true,sensorsValid:false,sensorGrace:true,sensorFaultPending:true,lastDifference:3.2,panelReadingAgeMs:59999,paused:false},false);
+assert.match(get('solar-detail').textContent,/Aktuelle Differenz: 3,2 K/);assert.match(get('solar-detail').textContent,/vorübergehend nicht aktualisiert/);assert.match(get('solar-detail').className,/state-warning/);
+context.updateSolar({on:false,configValid:true,sensorsValid:false,sensorFaultPending:true,lastDifference:3.3,panelReadingAgeMs:60000,paused:false},false);
+assert.match(get('solar-detail').textContent,/Differenz mit letztem Panelwert: 3,3 K/);assert.match(get('solar-detail').className,/state-neutral/);
+context.updateSolar({on:true,configValid:true,sensorsValid:true,difference:3.4,panelReadingAgeMs:0,paused:false},false);
+assert.match(get('solar-detail').textContent,/Aktuelle Differenz: 3,4 K/);assert.doesNotMatch(get('solar-detail').textContent,/vorübergehend/);
+context.updateSolar({on:false,configValid:true,sensorsValid:false,sensorFaultPending:false,panelReadingAgeMs:61000,paused:false},false);
+assert.equal(get('solar-badge').textContent,'Sensorfehler · AUS');assert.match(get('solar-detail').className,/state-warning/);
 context.updateSolar({on:true,configValid:true,sensorsValid:false,sensorGrace:true,sensorFaultPending:true,lastDifference:6,paused:false},false);
 assert.equal(get('solar-badge').textContent,'EIN');assert.match(get('solar-detail').textContent,/Differenz mit letztem Panelwert: 6 K/);
 assert.doesNotMatch(get('solar-detail').textContent,/Sensorfehler|nicht verfügbar/);assert.match(get('solar-detail').className,/state-neutral/);

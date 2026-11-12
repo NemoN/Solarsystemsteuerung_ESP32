@@ -9,6 +9,8 @@ int main() {
   assert(!grace.canHold(0,true));
   grace.record(60,UINT32_MAX-5);
   assert(grace.hasReading());
+  assert(grace.ageMs(5)==11);
+  assert(grace.ageMs(59994)==60000);
   assert(grace.canHold(5,true) && grace.temperature()==60);
   assert(!grace.canHold(5,false));
   assert(grace.canHold(59994,true)); // Exakt 60 Sekunden, auch über millis()-Überlauf.

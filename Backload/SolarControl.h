@@ -17,6 +17,7 @@ class SolarPanelGrace {
   }
   float temperature() const { return temperature_; }
   bool hasReading() const { return ready_; }
+  uint32_t ageMs(uint32_t now) const { return uint32_t(now - lastValid_); }
  private:
   float temperature_ = 0;
   uint32_t lastValid_ = 0;

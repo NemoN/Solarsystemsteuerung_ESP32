@@ -43,7 +43,7 @@
 #include <time.h>
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
-const char* FIRMWARE_VERSION = "3.1.0";
+const char* FIRMWARE_VERSION = "3.2.0";
 // Der AP wird nur für Einrichtung und Wiederherstellung benötigt.
 constexpr bool AP_RECOVERY_ONLY = true;
 
@@ -959,6 +959,8 @@ String solarStatusJson() {
     ",\"sensorsValid\":" + String(sensorsValid ? "true" : "false") +
     ",\"sensorGrace\":" + String(solarGraceActive ? "true" : "false") +
     ",\"sensorFaultPending\":" + String(sensorFaultPending ? "true" : "false") +
+    ",\"panelReadingAgeMs\":" + (solarPanelGrace.hasReading()
+      ? String(solarPanelGrace.ageMs(millis())) : String("null")) +
     ",\"lastDifference\":" + (sensorFaultPending && solarPanelGrace.hasReading()
       ? jsonNumber(solarPanelGrace.temperature() - tank.currentTemp) : String("null")) +
     ",\"paused\":" + String((modeTransition || otaActive || otaVerificationPending) ? "true" : "false") +
