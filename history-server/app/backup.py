@@ -16,7 +16,7 @@ def validate(path):
         if db.execute("PRAGMA integrity_check").fetchone()[0] != "ok":
             raise ValueError("Die Sicherung ist beschädigt.")
         version = db.execute("PRAGMA user_version").fetchone()[0]
-        if version not in (1, SCHEMA_VERSION):
+        if version not in (1, 2, SCHEMA_VERSION):
             raise ValueError("Die Sicherung hat eine unbekannte Datenbankversion.")
         columns = [row[1] for row in db.execute("PRAGMA table_info(samples)")]
         if columns != ["timestamp_utc", "observed_at_utc", "t0", "t1", "t2", "s0", "s1", "s2", "result", "detail"]:
@@ -25,6 +25,11 @@ def validate(path):
             columns = [row[1] for row in db.execute("PRAGMA table_info(pump_runtime)")]
             if columns != ["kind", "period", "solar", "combi_to_buffer", "buffer_to_combi", "observed_at_utc"]:
                 raise ValueError("Die Sicherung enthält keine gültige Pumpenlaufzeit-Tabelle.")
+        if version >= 3:
+            for table, expected in (("discovered_sensors", ["sensor_id", "name"]),
+                                    ("sensor_samples", ["timestamp_utc", "sensor_id", "value", "status"])):
+                if [row[1] for row in db.execute(f"PRAGMA table_info({table})")] != expected:
+                    raise ValueError("Die Sicherung enthält keine gültigen Sensordaten.")
 
 
 def export_database(path: Path, output):

@@ -13,6 +13,7 @@ let request;
 let chart;
 let lastData;
 let runtimeKind = "day", runtimeRevision = 0;
+const sensorVisibility = new Map();
 
 function localDay(value) {
   const parts = new Intl.DateTimeFormat("en-CA", {timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit"}).formatToParts(value);
@@ -36,10 +37,33 @@ async function json(url, signal) {
 }
 
 function selected(id) {
-  return document.querySelector(`[data-sensor="${id}"]`).checked;
+  return sensorVisibility.get(id) !== false;
+}
+
+function renderLegend(series) {
+  const legend = $("sensor-legend");
+  const labels = series.map((sensor, index) => {
+    const label = document.createElement("label");
+    const input = document.createElement("input");
+    input.type = "checkbox"; input.dataset.sensor = sensor.id; input.checked = selected(sensor.id);
+    const line = document.createElement("span"); line.className = "line";
+    line.style.borderColor = sensor.color;
+    line.style.borderTopStyle = ["solid", "dashed", "dotted"][index % 3];
+    label.append(input, line, document.createTextNode(sensor.label));
+    input.addEventListener("change", () => {
+      sensorVisibility.set(sensor.id, input.checked);
+      if (chart) { chart.setDatasetVisibility(index, input.checked); chart.update("none"); }
+      showVisibilityMessage();
+    });
+    return label;
+  });
+  const heading = document.createElement("legend");
+  heading.className = "sr-only"; heading.textContent = "Temperaturkurven einblenden";
+  legend.replaceChildren(heading, ...labels);
 }
 
 function draw(data) {
+  renderLegend(data.series);
   if (chart) chart.destroy();
   const duration = new Date(data.to) - new Date(data.from);
   const ticks = new Intl.DateTimeFormat("de-DE", duration <= 2 * 86400000
@@ -49,7 +73,7 @@ function draw(data) {
     type: "line",
     data: {datasets: data.series.map((s, i) => ({
       label: s.label, data: s.points, borderColor: s.color, backgroundColor: s.color,
-      borderWidth: 2, borderDash: [[], [7, 4], [2, 4]][i],
+      borderWidth: 2, borderDash: [[], [7, 4], [2, 4]][i % 3],
       pointRadius: (context) => {
         const points = context.dataset.data;
         const i = context.dataIndex;
@@ -69,10 +93,10 @@ function draw(data) {
       },
       scales: {
         x: {type: "linear", min: Date.parse(data.from), max: Date.parse(data.to),
-          grid: {display: false}, border: {color: "#b9c8c9"},
-          ticks: {color: "#4e6268", maxTicksLimit: window.innerWidth < 650 ? 4 : 8, maxRotation: 0, callback: (value) => ticks.format(value)}},
-        y: {title: {display: true, text: "Temperatur (°C)", color: "#4e6268"},
-          grid: {color: "#e4eae9"}, border: {display: false}, ticks: {color: "#4e6268", callback: (value) => number.format(value)}},
+          grid: {display: false}, border: {color: "#49606a"},
+          ticks: {color: "#c0cfd6", maxTicksLimit: window.innerWidth < 650 ? 4 : 8, maxRotation: 0, callback: (value) => ticks.format(value)}},
+        y: {title: {display: true, text: "Temperatur (°C)", color: "#c0cfd6"},
+          grid: {color: "#2d414b"}, border: {display: false}, ticks: {color: "#c0cfd6", callback: (value) => number.format(value)}},
       },
     },
   });
@@ -80,7 +104,7 @@ function draw(data) {
 
 function showVisibilityMessage() {
   if (lastData && lastData.valid_value_count > 0) {
-    if (![0, 1, 2].some(selected)) message("Alle Kurven sind ausgeblendet. Oben einen Sensor auswählen.");
+    if (!lastData.series.some((sensor) => selected(sensor.id))) message("Alle Kurven sind ausgeblendet. Oben einen Sensor auswählen.");
     else $("chart-message").hidden = true;
   }
 }
@@ -182,7 +206,7 @@ document.querySelectorAll("[data-runtime]").forEach((button) => button.addEventL
 document.querySelectorAll("[data-days]").forEach((button) => {
   button.addEventListener("click", () => {
     selectedDays = Number(button.dataset.days);
-    document.querySelectorAll(".periods button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
+    document.querySelectorAll(".history .periods button").forEach((b) => b.setAttribute("aria-pressed", String(b === button)));
     $("custom-toggle").setAttribute("aria-expanded", "false");
     $("custom-range").hidden = true;
     loadHistory();
@@ -202,19 +226,12 @@ $("custom-range").addEventListener("submit", (event) => {
     return;
   }
   selectedDays = null;
-  document.querySelectorAll(".periods button").forEach((b) => b.setAttribute("aria-pressed", String(b.id === "custom-toggle")));
+  document.querySelectorAll(".history .periods button").forEach((b) => b.setAttribute("aria-pressed", String(b.id === "custom-toggle")));
   query = new URLSearchParams({from: $("date-from").value, to: $("date-to").value});
   loadHistory();
 });
 $("date-to").addEventListener("input", () => $("date-to").setCustomValidity(""));
 $("date-from").addEventListener("input", () => $("date-to").setCustomValidity(""));
-document.querySelectorAll("[data-sensor]").forEach((input) => input.addEventListener("change", () => {
-  if (chart) {
-    chart.setDatasetVisibility(Number(input.dataset.sensor), input.checked);
-    chart.update("none");
-  }
-  showVisibilityMessage();
-}));
 $("refresh").addEventListener("click", () => {loadHistory(); loadStatus(); loadRuntime();});
 $("retry").addEventListener("click", loadHistory);
 $("date-from").value = localDay(new Date(Date.now() - 7 * 86400000));
@@ -223,3 +240,33 @@ loadHistory();
 loadStatus();
 loadRuntime();
 setInterval(() => {loadStatus(); loadHistory(); loadRuntime();}, 60000);
+
+let updatePolling;
+async function loadUpdateStatus() {
+  try {
+    const data = await json("/api/update", AbortSignal.timeout(10000));
+    $("update-status").textContent = data.message;
+    $("update-status").classList.toggle("error", data.state === "error");
+    $("update-button").disabled = !data.enabled || data.state === "running";
+    if (data.state === "running" || data.state === "restarting") {
+      clearTimeout(updatePolling);
+      updatePolling = setTimeout(loadUpdateStatus, 3000);
+    }
+  } catch {
+    $("update-status").textContent = "Server vorübergehend nicht erreichbar. Erneuter Verbindungsversuch …";
+    clearTimeout(updatePolling); updatePolling = setTimeout(loadUpdateStatus, 3000);
+  }
+}
+$("update-button").addEventListener("click", async () => {
+  $("update-button").disabled = true;
+  $("update-status").textContent = "Update wird gestartet …";
+  try {
+    const response = await fetch("/api/update", {method: "POST", headers: {"X-Requested-With": "HistoryUI"}});
+    if (!response.ok) { const body = await response.json(); throw new Error(body.detail || "Update konnte nicht gestartet werden."); }
+    updatePolling = setTimeout(loadUpdateStatus, 1500);
+  } catch (error) {
+    $("update-status").textContent = error.message;
+    $("update-button").disabled = false;
+  }
+});
+loadUpdateStatus();

@@ -73,7 +73,7 @@ def test_v1_database_migration_backup_and_restore(tmp_path):
     assert migrated.latest()["t0"] == 1
     assert migrated.runtime_periods("day") == []
     with connect(target) as db:
-        assert db.execute("PRAGMA user_version").fetchone()[0] == 2
+        assert db.execute("PRAGMA user_version").fetchone()[0] == 3
     new = io.BytesIO(); export_database(target, new)
     restore_database(tmp_path / "v2.sqlite3", io.BytesIO(new.getvalue()))
 

@@ -6,9 +6,9 @@ from urllib.parse import urlsplit
 INTERVAL = 15 * 60
 TIMEOUT = 5.0
 SENSORS = (
-    (0, "Kombispeicher oben", "#17636b"),
-    (1, "Kombispeicher Mitte", "#955018"),
-    (2, "Pufferspeicher oben", "#6855a0"),
+    (0, "Kombispeicher oben", "#53dec6"),
+    (1, "Kombispeicher Mitte", "#f6bd68"),
+    (2, "Pufferspeicher oben", "#ae9bf5"),
 )
 
 

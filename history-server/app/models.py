@@ -70,6 +70,7 @@ class Reading:
     result: str
     detail: str = ""
     runtime: tuple[RuntimePeriod, ...] = ()
+    extra_sensors: tuple[tuple[int, str, float | None, str], ...] = ()
 
     @classmethod
     def failure(cls, result: str, detail: str = ""):
@@ -88,13 +89,13 @@ def parse_reading(payload) -> Reading:
         if not isinstance(item, dict):
             continue
         sensor_id = item.get("id")
-        if type(sensor_id) is not int or sensor_id not in (0, 1, 2):
+        if type(sensor_id) is not int or not 0 <= sensor_id <= 255:
             continue
         if sensor_id in found:
             duplicates.add(sensor_id)
         found[sensor_id] = item
-    values, states = [], []
-    for sensor_id in range(3):
+    values, states, extras = [], [], []
+    for sensor_id in sorted(set(range(3)) | set(found)):
         item = found.get(sensor_id)
         value, state = None, "missing"
         if sensor_id in duplicates:
@@ -109,7 +110,13 @@ def parse_reading(payload) -> Reading:
                 state = "invalid"
             else:
                 value, state = float(temperature), "ok"
-        values.append(value)
-        states.append(state)
-    count = states.count("ok")
-    return Reading(tuple(values), tuple(states), "ok" if count == 3 else "partial" if count else "sensor_error", runtime=parse_runtime(payload.get("pumpRuntime")))
+        if sensor_id < 3:
+            values.append(value)
+            states.append(state)
+        else:
+            name = item.get("name") if item else None
+            name = name.strip()[:120] if isinstance(name, str) and name.strip() else f"Sensor {sensor_id}"
+            extras.append((sensor_id, name, value, state))
+    all_states = states + [entry[3] for entry in extras]
+    count = all_states.count("ok")
+    return Reading(tuple(values), tuple(states), "ok" if count == len(all_states) else "partial" if count else "sensor_error", runtime=parse_runtime(payload.get("pumpRuntime")), extra_sensors=tuple(extras))

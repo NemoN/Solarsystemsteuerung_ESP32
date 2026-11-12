@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#17636b">
+  <meta name="theme-color" content="#06131e">
   <title>Temperaturarchiv · Backload</title>
   <link rel="icon" href="data:,">
   <link rel="stylesheet" href="/static/styles.css">
@@ -12,12 +12,16 @@
 </head>
 <body>
   <main>
+    <nav class="page-nav" aria-label="Bereiche">
+      <div class="nav-brand"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 23 19 10l15 13v18H4z"/><circle class="nav-brand-sun" cx="36" cy="10" r="5"/><path class="nav-brand-sun" d="M36 1v3m0 12v3M27 10h3m12 0h3M30 4l2 2m8 8 2 2m0-12-2 2"/></svg><span class="nav-wordmark" aria-label="Backload"><span>BACK</span><span>LOAD</span></span></div>
+      <a href="#history-heading">Temperaturverlauf</a><a href="#runtime-heading">Pumpenlaufzeiten</a><a href="#update-heading">Server-Update</a>
+    </nav>
     <header class="page-header">
       <div>
         <h1>Temperaturarchiv</h1>
         <p>Temperaturen und Pumpen im Überblick.</p>
       </div>
-      <span class="product-name">Backload</span>
+
     </header>
 
     <section class="collector" aria-label="Erfassung">
@@ -47,14 +51,11 @@
         <button type="submit" class="button primary">Anzeigen</button>
       </form>
       <p class="range-caption" id="range-caption">Letzte 7 Tage · Europe/Berlin (MEZ/MESZ)</p>
-      <fieldset class="legend">
+      <fieldset class="legend" id="sensor-legend">
         <legend class="sr-only">Temperaturkurven einblenden</legend>
-        <label><input type="checkbox" data-sensor="0" checked><span class="line combi-top"></span>Kombispeicher oben</label>
-        <label><input type="checkbox" data-sensor="1" checked><span class="line combi-middle"></span>Kombispeicher Mitte</label>
-        <label><input type="checkbox" data-sensor="2" checked><span class="line buffer"></span>Pufferspeicher oben</label>
       </fieldset>
       <div id="chart-area" class="chart-area" aria-busy="true">
-        <canvas id="history-chart" role="img" aria-label="Temperaturverlauf der drei Sensoren in Grad Celsius. Einzelwerte stehen im CSV-Download."></canvas>
+        <canvas id="history-chart" role="img" aria-label="Temperaturverlauf der erkannten Sensoren in Grad Celsius. Einzelwerte stehen im CSV-Download."></canvas>
         <div id="chart-message" class="chart-message" role="status"><p id="chart-message-text">Messungen werden geladen …</p><button type="button" id="retry" class="button secondary" hidden>Erneut laden</button></div>
       </div>
       <div class="chart-footer">
@@ -77,6 +78,13 @@
         <table class="runtime-table"><thead><tr><th scope="col">Zeitraum</th><th scope="col">Solarpumpe</th><th scope="col">Kombi → Puffer</th><th scope="col">Puffer → Kombi</th><th scope="col">Zuletzt abgeholt</th></tr></thead><tbody id="runtime-rows"></tbody></table>
       </div>
       <p class="hint">Angezeigt werden bis zu 365 Zeiträume. Fehlende Zeiträume wurden nicht erfasst; simulierte Pumpenläufe werden nicht gezählt.</p>
+    </section>
+
+    <section class="update-section" aria-labelledby="update-heading">
+      <div class="section-header"><h2 id="update-heading">History-Server aktualisieren</h2></div>
+      <p class="hint">Aktualisiert den eingerichteten Git-Branch und startet den Archivdienst neu.</p>
+      <button id="update-button" type="button" class="button primary" disabled>Server aktualisieren</button>
+      <p id="update-status" class="notice" role="status">Update-Funktion wird geprüft …</p>
     </section>
 
     <footer>

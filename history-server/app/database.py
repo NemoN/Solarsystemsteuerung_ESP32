@@ -5,7 +5,7 @@ import sqlite3
 
 from .models import Reading
 
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 COLUMNS = "timestamp_utc, observed_at_utc, t0, t1, t2, s0, s1, s2, result, detail"
 
 
@@ -28,7 +28,7 @@ class Database:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with connect(self.path) as db:
             version = db.execute("PRAGMA user_version").fetchone()[0]
-            if version not in (0, 1, SCHEMA_VERSION):
+            if version not in (0, 1, 2, SCHEMA_VERSION):
                 raise RuntimeError(f"Unbekannte Datenbankversion: {version}")
             # Rollback-Journal: kurze Transaktionen, kein WAL-Reset bei parallelen Lesern.
             db.execute("PRAGMA journal_mode=DELETE")
@@ -49,6 +49,14 @@ class Database:
                 observed_at_utc INTEGER NOT NULL,
                 PRIMARY KEY (kind, period)
             )""")
+            db.execute("""CREATE TABLE IF NOT EXISTS discovered_sensors (
+                sensor_id INTEGER PRIMARY KEY, name TEXT NOT NULL
+            )""")
+            db.execute("""CREATE TABLE IF NOT EXISTS sensor_samples (
+                timestamp_utc INTEGER NOT NULL REFERENCES samples(timestamp_utc),
+                sensor_id INTEGER NOT NULL REFERENCES discovered_sensors(sensor_id),
+                value REAL, status TEXT NOT NULL, PRIMARY KEY(timestamp_utc, sensor_id)
+            )""")
             db.execute(f"PRAGMA user_version={SCHEMA_VERSION}")
             db.commit()
 
@@ -58,6 +66,10 @@ class Database:
                 f"INSERT INTO samples ({COLUMNS}) VALUES (?,?,?,?,?,?,?,?,?,?) ON CONFLICT(timestamp_utc) DO NOTHING",
                 (timestamp, observed_at, *reading.temperatures, *reading.sensor_status, reading.result, reading.detail),
             )
+            if cursor.rowcount == 1:
+                for sensor_id, name, value, status in reading.extra_sensors:
+                    db.execute("INSERT INTO discovered_sensors VALUES (?, ?) ON CONFLICT(sensor_id) DO UPDATE SET name=excluded.name", (sensor_id, name))
+                    db.execute("INSERT INTO sensor_samples VALUES (?,?,?,?)", (timestamp, sensor_id, value, status))
             for record in reading.runtime:
                 db.execute("""INSERT INTO pump_runtime VALUES (?,?,?,?,?,?)
                     ON CONFLICT(kind, period) DO UPDATE SET
@@ -79,11 +91,27 @@ class Database:
             return [dict(row) for row in db.execute(
                 "SELECT * FROM pump_runtime WHERE kind = ? ORDER BY period DESC LIMIT ?", (kind, limit))]
 
+    def sensors(self):
+        from .config import SENSORS
+        colors = ("#ff947e", "#6dc9f2", "#f2d36f", "#d6a2ec", "#b9dc87", "#f3a8b6")
+        with connect(self.path, readonly=True) as db:
+            extras = db.execute("SELECT sensor_id, name FROM discovered_sensors ORDER BY sensor_id").fetchall()
+        return list(SENSORS) + [(row[0], row[1], colors[(row[0] - 3) % len(colors)]) for row in extras]
+
     def rows(self, start: float, end: float):
         with connect(self.path, readonly=True) as db:
             cursor = db.execute("SELECT * FROM samples WHERE timestamp_utc >= ? AND timestamp_utc < ? ORDER BY timestamp_utc", (start, end))
+            extra_cursor = db.execute("SELECT * FROM sensor_samples WHERE timestamp_utc >= ? AND timestamp_utc < ? ORDER BY timestamp_utc, sensor_id", (start, end))
+            extra = extra_cursor.fetchone()
             while batch := cursor.fetchmany(1024):
-                yield from batch
+                for sample in batch:
+                    row = dict(sample)
+                    while extra is not None and extra["timestamp_utc"] <= row["timestamp_utc"]:
+                        if extra["timestamp_utc"] == row["timestamp_utc"]:
+                            row[f"t{extra['sensor_id']}"] = extra["value"]
+                            row[f"s{extra['sensor_id']}"] = extra["status"]
+                        extra = extra_cursor.fetchone()
+                    yield row
 
 
 @contextmanager

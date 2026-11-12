@@ -90,12 +90,13 @@ class Curve:
 
 def build_history(database, start, end):
     width = INTERVAL if end - start <= 1200 * INTERVAL else math.ceil((end - start) / (1200 / 4) / INTERVAL) * INTERVAL
-    curves = [Curve(width) for _ in SENSORS]
+    sensors = database.sensors()
+    curves = [Curve(width) for _ in sensors]
     count, valid_count = 0, 0
     for row in database.rows(start, end):
         count += 1
-        for sensor_id, curve in enumerate(curves):
-            value = row[f"t{sensor_id}"]
+        for (sensor_id, _, _), curve in zip(sensors, curves):
+            value = row.get(f"t{sensor_id}")
             valid_count += value is not None
             curve.add(row["timestamp_utc"], value)
     for curve in curves:
@@ -106,7 +107,7 @@ def build_history(database, start, end):
         "display_reduced": any(curve.reduced for curve in curves),
         "series": [
             {"id": sensor_id, "label": label, "color": color, "points": curve.points}
-            for (sensor_id, label, color), curve in zip(SENSORS, curves)
+            for (sensor_id, label, color), curve in zip(sensors, curves)
         ],
     }
 
@@ -117,18 +118,17 @@ def csv_file(database, start, end):
     try:
         output.write("\ufeff")
         writer = csv.writer(output, delimiter=";", lineterminator="\r\n")
-        writer.writerow([
-            "Zeit UTC", "Zeit Europe/Berlin", "Kombispeicher oben (°C)",
-            "Kombispeicher Mitte (°C)", "Pufferspeicher oben (°C)",
-            "Status Kombispeicher oben", "Status Kombispeicher Mitte", "Status Pufferspeicher oben",
-            "Abfrageergebnis", "Fehlerhinweis", "Abgefragt UTC",
-        ])
+        sensors = database.sensors()
+        writer.writerow(["Zeit UTC", "Zeit Europe/Berlin",
+            *[f"{label} (°C)" for _, label, _ in sensors],
+            *[f"Status {label}" for _, label, _ in sensors],
+            "Abfrageergebnis", "Fehlerhinweis", "Abgefragt UTC"])
         for row in database.rows(start, end):
             local = datetime.fromtimestamp(row["timestamp_utc"], timezone.utc).astimezone(BERLIN).isoformat(timespec="seconds")
             writer.writerow([
                 utc_iso(row["timestamp_utc"]), local,
-                *["" if row[f"t{i}"] is None else str(row[f"t{i}"]).replace(".", ",") for i in range(3)],
-                *[SENSOR_MESSAGES.get(row[f"s{i}"], "Unbekannter Fehler") for i in range(3)],
+                *["" if row.get(f"t{i}") is None else str(row[f"t{i}"]).replace(".", ",") for i, _, _ in sensors],
+                *[SENSOR_MESSAGES.get(row.get(f"s{i}", "missing"), "Unbekannter Fehler") for i, _, _ in sensors],
                 RESULT_MESSAGES.get(row["result"], "Unbekannter Fehler"), row["detail"], utc_iso(row["observed_at_utc"]),
             ])
         output.seek(0)

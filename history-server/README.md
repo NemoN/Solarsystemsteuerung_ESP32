@@ -1,6 +1,6 @@
 # Backload Temperaturarchiv
 
-Der History-Server speichert alle 15 Minuten drei Temperaturen und, sofern die
+Der History-Server speichert alle 15 Minuten die vom ESP32 gemeldeten Temperaturen und, sofern die
 Firmware sie liefert, die Pumpenlaufzeiten in einer SQLite-Datenbank. Die
 Webseite zeigt den Verlauf und bietet einen CSV-Export. Zur Erfassung muss kein
 Browser geöffnet sein.
@@ -113,12 +113,28 @@ Nach Änderungen an der Dienstdatei `daemon-reload` und anschließend
 `sudo systemctl restart backload-history` ausführen. Nach einem Update der
 Projektdateien und Python-Pakete den Dienst ebenfalls neu starten.
 
+### Update per Schaltfläche unter Debian/Ubuntu
+
+Die Funktion ist standardmäßig deaktiviert und für eine **systemd-Installation aus einem vollständigen Git-Checkout** vorgesehen, nicht für Docker oder einen kopierten Einzelordner. Die Webseite hat keine Anmeldung: Jeder, der sie erreichen kann, kann nach der Aktivierung Updates auslösen. Deshalb nur in einem vertrauenswürdigen Netz oder hinter einem angemeldeten Reverse-Proxy betreiben.
+
+1. Das vollständige Repository auf einen verfolgten Branch auschecken. `www-data` benötigt Schreibrechte für den Checkout einschließlich `.git`, für `history-server/.venv` und das Datenverzeichnis sowie lesenden Netzwerkzugang zum konfigurierten Git-Upstream und zum Python-Paketindex. Bei einem öffentlichen Repository ist eine HTTPS-Remote-Adresse ohne Zugangsdaten zweckmäßig. Der Checkout darf keine lokalen Änderungen an versionierten Dateien enthalten. Daten und `.env` bleiben außerhalb der versionierten Dateien.
+2. Im Dienst `User=www-data` und `Environment=HISTORY_UPDATE_ENABLED=1` setzen; Pfade und `DATABASE_PATH` wie oben beschrieben eintragen. Die Dienstdatei selbst muss root gehören und darf nicht für `www-data` beschreibbar sein.
+3. Mit `sudo visudo -f /etc/sudoers.d/backload-history` genau diese Regel eintragen:
+
+   ```sudoers
+   www-data ALL=(root) NOPASSWD: /usr/bin/systemctl restart --no-block backload-history.service
+   ```
+
+   Die Regel gewährt ausschließlich den Neustart dieses Dienstes. Anschließend `sudo systemctl daemon-reload` und `sudo systemctl restart backload-history` ausführen. Im Webinterface erscheint unter „History-Server aktualisieren“ der aktivierte Knopf.
+
+Der Knopf führt `git pull --ff-only` für den eingestellten Upstream aus, installiert `requirements.txt` in der laufenden virtuellen Umgebung und startet den Dienst neu. Bei lokalen Änderungen, abweichendem Verlauf oder Fehlern wird abgebrochen und die Ursache angezeigt. Ein Fehler bei der Paketinstallation kann auftreten, nachdem Git bereits aktualisiert wurde; dann Dienstprotokoll und Checkout prüfen und die Installation manuell abschließen. Während des Neustarts können Messungen ausfallen. Die SQLite-Datenbank bleibt erhalten; vor Updates empfiehlt sich eine Sicherung wie unten beschrieben. Die Funktion installiert auch Änderungen außerhalb von `history-server` im selben Checkout.
+
 Pro Datenbank darf nur ein Sammler laufen. Deshalb weder mehrere Server noch
 mehrere Uvicorn-Worker oder den Entwicklungsmodus `--reload` verwenden.
 
 ## Daten und Verlauf
 
-- Gespeichert werden Kombispeicher oben und Mitte sowie Pufferspeicher oben.
+- Sensoren aus `controllers` werden anhand ihrer ID automatisch erkannt und gespeichert. Die aktuelle Firmware meldet Kombispeicher oben, Mitte und unten, Pufferspeicher oben und Solarpanel. Neu erkannte Sensoren erscheinen ab der ersten Erfassung im Diagramm und im CSV-Export; ältere Werte lassen sich nicht nachträglich rekonstruieren.
   Die Erfassung beginnt zur nächsten Viertelstunde. Sensorfehler und Ausfälle
   werden gekennzeichnet; während eines Serverausfalls fehlen die Messungen.
 - Simulierte Werte im Testmodus werden nicht als Messungen gespeichert. Daten
@@ -175,7 +191,7 @@ Wiederherstellung, solange der Sammler läuft.
 
 `/api/history` liefert den Verlauf, `/api/export.csv` den CSV-Export,
 `/api/pump-runtime?kind=day` die Pumpenlaufzeiten (`day`, `month`, `year`) und
-`/api/collector-status` den Erfassungsstatus. `/healthz` prüft nur den Dienst,
+`/api/collector-status` den Erfassungsstatus und `/api/update` den Status des optionalen Updates. `/healthz` prüft nur den Dienst,
 nicht die Verbindung zum ESP32.
 
 Tests ohne Docker:

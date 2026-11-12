@@ -2,8 +2,12 @@ import asyncio
 from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 import time
+import json
+import os
+import subprocess
+import sys
 
-from fastapi import FastAPI, HTTPException, Query
+from fastapi import FastAPI, HTTPException, Query, Request
 from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.background import BackgroundTask
@@ -12,6 +16,7 @@ from .collector import Collector
 from .config import Settings
 from .database import Database, collector_lock
 from .history import build_history, csv_file, resolve_range, stream_csv
+from .updater import status_path, write_status
 
 STATIC = Path(__file__).parent / "static"
 
@@ -25,6 +30,16 @@ def create_app(settings=None, *, start_collector=True, client=None, clock=time.t
     async def lifespan(app):
         with collector_lock(database.path):
             database.initialize()
+            # Ein Neustart bestätigt den Abschluss; ein unterbrochenes Update bleibt sichtbar.
+            update_file = status_path(database.path)
+            try:
+                previous_update = json.loads(update_file.read_text(encoding="utf-8"))
+                if previous_update.get("state") == "restarting":
+                    write_status(update_file, "complete", "Update installiert und Dienst neu gestartet.")
+                elif previous_update.get("state") == "running":
+                    write_status(update_file, "error", "Update wurde durch einen Dienstneustart unterbrochen. Serverprotokoll prüfen.")
+            except (OSError, ValueError):
+                pass
             task = asyncio.create_task(collector.run()) if start_collector else None
             app.state.database = database
             app.state.collector = collector
@@ -75,6 +90,38 @@ def create_app(settings=None, *, start_collector=True, client=None, clock=time.t
         if kind not in ("day", "month", "year") or not 1 <= limit <= 5000:
             raise HTTPException(status_code=400, detail="Ungültiger Zeitraum oder Limit.")
         return {"kind": kind, "periods": database.runtime_periods(kind, limit)}
+
+    @app.get("/api/update")
+    def update_status():
+        enabled = os.getenv("HISTORY_UPDATE_ENABLED") == "1"
+        if not enabled:
+            return {"enabled": False, "state": "disabled", "message": "Update per Schaltfläche ist nicht eingerichtet."}
+        try:
+            data = json.loads(status_path(database.path).read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            data = {"state": "idle", "message": "Bereit für ein Update."}
+        return {"enabled": True, **data}
+
+    @app.post("/api/update", status_code=202)
+    def start_update(request: Request):
+        if os.getenv("HISTORY_UPDATE_ENABLED") != "1":
+            raise HTTPException(403, "Update per Schaltfläche ist nicht eingerichtet.")
+        origin = request.headers.get("origin", "")
+        expected = f"{request.url.scheme}://{request.headers.get('host', '')}"
+        if origin != expected or request.headers.get("x-requested-with") != "HistoryUI":
+            raise HTTPException(403, "Bitte das Webinterface verwenden.")
+        # Nur ein gestarteter Prozess pro Server; zusätzlich schützt flock vor parallelen Updates.
+        process = getattr(app.state, "update_process", None)
+        if process is not None and process.poll() is None:
+            raise HTTPException(409, "Ein Update läuft bereits.")
+        try:
+            app.state.update_process = subprocess.Popen(
+                [sys.executable, "-m", "app.updater", str(database.path)],
+                cwd=STATIC.parent.parent, stdin=subprocess.DEVNULL,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+        except OSError as exc:
+            raise HTTPException(500, "Updateprozess konnte nicht gestartet werden.") from exc
+        return {"state": "running"}
 
     @app.get("/api/export.csv")
     def export(start: str | None = Query(None, alias="from"), end: str | None = Query(None, alias="to")):
