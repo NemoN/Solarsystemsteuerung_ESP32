@@ -56,6 +56,8 @@ export DATABASE_PATH="$PWD/data/temperatures.sqlite3"
 .venv/bin/python -m uvicorn app.main:app --host 0.0.0.0 --port 8088 --workers 1
 ```
 
+Die Navigation enthält einen Link zur ESP-Steuerung. Sein Ziel wird automatisch aus `ESP32_STATUS_URL` übernommen. Dort kann statt einer IP auch ein mDNS-Name wie `http://backload.local/api/status` stehen, sofern sowohl der Server als auch der Browser diesen Namen auflösen können. Die Adresse muss vom Gerät erreichbar sein, auf dem die Webseite geöffnet wird.
+
 Die Webseite ist unter `http://SERVER-IP:8088` erreichbar. `--port` ändert den
 Port; `--host 127.0.0.1` beschränkt den Zugriff auf den lokalen Rechner. Mit
 Strg+C wird der Server beendet. Die beiden Umgebungsvariablen müssen in jeder

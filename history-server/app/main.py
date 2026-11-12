@@ -79,7 +79,7 @@ def create_app(settings=None, *, start_collector=True, client=None, clock=time.t
 
     @app.get("/api/collector-status")
     def collector_status():
-        return collector.status()
+        return {**collector.status(), "esp_url": settings.dashboard_url}
 
     @app.get("/api/history")
     def history(start: str | None = Query(None, alias="from"), end: str | None = Query(None, alias="to")):

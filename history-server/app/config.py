@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 import os
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import urlsplit, urlunsplit
 
 INTERVAL = 15 * 60
 TIMEOUT = 5.0
@@ -19,12 +19,17 @@ class Settings:
 
     def __post_init__(self):
         url = urlsplit(self.source_url)
-        if url.scheme not in ("http", "https") or not url.hostname or url.username or url.password or url.fragment or any(c.isspace() for c in self.source_url):
+        if url.scheme not in ("http", "https") or not url.hostname or url.username is not None or url.password is not None or url.fragment or any(c.isspace() for c in self.source_url):
             raise ValueError("ESP32_STATUS_URL muss eine HTTP(S)-Adresse ohne Zugangsdaten sein.")
         try:
             url.port
         except ValueError as exc:
             raise ValueError("ESP32_STATUS_URL enthält einen ungültigen Port.") from exc
+
+    @property
+    def dashboard_url(self):
+        url = urlsplit(self.source_url)
+        return urlunsplit((url.scheme, url.netloc, "/", "", ""))
 
     @classmethod
     def from_env(cls):

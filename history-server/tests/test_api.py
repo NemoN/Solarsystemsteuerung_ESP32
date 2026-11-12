@@ -101,3 +101,19 @@ def test_running_collector_lifespan_capture_and_restart(tmp_path, payload):
         assert client.get("/api/collector-status").json()["last_capture"] == "1970-01-01T00:15:00Z"
         assert client.get("/api/history").json()["sample_count"] == 1
         assert len(calls) == 1
+
+
+@pytest.mark.parametrize("source,expected", [
+    ("http://192.168.92.77/api/status", "http://192.168.92.77/"),
+    ("http://backload.local:8080/api/status?test=1", "http://backload.local:8080/"),
+    ("https://[2001:db8::1]:8443/path", "https://[2001:db8::1]:8443/"),
+])
+def test_esp_link_uses_configured_origin(tmp_path, source, expected):
+    app = create_app(Settings(source, tmp_path / "link.sqlite3"), start_collector=False)
+    with TestClient(app) as client:
+        assert client.get("/api/collector-status").json()["esp_url"] == expected
+
+
+def test_esp_url_rejects_empty_userinfo(tmp_path):
+    with pytest.raises(ValueError):
+        Settings("http://@esp32/api/status", tmp_path / "link.sqlite3")

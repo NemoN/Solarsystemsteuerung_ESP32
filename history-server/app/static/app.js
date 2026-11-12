@@ -152,6 +152,10 @@ async function loadHistory() {
 async function loadStatus() {
   try {
     const data = await json("/api/collector-status", AbortSignal.timeout(10000));
+    if (data.esp_url) {
+      $("esp-link").href = data.esp_url;
+      $("esp-link").hidden = false;
+    }
     $("last-capture").textContent = data.last_capture ? fullDate.format(new Date(data.last_capture)) : "Noch keine Messung";
     $("last-result").textContent = data.last_result ? data.last_result.message : "Erfassung startet zur nächsten Viertelstunde";
     $("last-result").title = data.last_result?.detail || "";

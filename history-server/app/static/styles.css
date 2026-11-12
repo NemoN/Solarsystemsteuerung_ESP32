@@ -127,11 +127,12 @@ footer p + p { margin-top: 4px; }
 
 /* Farbwelt und seitliche Navigation der aktuellen ESP-Oberfläche. */
 :root { color-scheme: dark; --background: #06131e; --surface: #10212c; --ink: #f2f7fa; --muted: #c0cfd6; --teal: #53dec6; --teal-hover: #00b5a5; --border: #2d414b; background: var(--background); }
-main { max-width: 1232px; padding-left: 216px; }
+main { max-width: 1232px; padding-left: 194px; }
 .page-nav { position: fixed; z-index: 5; top: 0; bottom: 0; left: 0; width: calc(180px + max(0px, (100vw - 1232px) / 2)); display: flex; flex-direction: column; align-items: stretch; gap: 3px; padding: 16px 10px 16px max(10px, calc((100vw - 1232px) / 2 + 10px)); margin: 0; border: 0; background: linear-gradient(90deg, #020a12, #133248); }
 .nav-brand { color: var(--ink); margin: 0 0 18px; letter-spacing: .08em; }
 .nav-brand svg { color: #00d8c5; }
-.page-nav a { color: var(--ink); }
+.page-nav a { color: var(--ink); min-height: 40px; padding: 8px; gap: 8px; font-size: .8rem; font-weight: 650; }
+.page-nav .nav-icon { width: 16px; height: 16px; flex: none; }
 .page-nav a:hover, button:hover, .secondary:hover { background: #20343f; color: var(--ink); border-color: #49606a; }
 button { color: var(--ink); background: #233b48; }
 .primary, .periods [aria-pressed=true] { color: #fff; background: #06776e; border-color: #06776e; }
