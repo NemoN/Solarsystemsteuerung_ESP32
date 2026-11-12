@@ -35,6 +35,18 @@ python3 "$project_dir/tests/test_automatic_settings.py"
   "$project_dir/Backload/TemperatureHistory.cpp" "$project_dir/tests/test_temperature_history.cpp" \
   -o "$test_dir/history-tests"
 "$test_dir/history-tests"
+python3 "$project_dir/tests/test_archive_scheduler.py"
+if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists libcjson; then
+  # The firmware uses the cJSON supplied by ESP-IDF; host tests use system cJSON.
+  # Word splitting is intentional for pkg-config compiler/linker arguments.
+  "${CXX:-c++}" -std=c++11 -Wall -Wextra -Werror \
+    -I"$project_dir/Backload" $(pkg-config --cflags libcjson) \
+    "$project_dir/Backload/ArchiveHistory.cpp" "$project_dir/tests/test_archive_history.cpp" \
+    $(pkg-config --libs libcjson) -o "$test_dir/archive-tests"
+  "$test_dir/archive-tests"
+else
+  printf '%s\n' 'SKIP: Archiv-JSON-Test benötigt libcjson und pkg-config.'
+fi
 
 "${CXX:-c++}" -std=c++11 -Wall -Wextra -Werror -fsanitize=address,undefined \
   "$project_dir/tests/test_history_server_url.cpp" -o "$test_dir/history-server-url-tests"

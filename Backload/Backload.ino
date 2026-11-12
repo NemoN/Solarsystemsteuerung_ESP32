@@ -20,6 +20,8 @@
 #include "AutomaticControl.h"
 #include "SolarControl.h"
 #include "TemperatureHistory.h"
+#include "ArchiveHistory.h"
+#include "RelayResponse.h"
 #include "RecoveryApPolicy.h"
 #include "Hostname.h"
 #include "HistoryServerUrl.h"
@@ -43,7 +45,7 @@
 #include <time.h>
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
-const char* FIRMWARE_VERSION = "3.2.0";
+const char* FIRMWARE_VERSION = "3.3.0";
 // Der AP wird nur für Einrichtung und Wiederherstellung benötigt.
 constexpr bool AP_RECOVERY_ONLY = true;
 
@@ -183,6 +185,15 @@ uint32_t runtimeLastUpdate = 0, runtimeLastSave = 0;
 bool hostnameStorageReady = false, hostnameUsesDefault = true, mdnsReady = false;
 String configuredHostname, activeHostname;
 String historyServerUrl;
+// Only the main loop accesses archiveHistory. The worker publishes a complete
+// candidate with an atomic state; it never touches the live history or relays.
+ArchiveHistory archiveHistory, archiveCandidate;
+enum ArchiveFetchState { ARCHIVE_IDLE, ARCHIVE_RUNNING, ARCHIVE_READY, ARCHIVE_FAILED };
+std::atomic<int> archiveFetchState(ARCHIVE_IDLE);
+char archiveFetchUrl[HistoryServerUrl::MAX_LENGTH + 1] = {};
+uint32_t archiveFetchTime = 0, archiveGeneration = 0, archiveFetchGeneration = 0;
+uint32_t archiveLastAttempt = 0, archiveRetryDelay = 0;
+bool archiveLoaded = false;
 // Dachsensor vorläufig deaktiviert; die Implementierung bleibt für später erhalten.
 constexpr bool ROOF_SENSOR_ENABLED = false;
 WiFiUDP roofUdp;
@@ -591,6 +602,12 @@ void saveHistoryServerUrl() {
     saved = hostnamePreferences.putString("history-url", next) == next.length() && hostnamePreferences.getString("history-url", "") == next;
   }
   if (!saved) { server.send(500, "text/plain; charset=utf-8", "Adresse konnte nicht gespeichert werden."); return; }
+  if (next != historyServerUrl) {
+    ++archiveGeneration;
+    archiveLoaded = false;
+    archiveHistory = ArchiveHistory{};
+    archiveRetryDelay = 0;
+  }
   historyServerUrl = next;
   sendHistoryServerUrl();
 }
@@ -975,6 +992,94 @@ String heatingStatusJson() {
     ",\"relayOn\":" + String(oilBurnerRelayOn() ? "true" : "false") + "}";
 }
 
+// Network work and JSON parsing must never block the control loop. HTTP/1.0
+// requests avoid chunked bodies; both known and unknown lengths are bounded.
+void archiveFetchTask(void*) {
+  bool ok = false;
+  String base(archiveFetchUrl);
+  int query = base.indexOf('?'), fragment = base.indexOf('#');
+  if (query >= 0) base = base.substring(0, query);
+  if (fragment >= 0 && fragment < int(base.length())) base = base.substring(0, fragment);
+  while (base.endsWith("/")) base.remove(base.length() - 1);
+  time_t from = time_t(archiveFetchTime - 21600), to = time_t(archiveFetchTime);
+  struct tm fromTm{}, toTm{};
+  char fromText[32], toText[32];
+  if (gmtime_r(&from, &fromTm) && gmtime_r(&to, &toTm) &&
+      strftime(fromText, sizeof(fromText), "%Y-%m-%dT%H:%M:%SZ", &fromTm) &&
+      strftime(toText, sizeof(toText), "%Y-%m-%dT%H:%M:%SZ", &toTm)) {
+    const String url = base + "/api/history?from=" + fromText + "&to=" + toText;
+    WiFiClient plain;
+    WiFiClientSecure secure;
+    secure.setCACert(GITHUB_ROOT_CERTS);
+    secure.setHandshakeTimeout(5);
+    WiFiClient& client = base.startsWith("https://") ? static_cast<WiFiClient&>(secure) : plain;
+    HTTPClient http;
+    http.useHTTP10(true);
+    http.setConnectTimeout(4000); http.setTimeout(5000); http.setReuse(false);
+    if (http.begin(client, url) && http.GET() == HTTP_CODE_OK) {
+      constexpr size_t MAX_RESPONSE = 32768;
+      const int length = http.getSize();
+      WiFiClient* stream = http.getStreamPtr();
+      char* body = static_cast<char*>(malloc(MAX_RESPONSE + 1));
+      if (stream && body && length <= int(MAX_RESPONSE)) {
+        if (length > 0) {
+          ok = readRelayResponse(*stream, size_t(length), body, MAX_RESPONSE + 1,
+            []() { return millis(); }, []() { delay(10); }, 8000);
+        } else if (length < 0) {
+          size_t used = 0; const uint32_t started = millis();
+          while (uint32_t(millis() - started) < 8000 && used < MAX_RESPONSE) {
+            const int available = stream->available();
+            if (available > 0) {
+              size_t count = size_t(available);
+              if (count > MAX_RESPONSE - used) count = MAX_RESPONSE - used;
+              const int n = stream->read(reinterpret_cast<uint8_t*>(body + used), count);
+              if (n < 0) break;
+              used += size_t(n);
+            } else if (!http.connected()) { ok = used > 0; break; }
+            else delay(10);
+          }
+          body[used] = '\0';
+        }
+        if (ok) ok = archiveCandidate.parse(body, archiveFetchTime);
+      }
+      free(body);
+    }
+    http.end();
+  }
+  archiveFetchState.store(ok ? ARCHIVE_READY : ARCHIVE_FAILED);
+  vTaskDelete(nullptr);
+}
+
+void serviceArchiveHistory() {
+  const int state = archiveFetchState.load();
+  if (state == ARCHIVE_READY || state == ARCHIVE_FAILED) {
+    if (archiveFetchGeneration == archiveGeneration && !SIMULATION_MODE && historyServerUrl.length()) {
+      if (state == ARCHIVE_READY) {
+        archiveHistory = archiveCandidate;
+        archiveLoaded = true;
+        FirmwareLog.println("Sparkline: Archivwerte vom History-Server geladen.");
+      } else {
+        archiveRetryDelay = archiveRetryDelay ? min(archiveRetryDelay * 2UL, 300000UL) : 15000UL;
+        FirmwareLog.println("Sparkline: History-Server nicht erreichbar oder Daten ungültig; erneuter Versuch folgt.");
+      }
+    }
+    archiveFetchState.store(ARCHIVE_IDLE);
+  }
+  const uint32_t nowMs = millis();
+  const time_t now = time(nullptr);
+  if (archiveFetchState.load() != ARCHIVE_IDLE || archiveLoaded || SIMULATION_MODE ||
+      !historyServerUrl.length() || WiFi.status() != WL_CONNECTED || now < 1704067200 ||
+      otaActive || otaVerificationPending || modeTransition ||
+      (archiveRetryDelay && uint32_t(nowMs - archiveLastAttempt) < archiveRetryDelay)) return;
+  strlcpy(archiveFetchUrl, historyServerUrl.c_str(), sizeof(archiveFetchUrl));
+  archiveFetchTime = uint32_t(now);
+  archiveFetchGeneration = archiveGeneration;
+  archiveLastAttempt = nowMs;
+  archiveFetchState.store(ARCHIVE_RUNNING);
+  if (xTaskCreate(archiveFetchTask, "archive-history", 16384, nullptr, 1, nullptr) != pdPASS)
+    archiveFetchState.store(ARCHIVE_FAILED);
+}
+
 // The browser receives at most 400 averaged points; every minute remains in
 // PSRAM. Any invalid minute makes its sensor's display bucket a gap.
 void sendTemperatureHistory() {
@@ -1022,7 +1127,33 @@ void sendTemperatureHistory() {
       }
     }
   }
-  json += "]}";
+  json += ']';
+  if (range == "6h" && archiveLoaded && now >= 1704067200) {
+    const uint32_t end = uint32_t(now), begin = end - 21600;
+    json += ",\"archiveIntervalSeconds\":" + String(archiveHistory.interval) + ",\"archiveSeries\":[";
+    bool firstSeries = true;
+    for (size_t sensor = 0; sensor < ArchiveHistory::SENSOR_COUNT; ++sensor) {
+      const auto& series = archiveHistory.sensors[sensor];
+      if (!series.present || !series.size) continue;
+      if (!firstSeries) json += ',';
+      firstSeries = false;
+      json += "{\"id\":" + String(unsigned(sensor)) + ",\"points\":[";
+      bool firstPoint = true;
+      for (size_t i = 0; i < series.size; ++i) {
+        const auto& point = series.points[i];
+        if (point.time < begin || point.time > end) continue;
+        if (!firstPoint) json += ',';
+        firstPoint = false;
+        json += '['; json += String(point.time); json += ',';
+        json += point.value == ArchiveHistory::MISSING ? String("null") : String(float(point.value) / 10.0f, 1);
+        json += ']';
+      }
+      json += "]}";
+    }
+    json += ']';
+    json += ",\"now\":" + String(end);
+  }
+  json += '}';
   server.sendHeader("Cache-Control", "no-store");
   server.send(200, "application/json; charset=utf-8", json);
 }
@@ -2207,6 +2338,7 @@ void loop() {
   // Keine zweisekündige Pause: HTTP-Anfragen zwischen Messungen bearbeiten.
   server.handleClient();
   processWifi();
+  serviceArchiveHistory();
   processRecoveryAp();
   if (ROOF_SENSOR_ENABLED) processRoofHeartbeat();
   processWebSerialMonitor();

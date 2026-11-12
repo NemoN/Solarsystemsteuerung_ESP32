@@ -11,6 +11,7 @@ end = sketch.index('void saveHostname() {', start)
 harness = r'''
 #include "HistoryServerUrl.h"
 #include "Hostname.h"
+#include "ArchiveHistory.h"
 #include <cassert>
 #include <map>
 #include <string>
@@ -20,6 +21,9 @@ struct String : std::string {
  void trim(){const auto a=find_first_not_of(" \t\r\n");if(a==npos){clear();return;}const auto b=find_last_not_of(" \t\r\n");assign(substr(a,b-a+1));}
 };
 bool hostnameStorageReady=false,hostnameUsesDefault=true,otaActive=false,otaVerificationPending=false,modeTransition=false;
+uint32_t archiveGeneration=0,archiveRetryDelay=0;
+bool archiveLoaded=false;
+ArchiveHistory archiveHistory;
 String configuredHostname,activeHostname,historyServerUrl;
 const char* defaultHostname(){return "esp32-heizung";}
 String jsonString(const String& s){return String("\"")+s+"\"";}
@@ -48,13 +52,17 @@ int main(){
  loadHostname();assert(hostnameStorageReady && historyServerUrl.empty());
  server.params={{"url"," http://history.local:8088/ "}};saveHistoryServerUrl();
  assert(server.status==200 && historyServerUrl=="http://history.local:8088/");
+ assert(archiveGeneration==1 && !archiveLoaded);
  assert(hostnamePreferences.getString("history-url","")==historyServerUrl);
+ archiveLoaded=true;archiveRetryDelay=5000;saveHistoryServerUrl();
+ assert(archiveGeneration==1 && archiveLoaded && archiveRetryDelay==5000);
  historyServerUrl="";loadHostname();assert(historyServerUrl=="http://history.local:8088/");
  server.params={{"url","javascript:alert(1)"}};saveHistoryServerUrl();assert(server.status==400 && historyServerUrl=="http://history.local:8088/");
  server.params={{"url","http://new.local/"}};hostnamePreferences.fail=true;saveHistoryServerUrl();assert(server.status==500 && historyServerUrl=="http://history.local:8088/");
  server.params={{"url",""}};saveHistoryServerUrl();assert(server.status==500 && !historyServerUrl.empty());
  hostnamePreferences.fail=false;server.headerValue="wrong";saveHistoryServerUrl();assert(server.status==403);
  server.headerValue="HeatingUI";saveHistoryServerUrl();assert(server.status==200 && historyServerUrl.empty() && !hostnamePreferences.isKey("history-url"));
+ assert(archiveGeneration==2 && !archiveLoaded && archiveRetryDelay==0);
  historyServerUrl="http://old/";loadHostname();assert(historyServerUrl.empty());
 }
 '''

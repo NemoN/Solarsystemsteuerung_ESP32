@@ -179,7 +179,10 @@ grauen Fragezeichen gezeigt. Bei längerem Sensorfehler oder Verbindungsabbruch
 werden keine alten Werte als aktuelle Messungen angezeigt.
 Jede Temperaturkarte zeigt den aktuellen Istwert und darunter eine kleine
 Kurve der letzten sechs Stunden. Die Kurven verwenden den Minutenverlauf im
-PSRAM und zeigen Sensorfehler als Lücken. Die Min-/Max-Werte beziehen sich
+PSRAM und zeigen Sensorfehler als Lücken. Nach einem Neustart ergänzt ein
+konfigurierter History-Server ältere Werte im Archivintervall (normalerweise
+15 Minuten). Die Archivpunkte werden verbunden, fehlende Messungen bleiben
+Lücken; lokale Minutenwerte haben Vorrang. Die Min-/Max-Werte beziehen sich
 auf den dargestellten Zeitraum; die Skala passt sich an die Werte an.
 
 Arduino IDE
@@ -215,8 +218,13 @@ sein. Nach erfolgter Synchronisierung läuft die Uhr bei WLAN-Ausfall weiter.
 Der History-Server holt die vorhandenen Zeiträume mit den normalen Abfragen ab;
 siehe history-server/README.md. Sein Archiv kann Lücken aufweisen, wenn er
 länger als die jeweilige Aufbewahrungszeit des ESP32 nicht abfragt.
-Unter Einstellungen → History-Server kann seine Adresse für einen Menülink
-eingetragen werden. Eine leere Adresse blendet den Link aus.
+Unter Einstellungen → History-Server kann seine Basisadresse für den Menülink
+und die ergänzenden Sparkline-Daten eingetragen werden. Der Abruf startet im
+Hintergrund nach WLAN-Verbindung und Zeitsynchronisierung; bei fehlendem Server
+wird er später wiederholt und die lokale Aufzeichnung läuft weiter. HTTPS
+benötigt ein vom ESP vertrauenswürdig prüfbares Zertifikat. Im Testmodus werden
+keine Archivdaten des History-Servers übernommen. Eine leere Adresse blendet
+den Link aus und deaktiviert den Abruf.
 Webinterface: http://<ESP32-IP>/
 Einstellungen mit WLAN und Firmware: http://<ESP32-IP>/einstellungen
 ESP-Informationen: http://<ESP32-IP>/info
@@ -262,7 +270,9 @@ Für die Diagrammanzeige werden größere Zeiträume auf höchstens 400 Punkte
 zusammengefasst; eine Lücke innerhalb eines Zeitabschnitts bleibt als Lücke
 sichtbar. Bei einem Rücksprung der Uhr werden keine doppelten Minuten abgelegt.
 
-Der Verlauf ist flüchtig und nach einem Neustart oder Stromausfall gelöscht.
+Der lokale Verlauf ist flüchtig und nach einem Neustart oder Stromausfall
+gelöscht. Archivpunkte für die Sparklines werden getrennt gehalten und füllen
+die lokale Verlaufsseite nicht rückwirkend auf.
 Fehlt der PSRAM oder ist er zu klein, meldet die Verlaufsseite das; die
 Temperaturregelung läuft weiter. In der Arduino IDE OPI PSRAM aktivieren.
 Das getrennte Docker-Temperaturarchiv bleibt für dauerhafte Daten zuständig.

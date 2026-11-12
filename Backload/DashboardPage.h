@@ -1839,7 +1839,7 @@ function createPanel(c){
 let sparkData=null,sparkMessage='Verlauf wird geladen …',sparkLoading=false;
 function addTemperatureSparkline(section,c){
   const chart=document.createElement('div');chart.className='sparkline';
-  chart.innerHTML=`<svg viewBox="0 0 360 62" preserveAspectRatio="none" role="img"><defs><linearGradient id="spark-gradient-${c.id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="currentColor" stop-opacity=".22"/><stop offset="100%" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs><path class="sparkline-area" fill="url(#spark-gradient-${c.id})"></path><path class="sparkline-line"></path><g></g></svg><div class="sparkline-info"><span>Letzte 6 Stunden · 1 Min.</span><span class="sparkline-range"></span></div><div class="sparkline-status"></div>`;
+  chart.innerHTML=`<svg viewBox="0 0 360 62" preserveAspectRatio="none" role="img"><defs><linearGradient id="spark-gradient-${c.id}" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="currentColor" stop-opacity=".22"/><stop offset="100%" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs><path class="sparkline-area" fill="url(#spark-gradient-${c.id})"></path><path class="sparkline-line"></path><g></g></svg><div class="sparkline-info"><span class="sparkline-resolution">Letzte 6 Stunden · 1 Min.</span><span class="sparkline-range"></span></div><div class="sparkline-status"></div>`;
   section.querySelector('.readings').after(chart);
   drawSparkline(chart,c.id,c.name);
   return chart;
@@ -1861,30 +1861,44 @@ function showTemperature(p,c){
 function drawSparkline(chart,id,name){
   const svg=chart.querySelector('svg'),path=svg.querySelector('.sparkline-line'),area=svg.querySelector('.sparkline-area'),dots=svg.querySelector('g');
   const status=chart.querySelector('.sparkline-status'),range=chart.querySelector('.sparkline-range');
-  const points=sparkData&&Array.isArray(sparkData.points)?sparkData.points:[];
-  const valid=points.filter(p=>typeof p[id+1]==='number'&&Number.isFinite(p[id+1]));
+  const local=sparkData&&Array.isArray(sparkData.points)?sparkData.points:[];
+  const archived=sparkData&&Array.isArray(sparkData.archiveSeries)?sparkData.archiveSeries.find(s=>s.id===id):null;
+  const interval=Number(sparkData&&sparkData.archiveIntervalSeconds)||900;
+  const firstLocal=local.length?local[0][0]:Infinity;
+  const points=(archived&&Array.isArray(archived.points)?archived.points:[])
+    .filter(p=>Array.isArray(p)&&Number.isFinite(p[0])&&p[0]<firstLocal)
+    .map(p=>({time:p[0],value:p[1],archive:true}))
+    .concat(local.map(p=>({time:p[0],value:p[id+1],archive:false})));
+  const end=Number.isFinite(sparkData&&sparkData.now)?sparkData.now:points.length?points[points.length-1].time:0;
+  const visible=points.filter(p=>p.time>=end-21600&&p.time<=end);
+  const isValid=p=>p&&typeof p.value==='number'&&Number.isFinite(p.value);
+  const connected=(a,b)=>isValid(a)&&isValid(b)&&b.time>a.time&&b.time-a.time<=(a.archive||b.archive?interval:60);
+  const valid=visible.filter(isValid);
+  const resolution=chart.querySelector('.sparkline-resolution');
+  if(resolution)resolution.textContent=visible.some(p=>p.archive&&isValid(p))?'Letzte 6 Stunden · Archiv '+(interval/60)+' Min. / ESP 1 Min.':'Letzte 6 Stunden · 1 Min.';
   path.setAttribute('d','');area.setAttribute('d','');dots.replaceChildren();range.textContent='';
   if(!valid.length){
     svg.setAttribute('hidden','');status.textContent=sparkMessage||'Keine gültigen Werte im Zeitraum.';
     svg.setAttribute('aria-label',name+': '+status.textContent);return;
   }
   svg.removeAttribute('hidden');status.textContent='';
-  const values=valid.map(p=>p[id+1]),min=Math.min(...values),max=Math.max(...values);
+  const values=valid.map(p=>p.value),min=Math.min(...values),max=Math.max(...values);
   const pad=Math.max(.5,(max-min)*.1),low=min-pad,high=max+pad;
-  const end=points[points.length-1][0],start=end-359*60;
-  const x=t=>Math.max(3,Math.min(357,3+(t-start)/(359*60)*354));
+  const start=end-21600;
+  const x=t=>Math.max(3,Math.min(357,3+(t-start)/21600*354));
   const y=v=>4+(high-v)/(high-low)*54;
   let d='',fill='',segment='',count=0,firstX='',lastX='';
   const closeSegment=()=>{if(count>1)fill+=segment+' L'+lastX+' 62 L'+firstX+' 62 Z';segment='';count=0;};
-  for(const p of points){
-    const v=p[id+1];if(typeof v!=='number'||!Number.isFinite(v)){closeSegment();continue;}
-    const px=x(p[0]).toFixed(1),point=px+' '+y(v).toFixed(1),command=(count?' L':' M')+point;
+  for(let i=0;i<visible.length;i++){
+    const p=visible[i],v=p.value;if(!isValid(p)){closeSegment();continue;}
+    if(count&&!connected(visible[i-1],p))closeSegment();
+    const px=x(p.time).toFixed(1),point=px+' '+y(v).toFixed(1),command=(count?' L':' M')+point;
     if(!count)firstX=px;lastX=px;count++;d+=command;segment+=command;
   }
   closeSegment();path.setAttribute('d',d);area.setAttribute('d',fill);
-  for(let i=0;i<points.length;i++){
-    const p=points[i],v=p[id+1],prev=i>0&&typeof points[i-1][id+1]==='number',next=i+1<points.length&&typeof points[i+1][id+1]==='number';
-    if(typeof v==='number'&&Number.isFinite(v)&&!prev&&!next){const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');dot.setAttribute('cx',x(p[0]));dot.setAttribute('cy',y(v));dot.setAttribute('r','2.5');dots.appendChild(dot);}
+  for(let i=0;i<visible.length;i++){
+    const p=visible[i],prev=connected(visible[i-1],p),next=connected(p,visible[i+1]);
+    if(isValid(p)&&!prev&&!next){const dot=document.createElementNS('http://www.w3.org/2000/svg','circle');dot.setAttribute('cx',x(p.time));dot.setAttribute('cy',y(p.value));dot.setAttribute('r','2.5');dots.appendChild(dot);}
   }
   range.textContent=temperatureNumber.format(min)+'–'+temperatureNumber.format(max)+' °C';
   svg.setAttribute('aria-label',name+': Verlauf der letzten sechs Stunden, Minimum '+temperatureNumber.format(min)+', Maximum '+temperatureNumber.format(max)+' Grad Celsius.');
@@ -2197,7 +2211,7 @@ if(document.body.classList.contains('history-page')){
   historyRange.addEventListener('change',loadHistory);window.addEventListener('resize',drawHistory);loadHistory();setInterval(loadHistory,60000);
 }
 if(document.body.classList.contains('info-page')){loadDeviceInfo();setInterval(loadDeviceInfo,5000);}
-if(!document.body.classList.contains('history-page')&&!document.body.classList.contains('settings-page')&&!document.body.classList.contains('info-page')&&!document.body.classList.contains('organigram-page')){loadSparklines();setInterval(loadSparklines,60000);}
+if(!document.body.classList.contains('history-page')&&!document.body.classList.contains('settings-page')&&!document.body.classList.contains('info-page')&&!document.body.classList.contains('organigram-page')){loadSparklines();setTimeout(loadSparklines,5000);setTimeout(loadSparklines,15000);setInterval(loadSparklines,60000);}
 if(document.body.classList.contains('settings-page'))loadInstalledReleaseNotes();
 refresh();
 </script></main></body></html>)HTML";
