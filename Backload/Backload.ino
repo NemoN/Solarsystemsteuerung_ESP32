@@ -21,6 +21,7 @@
 #include "SolarControl.h"
 #include "TemperatureHistory.h"
 #include "ArchiveHistory.h"
+#include "FirmwareRelease.h"
 #include "RelayResponse.h"
 #include "RecoveryApPolicy.h"
 #include "Hostname.h"
@@ -45,7 +46,7 @@
 #include <time.h>
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
-const char* FIRMWARE_VERSION = "3.3.0";
+const char* FIRMWARE_VERSION = "3.4.0";
 // Der AP wird nur für Einrichtung und Wiederherstellung benötigt.
 constexpr bool AP_RECOVERY_ONLY = true;
 
@@ -194,6 +195,13 @@ char archiveFetchUrl[HistoryServerUrl::MAX_LENGTH + 1] = {};
 uint32_t archiveFetchTime = 0, archiveGeneration = 0, archiveFetchGeneration = 0;
 uint32_t archiveLastAttempt = 0, archiveRetryDelay = 0;
 bool archiveLoaded = false;
+Preferences firmwareCheckPreferences;
+bool firmwareCheckStorageReady = false;
+uint32_t firmwareCheckLastAttempt = 0, firmwareCheckStartFailure = 0;
+bool firmwareCheckStartFailed = false;
+char firmwareLatestTag[32] = {}, firmwareCandidateTag[32] = {};
+enum FirmwareCheckState { FIRMWARE_CHECK_IDLE, FIRMWARE_CHECK_RUNNING, FIRMWARE_CHECK_READY, FIRMWARE_CHECK_FAILED };
+std::atomic<int> firmwareCheckState(FIRMWARE_CHECK_IDLE);
 // Dachsensor vorläufig deaktiviert; die Implementierung bleibt für später erhalten.
 constexpr bool ROOF_SENSOR_ENABLED = false;
 WiFiUDP roofUdp;
@@ -1069,7 +1077,7 @@ void serviceArchiveHistory() {
   const time_t now = time(nullptr);
   if (archiveFetchState.load() != ARCHIVE_IDLE || archiveLoaded || SIMULATION_MODE ||
       !historyServerUrl.length() || WiFi.status() != WL_CONNECTED || now < 1704067200 ||
-      otaActive || otaVerificationPending || modeTransition ||
+      otaActive || otaVerificationPending || modeTransition || firmwareCheckState.load() == FIRMWARE_CHECK_RUNNING ||
       (archiveRetryDelay && uint32_t(nowMs - archiveLastAttempt) < archiveRetryDelay)) return;
   strlcpy(archiveFetchUrl, historyServerUrl.c_str(), sizeof(archiveFetchUrl));
   archiveFetchTime = uint32_t(now);
@@ -1078,6 +1086,89 @@ void serviceArchiveHistory() {
   archiveFetchState.store(ARCHIVE_RUNNING);
   if (xTaskCreate(archiveFetchTask, "archive-history", 16384, nullptr, 1, nullptr) != pdPASS)
     archiveFetchState.store(ARCHIVE_FAILED);
+}
+
+void loadFirmwareCheck() {
+  firmwareCheckStorageReady = firmwareCheckPreferences.begin("firmware-check", false);
+  if (!firmwareCheckStorageReady) return;
+  firmwareCheckLastAttempt = firmwareCheckPreferences.getUInt("last", 0);
+  const String saved = firmwareCheckPreferences.getString("latest", "");
+  int comparison = 0;
+  if (FirmwareRelease::compare(saved.c_str(), FIRMWARE_VERSION, comparison))
+    strlcpy(firmwareLatestTag, saved.c_str(), sizeof(firmwareLatestTag));
+}
+
+void firmwareCheckTask(void*) {
+  bool ok = false;
+  WiFiClientSecure client;
+  client.setCACert(GITHUB_ROOT_CERTS);
+  client.setHandshakeTimeout(5);
+  HTTPClient http;
+  http.useHTTP10(true); http.setConnectTimeout(4000); http.setTimeout(5000); http.setReuse(false);
+  http.setUserAgent("Backload-ESP32");
+  const char* url = "https://api.github.com/repos/NemoN/Solarsystemsteuerung_ESP32/releases/latest";
+  if (http.begin(client, url)) {
+    http.addHeader("Accept", "application/vnd.github+json");
+    if (http.GET() == HTTP_CODE_OK) {
+      constexpr size_t MAX_RESPONSE = 32768;
+      const int length = http.getSize();
+      WiFiClient* stream = http.getStreamPtr();
+      const size_t capacity = length > 0 && length <= int(MAX_RESPONSE) ? size_t(length) + 1 :
+        length < 0 ? MAX_RESPONSE + 1 : 0;
+      char* body = capacity ? static_cast<char*>(malloc(capacity)) : nullptr;
+      if (stream && body) {
+        if (length > 0) {
+          ok = readRelayResponse(*stream, size_t(length), body, capacity,
+            []() { return millis(); }, []() { delay(10); }, 8000);
+        } else {
+          size_t used = 0; const uint32_t started = millis();
+          while (uint32_t(millis() - started) < 8000 && used < MAX_RESPONSE) {
+            const int available = stream->available();
+            if (available > 0) {
+              size_t count = size_t(available);
+              if (count > MAX_RESPONSE - used) count = MAX_RESPONSE - used;
+              const int n = stream->read(reinterpret_cast<uint8_t*>(body + used), count);
+              if (n < 0) break;
+              used += size_t(n);
+            } else if (!http.connected()) { ok = used > 0; break; }
+            else delay(10);
+          }
+          body[used] = '\0';
+        }
+        if (ok) ok = FirmwareRelease::parseLatest(body, firmwareCandidateTag, sizeof(firmwareCandidateTag));
+      }
+      free(body);
+    }
+  }
+  http.end();
+  firmwareCheckState.store(ok ? FIRMWARE_CHECK_READY : FIRMWARE_CHECK_FAILED);
+  vTaskDelete(nullptr);
+}
+
+void serviceFirmwareCheck() {
+  const int state = firmwareCheckState.load();
+  if (state == FIRMWARE_CHECK_READY || state == FIRMWARE_CHECK_FAILED) {
+    if (state == FIRMWARE_CHECK_READY) {
+      strlcpy(firmwareLatestTag, firmwareCandidateTag, sizeof(firmwareLatestTag));
+      if (firmwareCheckStorageReady) firmwareCheckPreferences.putString("latest", firmwareLatestTag);
+      FirmwareLog.printf("Firmware-Updateprüfung: neuestes Release %s.\n", firmwareLatestTag);
+    } else FirmwareLog.println("Firmware-Updateprüfung nicht erfolgreich; nächster Versuch nach 24 Stunden.");
+    firmwareCheckState.store(FIRMWARE_CHECK_IDLE);
+  }
+  const time_t now = time(nullptr);
+  if (firmwareCheckState.load() != FIRMWARE_CHECK_IDLE || WiFi.status() != WL_CONNECTED ||
+      now < 1704067200 || !FirmwareRelease::checkDue(uint32_t(now), firmwareCheckLastAttempt) ||
+      otaActive || otaVerificationPending || modeTransition || archiveFetchState.load() == ARCHIVE_RUNNING ||
+      (firmwareCheckStartFailed && uint32_t(millis() - firmwareCheckStartFailure) < 60000UL)) return;
+  firmwareCheckState.store(FIRMWARE_CHECK_RUNNING);
+  if (xTaskCreate(firmwareCheckTask, "firmware-check", 16384, nullptr, 1, nullptr) != pdPASS) {
+    firmwareCheckState.store(FIRMWARE_CHECK_IDLE);
+    firmwareCheckStartFailure = millis(); firmwareCheckStartFailed = true;
+    return;
+  }
+  firmwareCheckStartFailed = false;
+  firmwareCheckLastAttempt = uint32_t(now);
+  if (firmwareCheckStorageReady) firmwareCheckPreferences.putUInt("last", firmwareCheckLastAttempt);
 }
 
 // The browser receives at most 400 averaged points; every minute remains in
@@ -1411,7 +1502,12 @@ void remoteRelayUpdateStatus() {
 void sendStatus() {
   String json;
   json.reserve(1400);
-  json = "{\"version\":\"" + String(FIRMWARE_VERSION) + "\",\"simulation\":" + String(SIMULATION_MODE ? "true" : "false") + ",\"controllers\":[";
+  int firmwareComparison = 0;
+  const bool firmwareKnown = FirmwareRelease::compare(firmwareLatestTag, FIRMWARE_VERSION, firmwareComparison);
+  json = "{\"version\":\"" + String(FIRMWARE_VERSION) + "\",\"firmwareUpdate\":{\"available\":" +
+    (firmwareKnown ? String(firmwareComparison > 0 ? "true" : "false") : String("null")) +
+    ",\"latest\":" + (firmwareKnown ? jsonString(firmwareLatestTag) : String("null")) +
+    ",\"lastAttempt\":" + (firmwareCheckLastAttempt ? String(firmwareCheckLastAttempt) : String("null")) + "},\"simulation\":" + String(SIMULATION_MODE ? "true" : "false") + ",\"controllers\":[";
   for (int i = 0; i < numControllers; i++) {
     TemperatureController& c = controllers[i];
     if (i) json += ',';
@@ -2136,6 +2232,7 @@ void setup() {
       pumpRuntime.restore(&saved, sizeof(saved));
   }
   runtimeStorageHealthy = runtimeReady;
+  loadFirmwareCheck();
   if (!runtimeReady) FirmwareLog.println("Pumpenlaufzeiten nicht verfügbar: Flash-Daten unlesbar oder Speicher nicht erreichbar; Daten werden nicht überschrieben.");
   trackPumpRuntime(true);
   storageReady = preferences.begin(SIMULATION_MODE ? "heating-test" : "heating", false);
@@ -2339,6 +2436,7 @@ void loop() {
   server.handleClient();
   processWifi();
   serviceArchiveHistory();
+  serviceFirmwareCheck();
   processRecoveryAp();
   if (ROOF_SENSOR_ENABLED) processRoofHeartbeat();
   processWebSerialMonitor();

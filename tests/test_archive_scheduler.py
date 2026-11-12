@@ -24,6 +24,8 @@ bool SIMULATION_MODE=false, otaActive=false, otaVerificationPending=false, modeT
 String historyServerUrl;
 enum ArchiveFetchState { ARCHIVE_IDLE, ARCHIVE_RUNNING, ARCHIVE_READY, ARCHIVE_FAILED };
 std::atomic<int> archiveFetchState(ARCHIVE_IDLE);
+constexpr int FIRMWARE_CHECK_RUNNING=1;
+std::atomic<int> firmwareCheckState(0);
 ArchiveHistory archiveHistory, archiveCandidate;
 char archiveFetchUrl[256] = {};
 uint32_t archiveFetchTime=0, archiveGeneration=0, archiveFetchGeneration=0;
@@ -45,7 +47,9 @@ int main() {
   WiFi.connected=true;serviceArchiveHistory();assert(launches==0); // No valid clock.
   epoch=1704067200;SIMULATION_MODE=true;serviceArchiveHistory();assert(launches==0);
   SIMULATION_MODE=false;otaActive=true;serviceArchiveHistory();assert(launches==0);
-  otaActive=false;serviceArchiveHistory();assert(launches==1 && archiveFetchState==ARCHIVE_RUNNING);
+  otaActive=false;firmwareCheckState=FIRMWARE_CHECK_RUNNING;serviceArchiveHistory();assert(launches==0);
+  firmwareCheckState=0;
+  serviceArchiveHistory();assert(launches==1 && archiveFetchState==ARCHIVE_RUNNING);
   serviceArchiveHistory();assert(launches==1);
   archiveFetchState=ARCHIVE_FAILED;serviceArchiveHistory();assert(archiveRetryDelay==15000 && launches==1);
   ms=14999;serviceArchiveHistory();assert(launches==1);

@@ -44,6 +44,12 @@ if command -v pkg-config >/dev/null 2>&1 && pkg-config --exists libcjson; then
     "$project_dir/Backload/ArchiveHistory.cpp" "$project_dir/tests/test_archive_history.cpp" \
     $(pkg-config --libs libcjson) -o "$test_dir/archive-tests"
   "$test_dir/archive-tests"
+  "${CXX:-c++}" -std=c++11 -Wall -Wextra -Werror \
+    -I"$project_dir/Backload" $(pkg-config --cflags libcjson) \
+    "$project_dir/Backload/FirmwareRelease.cpp" "$project_dir/tests/test_firmware_release.cpp" \
+    $(pkg-config --libs libcjson) -o "$test_dir/firmware-release-tests"
+  "$test_dir/firmware-release-tests"
+  python3 "$project_dir/tests/test_firmware_check_scheduler.py"
 else
   printf '%s\n' 'SKIP: Archiv-JSON-Test benötigt libcjson und pkg-config.'
 fi

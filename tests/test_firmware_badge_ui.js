@@ -1,0 +1,18 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs'), vm = require('node:vm'), path = require('node:path');
+const page = fs.readFileSync(path.join(__dirname, '../Backload/DashboardPage.h'), 'utf8');
+const start = page.indexOf('function updateFirmwareVersion('), end = page.indexOf('async function refresh(', start);
+assert(start >= 0 && end > start);
+const nodes = {'firmware-version-text': {}, 'firmware-update-badge': {}};
+const context = vm.createContext({document: {getElementById: id => nodes[id]}});
+vm.runInContext(page.slice(start, end), context);
+context.updateFirmwareVersion('3.3.0', {available: true});
+assert.equal(nodes['firmware-version-text'].textContent, 'Version: 3.3.0');
+assert.equal(nodes['firmware-update-badge'].hidden, false);
+context.updateFirmwareVersion('3.3.0-ohne-ap', {available: false});
+assert.equal(nodes['firmware-version-text'].textContent, 'Version: 3.3.0');
+assert.equal(nodes['firmware-update-badge'].hidden, true);
+context.updateFirmwareVersion('3.3.0', null);
+assert.equal(nodes['firmware-update-badge'].hidden, true);
+assert.match(page, /id="firmware-update-badge"[^>]*href="\/einstellungen#update-section"/);
+console.log('PASS: Update-Hinweis bei neuer Firmware und ausgeblendet bei unbekanntem Status.');

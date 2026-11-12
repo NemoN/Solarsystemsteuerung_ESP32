@@ -285,6 +285,13 @@ enthält noch keine ältere OTA-Version für einen Rückfall.
 
 Der Firmware-Bereich in den Einstellungen bietet die Suche nach GitHub-Releases
 und kann die neueste oder eine ältere Version über das Internet installieren.
+Der ESP prüft selbstständig höchstens einmal je 24 Stunden das neueste stabile
+GitHub-Release. Ist eine neuere Firmware mit passender Datei und Prüfsumme
+verfügbar, erscheint neben der Versionsnummer „Update“ als Link zu den
+Firmware-Einstellungen. Die Prüfung startet nach WLAN-Verbindung und gültiger
+Uhrzeit und speichert ihren Zeitpunkt über Neustarts hinweg. Bei einem Fehler
+bleibt das letzte bekannte Ergebnis erhalten; geprüft wird erst nach weiteren
+24 Stunden. Installiert wird nichts automatisch.
 Sowohl das Gerät, auf
 dem die Webseite geöffnet ist, als auch der ESP benötigen Internetzugang. Der
 ESP prüft die HTTPS-Zertifikate und die SHA-256-Prüfsumme der Release-Datei.

@@ -11,6 +11,7 @@ extern const char INDEX_HTML[] PROGMEM = R"HTML(<!doctype html>
 *{box-sizing:border-box}body{margin:0}main{max-width:860px;margin:auto;padding:36px 22px}
 h1{font-size:clamp(1.7rem,5vw,2.4rem);margin:0 0 12px}h2{font-size:1.25rem;margin:0}
 .dashboard-header{display:flex;align-items:center;justify-content:space-between;gap:18px 28px;flex-wrap:wrap}.header-status{margin-left:auto;text-align:right}
+a.firmware-update-badge{display:inline-block;margin-left:4px;padding:1px 6px;border-radius:4px;background:#d7dcdf;color:#111;font-size:inherit;font-weight:650;line-height:1.4;text-decoration:none}a.firmware-update-badge[hidden]{display:none}
 .page-nav a{display:inline-flex;align-items:center;gap:7px}.nav-icon{width:18px;height:18px;flex:none}body:not(.organigram-page) #organigram-section{display:none}body.organigram-page main>:not(#organigram-section):not(.page-nav):not(.site-footer):not(script):not(#test-message){display:none}
 .nav-brand{display:flex;align-items:center;gap:8px}.nav-brand svg{width:40px;height:40px}.nav-wordmark{display:flex;flex-direction:column;line-height:1}.sensor-title{display:flex;align-items:flex-start;gap:10px;min-width:0}.sensor-icon{width:22px;height:22px;flex:none;color:#00877b}.sensor-icon-sun{color:#936000}.section-icon{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;vertical-align:middle;margin-right:10px}.tank-water-surface{fill:#a2dbee;stroke:#0087ad;stroke-width:1.8}
 p{line-height:1.6}header{margin-bottom:30px}.muted{color:#4e6268}
@@ -89,7 +90,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
   </div>
   </div>
 </nav>
-<header class="dashboard-header"><div class="dashboard-title"><h1>Solarsystemsteuerung</h1><p id="firmware-version" class="muted">Version: …</p></div><div class="header-status"><p class="connection-status" role="status"><span id="connection-dot" class="connection-dot" aria-hidden="true"></span><span id="connection">Verbindung wird aufgebaut …</span></p><p id="device-clock" class="muted">ESP32-Zeit wird geladen …</p><p class="wifi-signal-status muted"><svg id="wifi-signal-bars" class="wifi-signal-bars" viewBox="0 0 25 18" role="img" aria-label="WLAN-Signalstärke nicht verfügbar"><rect x="0" y="15" width="3" height="3" rx=".5"/><rect x="5" y="12" width="3" height="6" rx=".5"/><rect x="10" y="9" width="3" height="9" rx=".5"/><rect x="15" y="6" width="3" height="12" rx=".5"/><rect x="20" y="3" width="3" height="15" rx=".5"/></svg><span id="wifi-signal">WLAN-Signal wird geladen …</span></p></div></header>
+<header class="dashboard-header"><div class="dashboard-title"><h1>Solarsystemsteuerung</h1><p id="firmware-version" class="muted"><span id="firmware-version-text">Version: …</span> <a id="firmware-update-badge" class="firmware-update-badge" href="/einstellungen#update-section" aria-label="Firmware-Update verfügbar" title="Firmware-Update verfügbar" hidden>Update</a></p></div><div class="header-status"><p class="connection-status" role="status"><span id="connection-dot" class="connection-dot" aria-hidden="true"></span><span id="connection">Verbindung wird aufgebaut …</span></p><p id="device-clock" class="muted">ESP32-Zeit wird geladen …</p><p class="wifi-signal-status muted"><svg id="wifi-signal-bars" class="wifi-signal-bars" viewBox="0 0 25 18" role="img" aria-label="WLAN-Signalstärke nicht verfügbar"><rect x="0" y="15" width="3" height="3" rx=".5"/><rect x="5" y="12" width="3" height="6" rx=".5"/><rect x="10" y="9" width="3" height="9" rx=".5"/><rect x="15" y="6" width="3" height="12" rx=".5"/><rect x="20" y="3" width="3" height="15" rx=".5"/></svg><span id="wifi-signal">WLAN-Signal wird geladen …</span></p></div></header>
 <p id="test-message" class="message" role="status"></p>
 <section aria-labelledby="heating-heading">
 <div class="heading"><h2 id="heating-heading"><svg class="section-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C9 6 5 10 5 15a7 7 0 0 0 14 0c0-5-4-9-7-13Z"/></svg>Sommer / Winter · Ölbrenner</h2><span id="heating-badge" class="badge" role="status">Status wird geladen …</span></div>
@@ -2015,6 +2016,10 @@ function updateOrganigram(data){
   }
   document.getElementById('org-direction-off').textContent=hardware&&hardware.directionOff===0?'Kombi → Puffer':hardware&&hardware.directionOff===1?'Puffer → Kombi':'—';
 }
+function updateFirmwareVersion(version,update){
+  document.getElementById('firmware-version-text').textContent='Version: '+(typeof version==='string'?version.replace(/-(?:ohne|mit)-ap$/i,''):'…');
+  document.getElementById('firmware-update-badge').hidden=!(update&&update.available===true);
+}
 async function refresh(){
   const revision=pumpRevision;
   const autoRequestRevision=autoRevision;
@@ -2049,7 +2054,7 @@ async function refresh(){
     clock.textContent=data.clock.available
       ?'ESP32-Zeit: '+data.clock.local+' '+data.clock.zone+(data.wifi.ip?'':' · läuft ohne WLAN weiter')
       :'ESP32-Zeit: noch nicht synchronisiert. WLAN mit Internetzugang erforderlich.';
-    document.getElementById('firmware-version').textContent='Version: '+data.version.replace(/-(?:ohne|mit)-ap$/i,'');
+    updateFirmwareVersion(data.version,data.firmwareUpdate);
     currentFirmwareVersion=data.version;
     for(const c of data.controllers){
       if(!panels.has(c.id))panels.set(c.id,createPanel(c));
