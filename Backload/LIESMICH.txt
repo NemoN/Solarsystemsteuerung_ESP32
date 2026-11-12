@@ -63,9 +63,12 @@ Bei laufender Pumpe werden Panel-Sensorfehler mit dem letzten gültigen
 Panelwert höchstens 60 Sekunden ab dessen Messung überbrückt. Die
 Stoppdifferenz und ein Fehler am Speicherfühler schalten weiterhin ab; mit
 einem alten Panelwert wird die Pumpe nicht gestartet. Die Weboberfläche zeigt
-bei kurzen Ausfällen den letzten gültigen Panelwert und ein graues Fragezeichen;
-ein ununterbrochener Fehler wird nach mehr als 60 Sekunden gemeldet. API, Log und Status-LED zeigen den
-Fehler weiterhin sofort; die Pumpenregelung wird nicht verzögert.
+bei kurzen Ausfällen den letzten gültigen Panelwert und ein graues Fragezeichen.
+Die Differenzanzeige behält bis zu 60 Sekunden Text und Farbe bei und verwendet
+den letzten gültigen Panelwert zusammen mit dem aktuellen Speicherwert; der
+angezeigte Zahlenwert kann sich dadurch ändern. Ein ununterbrochener Fehler wird
+nach mehr als 60 Sekunden gemeldet. API, Log und Status-LED zeigen den Fehler
+weiterhin sofort; die Pumpenregelung wird nicht verzögert.
 Zwischen den Grenzen bleibt der vorherige Pumpenzustand erhalten. Im eigenen
 Handbetrieb kann die Solarpumpe ein- und ausgeschaltet werden; Temperaturregelung
 und Sensorfehler werden dabei übergangen. Beim Aktivieren bleibt sie zunächst

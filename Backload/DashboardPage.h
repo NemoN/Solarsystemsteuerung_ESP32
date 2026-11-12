@@ -960,10 +960,10 @@ function updateSolar(state,simulation){
   const grace=!!(state.sensorGrace&&state.on&&!manual);
   const issue=state.paused?'Pausiert':!manual&&!state.configValid?'Einstellung ungültig':!manual&&!state.sensorsValid&&!grace&&!state.sensorFaultPending?'Sensorfehler':null;
   const waitingForPanel=!manual&&state.sensorFaultPending&&Number.isFinite(state.lastDifference)&&Number.isFinite(state.panelReadingAgeMs)&&state.panelReadingAgeMs<60000;
-  detail.className='muted status-highlight state-'+(issue||waitingForPanel||(grace&&!state.sensorFaultPending)?'warning':manual||state.sensorFaultPending?'neutral':'ok');
+  detail.className='muted status-highlight state-'+(issue||(grace&&!state.sensorFaultPending)?'warning':manual||(state.sensorFaultPending&&!waitingForPanel)?'neutral':'ok');
   badge.className='badge'+(issue?' waiting':state.on?' on':'');
   badge.textContent=issue?issue+' · AUS':state.on?(simulation?'EIN · simuliert':'EIN'):(simulation?'AUS · simuliert':'AUS');
-  const difference=Number.isFinite(state.difference)?'Aktuelle Differenz: '+setpointNumber.format(state.difference)+' K. ':waitingForPanel?'Aktuelle Differenz: '+setpointNumber.format(state.lastDifference)+' K. Panelwert vorübergehend nicht aktualisiert. ':state.sensorFaultPending&&Number.isFinite(state.lastDifference)?'Differenz mit letztem Panelwert: '+setpointNumber.format(state.lastDifference)+' K. ':state.sensorFaultPending?'':'Differenz nicht verfügbar. ';
+  const difference=Number.isFinite(state.difference)?'Aktuelle Differenz: '+setpointNumber.format(state.difference)+' K. ':waitingForPanel?'Aktuelle Differenz: '+setpointNumber.format(state.lastDifference)+' K. ':state.sensorFaultPending&&Number.isFinite(state.lastDifference)?'Differenz mit letztem Panelwert: '+setpointNumber.format(state.lastDifference)+' K. ':state.sensorFaultPending?'':'Differenz nicht verfügbar. ';
   detail.textContent=(manual?'Handbetrieb aktiv. ':'Automatik aktiv. ')+difference+
     (state.paused?'Update oder Neustart läuft.':manual&&!state.sensorsValid&&!state.sensorFaultPending?'Sensorfehler wird im Handbetrieb übergangen.':!state.configValid?'Bitte Einschaltdifferenz erneut speichern.':grace&&!state.sensorFaultPending?'Panel-Sensorfehler: Lauf wird mit letztem gültigen Wert höchstens 60 Sekunden überbrückt.':!state.sensorsValid&&!state.sensorFaultPending?'Solarpanel und Kombispeicher unten prüfen.':'');
   if(!solarDirty&&!solarBusy&&!solarForm.contains(document.activeElement)&&Number.isFinite(state.differenceStart))solarForm.elements.start.value=inputNumber(state.differenceStart);

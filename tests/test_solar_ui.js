@@ -23,8 +23,14 @@ context.updateSolar({on:false,configValid:true,sensorsValid:false,paused:false,d
 assert.equal(get('solar-badge').textContent,'Sensorfehler · AUS');assert.match(get('solar-detail').className,/state-warning/);
 context.updateSolar({on:true,configValid:true,sensorsValid:false,sensorGrace:true,paused:false,difference:null},false);
 assert.equal(get('solar-badge').textContent,'EIN');assert.match(get('solar-detail').textContent,/Panel-Sensorfehler.*60 Sekunden/);
-context.updateSolar({on:true,configValid:true,sensorsValid:false,sensorGrace:true,sensorFaultPending:true,lastDifference:3.2,panelReadingAgeMs:59999,paused:false},false);
-assert.match(get('solar-detail').textContent,/Aktuelle Differenz: 3,2 K/);assert.match(get('solar-detail').textContent,/vorübergehend nicht aktualisiert/);assert.match(get('solar-detail').className,/state-warning/);
+for(const on of [true,false]){
+ context.updateSolar({on,configValid:true,sensorsValid:true,difference:-1.3,paused:false},false);
+ const normalText=get('solar-detail').textContent,normalClass=get('solar-detail').className;
+ for(const age of [0,59999]){
+  context.updateSolar({on,configValid:true,sensorsValid:false,sensorGrace:on,sensorFaultPending:true,lastDifference:-1.3,panelReadingAgeMs:age,paused:false},false);
+  assert.equal(get('solar-detail').textContent,normalText);assert.equal(get('solar-detail').className,normalClass);
+ }
+}
 context.updateSolar({on:false,configValid:true,sensorsValid:false,sensorFaultPending:true,lastDifference:3.3,panelReadingAgeMs:60000,paused:false},false);
 assert.match(get('solar-detail').textContent,/Differenz mit letztem Panelwert: 3,3 K/);assert.match(get('solar-detail').className,/state-neutral/);
 context.updateSolar({on:true,configValid:true,sensorsValid:true,difference:3.4,panelReadingAgeMs:0,paused:false},false);
