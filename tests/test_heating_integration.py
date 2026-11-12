@@ -45,8 +45,8 @@ int pins[40];
 std::vector<std::pair<int,int>> writes;
 void digitalWrite(int pin,int value) {
   pins[pin]=value; writes.emplace_back(pin,value);
-  // Zu keinem Zeitpunkt dürfen Ölfreigabe und Vorladung gleichzeitig anliegen.
-  assert(!(pins[OIL_BURNER_PIN]==LOW && pins[PUMP_ENABLE_PIN]==LOW &&
+  // Die Ölsperre gilt für die Automatik, im Handbetrieb ist sie überbrückbar.
+  assert(manualControl || !(pins[OIL_BURNER_PIN]==LOW && pins[PUMP_ENABLE_PIN]==LOW &&
     pins[PUMP_DIRECTION_PIN]==HIGH));
 }
 struct MockLog {
@@ -58,7 +58,7 @@ void printMeasurementHeader() {}
 void serviceSolarPump() {}
 const char* pumpDirectionName(PumpDirection) { return "test"; }
 struct TemperatureController { bool valid,configValid; float currentTemp,targetTemp; };
-TemperatureController controllers[5]={{true,true,68,68},{false,false,NAN,0},
+TemperatureController controllers[5]={{true,true,68,68},{true,false,55,0},
   {true,false,60,0},{false,false,NAN,0},{false,false,NAN,0}};
 '''
 harness += "\n".join(function(signature) for signature in (
@@ -67,98 +67,45 @@ harness += "\n".join(function(signature) for signature in (
 harness += r'''
 int main() {
   for (int& pin:pins) pin=HIGH;
-  // Sommer: oben und Puffer regeln; Mitte/unten/Solar dürfen fehlen.
-  updateAutomaticPump();
-  assert(pump.on() && pins[PUMP_ENABLE_PIN]==LOW && runtimePumpOn && runtimePumpDirection==PumpDirection::CombiToBuffer);
-  controllers[1]={true,false,800,0};
-  controllers[3]={true,false,-150,0};
-  controllers[4]={true,false,800,0};
-  updateAutomaticPump(); assert(pump.on());
-  controllers[2].valid=false;
-  updateAutomaticPump(); assert(!pump.on());
-  controllers[2].valid=true;
-  updateAutomaticPump(); assert(pump.on());
-  controllers[0].valid=false;
-  updateAutomaticPump(); assert(!pump.on());
-  controllers[0].valid=true;
-  updateAutomaticPump(); assert(pump.on());
-
-  // Winter sperrt eine laufende Vorladung vor dem Einschalten des Brennerrelais.
-  writes.clear(); applyHeatingMode(true);
+  // Einlagerung nutzt oben, Mindesttemperatur immer Mitte.
+  updateAutomaticPump(); assert(pump.on() && pump.direction()==PumpDirection::CombiToBuffer);
+  controllers[1].currentTemp=34;updateAutomaticPump();assert(!pump.on());
+  controllers[1].currentTemp=55;updateAutomaticPump();assert(pump.on());
+  controllers[0].valid=false;updateAutomaticPump();assert(!pump.on());
+  controllers[0].valid=true;updateAutomaticPump();assert(pump.on());
+  // Ölfreigabe stoppt automatische Einlagerung, bevor das Relais einschaltet.
+  writes.clear();applyHeatingMode(true);
   assert(!pump.on() && pins[PUMP_ENABLE_PIN]==HIGH && pins[OIL_BURNER_PIN]==LOW);
   assert(writes.front()==std::make_pair(PUMP_ENABLE_PIN,HIGH));
-  assert(writes.back()==std::make_pair(OIL_BURNER_PIN,LOW));
-  updateAutomaticPump(); assert(!pump.on());
-
-  // Auch direkte Handbefehle umgehen die Sperre nicht.
-  manualControl=true;manualPumpOn=true;
-  pump.command(true,PumpDirection::CombiToBuffer,now);
-  servicePump();assert(!pump.on() && !manualPumpOn);
-  manualControl=false;
-
-  // Rückladung bei 37/45°C bleibt im Winter möglich, inklusive Umkehrpause.
-  controllers[1].currentTemp=37;controllers[2].currentTemp=45;
-  now=100;updateAutomaticPump();assert(!pump.on());
-  now=2099;servicePump();assert(!pump.on());
-  now=2100;servicePump();assert(!pump.on());
-  now=2200;servicePump();assert(pump.on() && runtimePumpOn && runtimePumpDirection==PumpDirection::BufferToCombi);
-  assert(pump.direction()==PumpDirection::BufferToCombi && pins[OIL_BURNER_PIN]==LOW);
-  manualControl=true;manualDirection=PumpDirection::BufferToCombi;manualPumpOn=true;
-  servicePump();assert(pump.on() && manualPumpOn);
-  manualControl=false;
-  // Beim Fühlerwechsel muss eine Rückladung die Startdifferenz erneut erfüllen.
-  controllers[0].currentTemp=44;applyHeatingMode(false);
-  assert(!pump.on() && pins[OIL_BURNER_PIN]==HIGH);
+  // Handbetrieb erlaubt ausdrücklich beide Ausgänge gleichzeitig.
+  manualControl=true;manualPumpOn=true;manualDirection=PumpDirection::CombiToBuffer;
+  servicePump();pump.command(true,manualDirection,now);servicePump();
+  assert(pump.on() && pins[PUMP_ENABLE_PIN]==LOW && pins[OIL_BURNER_PIN]==LOW);
+  applyHeatingMode(false);assert(pump.on() && pins[OIL_BURNER_PIN]==HIGH);
   applyHeatingMode(true);assert(pump.on() && pins[OIL_BURNER_PIN]==LOW);
-  // Winter verwendet Mitte: oben darf fehlen, ein Fehler an Mitte stoppt.
-  controllers[0].valid=false;updateAutomaticPump();assert(pump.on());
-  controllers[1].valid=false;updateAutomaticPump();assert(!pump.on());
-  controllers[1].valid=true;updateAutomaticPump();assert(pump.on());
-  controllers[0].valid=true;
-  controllers[0].configValid=false;updateAutomaticPump();assert(pump.on());
-  controllers[0].configValid=true;
-  controllers[1].currentTemp=41;updateAutomaticPump();assert(pump.on());
+  // Wechsel zurück zu Automatik stoppt Vorladung bei aktiver Ölfreigabe.
+  manualControl=false;pump.command(false,manualDirection,now);servicePump();updateAutomaticPump();assert(!pump.on());
+  // Rückladung nutzt Mitte unabhängig von Ölfreigabe und oberem Sensor.
+  pump=PumpControl(PumpDirection::BufferToCombi);automaticControl.reset();
+  controllers[0].valid=false;controllers[1].currentTemp=37;controllers[2].currentTemp=45;
+  updateAutomaticPump();assert(pump.on() && pump.direction()==PumpDirection::BufferToCombi);
   controllers[1].currentTemp=42;updateAutomaticPump();assert(!pump.on());
   controllers[1].currentTemp=37;updateAutomaticPump();assert(pump.on());
-
-  // Unbekannte Betriebsart: Fühlerwahl unbekannt, Automatik und Brenner AUS.
-  heatingModeValid=false;servicePump();assert(pump.on() && pins[OIL_BURNER_PIN]==HIGH);
-  updateAutomaticPump();assert(!pump.on());
-  heatingModeValid=true;
-  otaActive=true;servicePump();assert(pins[OIL_BURNER_PIN]==HIGH);
-  otaActive=false;servicePump();assert(pins[OIL_BURNER_PIN]==LOW);
-  otaVerificationPending=true;servicePump();assert(pins[OIL_BURNER_PIN]==HIGH);
-  otaVerificationPending=false;
-  modeTransition=true;servicePump();assert(pins[OIL_BURNER_PIN]==HIGH);
+  controllers[1].valid=false;updateAutomaticPump();assert(!pump.on());
+  controllers[1].valid=true;updateAutomaticPump();assert(pump.on());
+  controllers[2].currentTemp=34;updateAutomaticPump();assert(!pump.on());
+  controllers[2].currentTemp=45;updateAutomaticPump();assert(pump.on());
+  heatingModeValid=false;updateAutomaticPump();assert(!pump.on());
+  heatingModeValid=true;otaActive=true;servicePump();assert(pins[OIL_BURNER_PIN]==HIGH);
+  otaActive=false;otaVerificationPending=true;servicePump();assert(pins[OIL_BURNER_PIN]==HIGH);
+  otaVerificationPending=false;modeTransition=true;servicePump();assert(pins[OIL_BURNER_PIN]==HIGH);
   modeTransition=false;
-
-  // Simulation berücksichtigt die Sperre, lässt sämtliche physischen Relais aus.
-  pump=PumpControl();automaticControl.reset();
+  // Simulation schaltet keine physischen Relais.
+  heatingModeValid=true;SIMULATION_MODE=true;pump=PumpControl(PumpDirection::BufferToCombi);
   for (int& pin:pins) pin=HIGH;
-  SIMULATION_MODE=true;
-  controllers[1].currentTemp=37;
-  updateAutomaticPump();now+=2200;servicePump();now+=100;servicePump();
-  assert(pump.on() && !runtimePumpOn && pins[PUMP_ENABLE_PIN]==HIGH && pins[PUMP_DIRECTION_PIN]==HIGH &&
-    pins[OIL_BURNER_PIN]==HIGH);
-  // Die neue Grenze gilt nicht im Handbetrieb, aber sofort wieder in Automatik.
-  SIMULATION_MODE=false; heatingModeValid=true; oilBurnerEnabled=false;
-  pump=PumpControl(PumpDirection::BufferToCombi); automaticControl.reset();
-  controllers[0].valid=true; controllers[0].currentTemp=20;
-  controllers[2].valid=true; controllers[2].currentTemp=30;
-  automaticThresholds=AutomaticThresholds(8,35);
-  manualControl=true; manualDirection=PumpDirection::BufferToCombi; manualPumpOn=true;
-  pump.command(true,manualDirection,now); servicePump(); updateAutomaticPump();
-  assert(pump.on() && pins[PUMP_ENABLE_PIN]==LOW);
-  manualControl=false; updateAutomaticPump();
-  assert(!pump.on() && pins[PUMP_ENABLE_PIN]==HIGH);
-  // Beide Mindesttemperaturen gelten getrennt beim Start und im Betrieb.
-  automaticThresholds=AutomaticThresholds(8,35,40);
-  controllers[2].currentTemp=50;updateAutomaticPump();assert(!pump.on()); // Kombi 20
-  controllers[0].currentTemp=35;controllers[2].currentTemp=43;updateAutomaticPump();assert(pump.on());
-  automaticThresholds.minimumBuffer=44;updateAutomaticPump();assert(!pump.on());
-  automaticThresholds.minimumBuffer=40;updateAutomaticPump();assert(pump.on());
-  controllers[0].currentTemp=34.9f;updateAutomaticPump();assert(!pump.on());
-  puts("PASS: Sommer-/Winterfühler, 3K-Stopp, Sensorfehler, Ölsperre, GPIO-Schaltreihenfolge und Simulation.");
+  automaticControl.reset();updateAutomaticPump();
+  assert(pump.on() && !runtimePumpOn && pins[PUMP_ENABLE_PIN]==HIGH && pins[OIL_BURNER_PIN]==HIGH);
+  puts("PASS: Richtungssensoren, Mindesttemperaturen, Ölsperre, Handbetrieb und Simulation.");
 }
 '''
 

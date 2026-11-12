@@ -58,6 +58,7 @@ fi
   "$project_dir/tests/test_history_server_url.cpp" -o "$test_dir/history-server-url-tests"
 "$test_dir/history-server-url-tests"
 python3 "$project_dir/tests/test_history_server_settings.py"
+python3 "$project_dir/tests/test_burner_label.py"
 node "$project_dir/tests/test_history_server_ui.js"
 node "$project_dir/tests/test_sensor_status_ui.js"
 

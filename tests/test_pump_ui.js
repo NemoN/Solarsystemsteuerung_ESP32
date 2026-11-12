@@ -6,7 +6,7 @@ const nodes = new Map();
 function node(id) {
   if (!nodes.has(id)) {
     const classes = new Set();
-    nodes.set(id, {style:{}, attributes:{}, classes,
+    nodes.set(id, {style:{}, attributes:{}, dataset:{}, classes,
       setAttribute(key, value) { this.attributes[key] = value; },
       classList:{add:key=>classes.add(key), toggle:(key,on)=>on?classes.add(key):classes.delete(key)},
     });
@@ -19,7 +19,7 @@ const context = vm.createContext({
   pumpBadge:node('pump-badge'), pumpMessage:node('pump-message'),
   heatingSwitch:node('heating-switch'), heatingMessage:node('heating-message'),
   pumpState:null, pumpBusy:false, pumpRevision:0,
-  heatingState:null, heatingBusy:false, heatingRevision:0, autoRevision:0, simulationEnabled:true,
+  heatingState:null, heatingBusy:false, heatingRevision:0, autoRevision:0, simulationEnabled:true, confirm:()=>true,
 });
 function load(start, end) {
   const a = sketch.indexOf(start), b = sketch.indexOf(end, a);
@@ -49,9 +49,15 @@ function commandResponse(result) {
   context.updatePump(offForward);
   assert.equal(node('.pump-flow').attributes['data-direction'], 'ccw');
   assert(node('.pump-flow').classes.has('stopped'));
-  assert.equal(node('pump-switch').disabled, true);
+  assert.equal(node('pump-switch').disabled, false);
   assert.equal(node('direction-switch').disabled, false);
-  assert.match(node('pump-help').textContent, /Ölbrenner freigegeben.*Richtung EIN.*Puffer → Kombi/);
+  assert.match(node('pump-help').textContent, /Ölbrenner freigegeben/);
+  let warnings=0;context.confirm=()=>{warnings++;return false;};
+  await context.changePump('power');assert.equal(warnings,1);assert.equal(calls.length,0);
+  context.confirm=()=>{warnings++;return true;};
+  commandResponse(state({on:true,requestedOn:true}));await context.changePump('power');
+  assert.equal(warnings,2);assert.equal(calls.at(-1).options.body.get('value'),'1');
+  context.updatePump(offForward);
   assert.match(node('pump-direction-state').textContent, /Förderrichtung: Kombispeicher/);
 
   // Im Winter erst die erlaubte Richtung wählen, dann starten; Ausschalten bleibt möglich.
@@ -66,7 +72,7 @@ function commandResponse(result) {
   assert(!node('.pump-flow').classes.has('stopped'));
   assert.match(node('pump-flow-title').textContent, /Rechtslauf/);
   assert.equal(node('pump-switch').disabled, false);
-  assert.equal(node('direction-switch').disabled, true);
+  assert.equal(node('direction-switch').disabled, false);
   commandResponse(offReturn);
   await context.changePump('power');
   assert.equal(calls.at(-1).options.body.get('value'), '0');
@@ -99,7 +105,7 @@ function commandResponse(result) {
   assert.match(node('pump-message').textContent, /Befehl abgelehnt:.*Ölbrenner/);
   assert.match(node('pump-direction-state').textContent, /^Förderrichtung:/);
   assert.equal(node('pump-badge').textContent, 'Backloadpumpe: AUS');
-  assert.equal(node('pump-switch').disabled, true);
+  assert.equal(node('pump-switch').disabled, false);
   assert.equal(node('direction-switch').disabled, false);
 
   // Verlorene POST-Antwort: nur lesend prüfen, kein zweiter Schaltauftrag.

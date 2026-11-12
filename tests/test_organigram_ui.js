@@ -20,7 +20,7 @@ const data={simulation:true,heating:{winter:true,configValid:true},
   solar:{on:true,configValid:true,sensorsValid:true,paused:false,differenceStart:5,differenceStop:1,difference:6},
   hardware:{clk:38,mosi:11,miso:13,pump:3,direction:8,solar:18,oil:17,led:2,rgbLed:48,directionOff:0}};
 context.updateOrganigram(data);
-assert.equal(get('org-status').textContent,'Testmodus · Winter · Kombi Mitte');
+assert.equal(get('org-status').textContent,'Testmodus · Ölbrenner freigegeben');
 assert.equal(get('org-solar-state').textContent,'EIN · simuliert');
 assert.equal(get('org-solar-panel').textContent,'46 °C');
 assert.equal(get('org-solar-tank').textContent,'40 °C');
@@ -55,7 +55,7 @@ assert.equal(get('org-led').textContent,'2');
 assert.equal(get('org-rgb-led').textContent,'48');
 data.hardware.direction=12;data.hardware.directionOff=1;data.controllers[0].csPin=14;data.heating.winter=false;
 context.updateOrganigram(data);
-assert.equal(get('org-status').textContent,'Testmodus · Sommer · Kombi oben');
+assert.equal(get('org-status').textContent,'Testmodus · Ölbrenner gesperrt');
 assert.equal(get('org-mode-summer').className,'org-season is-active');
 assert.equal(get('org-mode-winter-state').textContent,'');
 assert.equal(get('org-relay-direction').textContent,'12');assert.equal(get('org-cs-0').textContent,'14');

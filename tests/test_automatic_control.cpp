@@ -11,6 +11,15 @@ int main() {
   const auto charge = TransferDemand::CombiToBuffer;
   const auto discharge = TransferDemand::BufferToCombi;
 
+  // Beide Richtungssensoren unterscheiden sich, die Mindestgrenze nutzt Mitte.
+  assert(automatic.update(true, true, true, 70, true, 40, true, 50, 68, t) == charge);
+  assert(automatic.update(true, true, true, 70, true, 34, true, 50, 68, t) == off);
+  assert(automatic.update(true, false, false, NAN, true, 37, true, 45, 68, t) == discharge);
+  assert(automatic.update(true, false, true, 75, true, 42, true, 45, 68, t) == off);
+  assert(automatic.update(true, true, true, 70, false, NAN, true, 50, 68, t) == off);
+  assert(automatic.update(true, true, true, 70, true, 40, false, NAN, 68, t) == off);
+  automatic.reset();
+
   // Start genau am Sollwert, ohne zusätzlichen Abstand. Beide Bedingungen nötig.
   assert(automatic.update(true, true, true, 67.9f, true, 50, 68, t) == off);
   assert(automatic.update(true, true, true, 68, true, 60.1f, 68, t) == off);

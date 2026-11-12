@@ -16,6 +16,9 @@ assert(!server.includes('server().on("/wlan"') && !server.includes('server().on(
 assert(server.includes('server().on("/regelungsuebersicht"') && !server.includes('server().on("/organigramm"'));
 assert.match(server, /server\(\)\.onNotFound\([\s\S]*?send\(404/);
 assert.match(styles, /body\.settings-page \.backload #wifi-section/);
+assert.match(styles, /body\.settings-page \.backload #burner-name-section/);
+assert.match(styles, /:not\(#burner-name-section\)/);
+assert.match(nav, /href="#burner-name-section"/);
 assert.match(styles, /body\.settings-page \.backload #update-section/);
 assert.match(styles, /a\[aria-current="page"\]/);
 // Mobile Navigation und CSS müssen denselben Umschaltpunkt verwenden.

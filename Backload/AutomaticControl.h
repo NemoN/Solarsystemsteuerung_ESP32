@@ -19,7 +19,7 @@ struct AutomaticThresholds {
 
 // Zustandsbehaftete Temperaturregelung; keine GPIO- oder Zeitabhängigkeit.
 // allowCharging sperrt ausschließlich die Einlagerung. Die Rückladung bleibt
-// unabhängig davon aktiv. Relais 4 sperrt die Einlagerung zusätzlich bei manueller Steuerung.
+// unabhängig davon aktiv. Mindestwerte beziehen sich auf Kombi Mitte und Puffer.
 class AutomaticControl {
 public:
   static constexpr float MIN_CHARGE_TARGET = 68.0f;
@@ -32,6 +32,9 @@ public:
   static bool readSavedThresholds(const float saved[5], AutomaticThresholds& thresholds);
   TransferDemand update(bool enabled, bool allowCharging, bool combiValid,
                         float combi, bool bufferValid, float buffer,
+                        float target, const AutomaticThresholds& thresholds);
+  TransferDemand update(bool enabled, bool allowCharging, bool topValid, float top,
+                        bool middleValid, float middle, bool bufferValid, float buffer,
                         float target, const AutomaticThresholds& thresholds);
   void reset() { demand_ = TransferDemand::Off; }
   TransferDemand demand() const { return demand_; }

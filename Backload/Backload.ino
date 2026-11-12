@@ -46,7 +46,7 @@
 #include <time.h>
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
-const char* FIRMWARE_VERSION = "3.4.1";
+const char* FIRMWARE_VERSION = "3.5.0";
 // Der AP wird nur für Einrichtung und Wiederherstellung benötigt.
 constexpr bool AP_RECOVERY_ONLY = true;
 
@@ -132,8 +132,9 @@ bool solarGraceActive = false;
 SensorFaultDelay solarPanelFaultDisplay;
 float solarStartDifference = SolarControl::DEFAULT_START;
 bool solarSettingsValid = true;
-bool oilBurnerEnabled = false; // Sommer = AUS, Winter = AN; keine Flammenrückmeldung.
+bool oilBurnerEnabled = false; // Freigabe; keine Flammenrückmeldung.
 bool heatingModeValid = false;
+String oilBurnerLabel = "Ölbrenner";
 bool autoSettingsValid = true;
 
 // Active-Low-Relais: LOW = AN, HIGH = AUS.
@@ -146,7 +147,7 @@ struct ControllerLimits {
 };
 
 // Der gemeinsame Einlagerungssollwert liegt aus Kompatibilitätsgründen in c0.
-// Er gilt für den durch Sommer/Winter gewählten Kombifühler. Das c0-Format enthält
+// Er gilt für Kombi oben bei Einlagerung. Das c0-Format enthält
 // weiterhin einen ungenutzten per-Sensor-Hysteresewert zur NVS-Kompatibilität.
 // Die wirksame Startdifferenz ist automaticThresholds.differenceStart (5–10 K).
 const ControllerLimits ROOM_HEATING_LIMITS = {
@@ -359,9 +360,10 @@ void servicePump() {
   // Beim Sperren des Brenners zuerst Relais 4 ausschalten, bevor Einlagerung
   // wieder möglich wird. Beim Freigeben gilt unten die umgekehrte Reihenfolge.
   if (!oilBurnerRelayOn()) digitalWrite(OIL_BURNER_PIN, HIGH);
-  // Die Sperre sitzt vor sämtlichen GPIO-Ausgaben und gilt auch für Handbefehle.
-  pump.setChargingAllowed(chargingAllowed(), millis());
-  if (!chargingAllowed() && manualDirection == PumpDirection::CombiToBuffer)
+  // Im Handbetrieb kann bei bekannter Freigabe auch mit Ölbrenner gepumpt werden.
+  const bool allowPumpCharging = manualControl ? heatingModeValid : chargingAllowed();
+  pump.setChargingAllowed(allowPumpCharging, millis());
+  if (!allowPumpCharging && manualDirection == PumpDirection::CombiToBuffer)
     manualPumpOn = false;
   // Immer zuerst ausschalten; die Richtung wird ausschließlich bei AUS verändert.
   if (!SIMULATION_MODE) {
@@ -373,7 +375,7 @@ void servicePump() {
   if (physicalOn != runtimePumpOn || (physicalOn && pump.direction() != runtimePumpDirection)) {
     runtimePumpOn = physicalOn; runtimePumpDirection = pump.direction(); trackPumpRuntime(true);
   } else trackPumpRuntime();
-  // Ein Vorladeauftrag ist bereits gestoppt, bevor Relais 4 einschalten kann.
+  // Im Automatikbetrieb ist die Einlagerung vor der Ölfreigabe gestoppt.
   if (oilBurnerRelayOn()) digitalWrite(OIL_BURNER_PIN, LOW);
 
   static bool lastOn = false;
@@ -396,11 +398,12 @@ void servicePump() {
 void updateAutomaticPump() {
   if (modeTransition || otaActive || otaVerificationPending) return;
   if (manualControl) { automaticControl.reset(); return; }
-  TemperatureController& combi = controllers[oilBurnerEnabled ? 1 : 0];
+  TemperatureController& top = controllers[0];
+  TemperatureController& middle = controllers[1];
   TemperatureController& buffer = controllers[2];
   TemperatureController& settings = controllers[0];
   const TransferDemand demand = automaticControl.update(AUTOMATIC_PUMP_CONFIGURED && storageReady && autoSettingsValid && heatingModeValid,
-    chargingAllowed(), combi.valid, combi.currentTemp,
+    chargingAllowed(), top.valid, top.currentTemp, middle.valid, middle.currentTemp,
     buffer.valid, buffer.currentTemp, settings.configValid ? settings.targetTemp : NAN, automaticThresholds);
   PumpDirection direction = pump.direction();
   if (demand == TransferDemand::CombiToBuffer) direction = PumpDirection::CombiToBuffer;
@@ -493,7 +496,7 @@ void measureTemperatures() {
             unsigned(reading.configBefore), unsigned(reading.configWithBias), unsigned(reading.configAfterConversion),
             (i == 3 || i == 4) ? (solarControl.manual() ? " | Solarpumpe: Handbetrieb aktiv" : solarGraceActive ? " | Solarpumpe: begrenzte Fehlerüberbrückung" : " | Solarregelung: Solarpumpe AUS") :
             manualControl ? " | Manuelle Steuerung der Backloadpumpe aktiv" :
-            (i == (oilBurnerEnabled ? 1 : 0) || i == 2) ? " | Automatik: Backloadpumpe AUS" : " | kein Backload-Regelfühler");
+            (i <= 2) ? " | Automatik: betroffene Förderrichtung gesperrt" : " | kein Backload-Regelfühler");
         }
       } else {
         if (i == 0) {
@@ -958,9 +961,9 @@ String pumpStatusJson() {
 }
 
 String automaticStatusJson() {
-  // Ein Schalter wählt den Kombifühler und steuert die Ölbrennerfreigabe.
   return "{\"winter\":" + String(oilBurnerEnabled ? "true" : "false") +
-    ",\"controlSensorId\":" + String(oilBurnerEnabled ? 1 : 0) +
+    ",\"controlSensorId\":" + String(pump.direction() == PumpDirection::BufferToCombi ? 1 : 0) +
+    ",\"chargeSensorId\":0,\"returnSensorId\":1,\"minimumCombiSensorId\":1" +
     String(",\"allowCharging\":") + String(chargingAllowed() ? "true" : "false") +
     ",\"configValid\":" + String(storageReady && autoSettingsValid && heatingModeValid ? "true" : "false") +
     ",\"targetOffset\":0" +
@@ -997,6 +1000,7 @@ String solarStatusJson() {
 String heatingStatusJson() {
   return "{\"winter\":" + String(oilBurnerEnabled ? "true" : "false") +
     ",\"configValid\":" + String(heatingModeValid ? "true" : "false") +
+    ",\"label\":" + jsonString(oilBurnerLabel) +
     ",\"relayOn\":" + String(oilBurnerRelayOn() ? "true" : "false") + "}";
 }
 
@@ -1688,7 +1692,7 @@ void applyHeatingMode(bool next) {
     pump.command(false, pump.direction(), millis());
   }
   servicePump(); // Sperre und Pumpe zuerst anwenden, dann Ölfreigabe schalten.
-  updateAutomaticPump(); // Gewählten Fühler und mögliche Rückladung neu prüfen.
+  updateAutomaticPump();
 }
 
 void saveHeatingMode() {
@@ -1700,16 +1704,30 @@ void saveHeatingMode() {
   }
   const String value = server.arg("winter");
   if (server.args() != 1 || (value != "0" && value != "1")) {
-    server.send(400, "text/plain; charset=utf-8", "Ungültige Sommer-/Winterumschaltung."); return;
+    server.send(400, "text/plain; charset=utf-8", "Ungültige Ölbrennerfreigabe."); return;
   }
   const bool next = value == "1";
   if (!storageReady || preferences.putBool("oil1", next) != 1) {
     server.send(500, "text/plain; charset=utf-8", "Betriebsart konnte nicht gespeichert werden. Schaltung unverändert."); return;
   }
   applyHeatingMode(next);
-  FirmwareLog.printf("%sBetriebsart: %s | Ölbrennerfreigabe: %s | Relais 4: %s | Kombi -> Puffer: %s.\n\n",
-    SIMULATION_MODE ? "[SIMULATION] " : "", next ? "Winter" : "Sommer", next ? "AN" : "AUS",
+  FirmwareLog.printf("%sÖlbrennerfreigabe: %s | Relais 4: %s | Automatik Kombi -> Puffer: %s.\n\n",
+    SIMULATION_MODE ? "[SIMULATION] " : "", next ? "AN" : "AUS",
     oilBurnerRelayOn() ? "AN" : "AUS", chargingAllowed() ? "temperaturabhängig möglich" : "gesperrt");
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "application/json", heatingStatusJson());
+}
+
+void saveOilBurnerLabel() {
+  if (server.header("X-Requested-With") != "HeatingUI") { server.send(403, "text/plain", "Bitte das Webinterface verwenden."); return; }
+  if (server.args() != 1 || !server.hasArg("label")) { server.send(400, "text/plain", "Ungültige Anfrage."); return; }
+  String next = server.arg("label"); next.trim();
+  if (!next.length() || next.length() > 40) { server.send(400, "text/plain; charset=utf-8", "Bezeichnung muss 1 bis 40 Bytes lang sein."); return; }
+  for (unsigned i = 0; i < next.length(); ++i) if ((uint8_t)next[i] < 32 || (uint8_t)next[i] == 127) { server.send(400, "text/plain; charset=utf-8", "Bezeichnung enthält ungültige Zeichen."); return; }
+  if (!storageReady || preferences.putString("oil-label", next) != next.length() || preferences.getString("oil-label", "") != next) {
+    server.send(500, "text/plain; charset=utf-8", "Bezeichnung konnte nicht gespeichert werden."); return;
+  }
+  oilBurnerLabel = next;
   server.sendHeader("Cache-Control", "no-store");
   server.send(200, "application/json", heatingStatusJson());
 }
@@ -1796,8 +1814,8 @@ void savePumpControl() {
     const bool nextOn = action == "power" ? enabled : manualPumpOn;
     const PumpDirection nextDirection = action == "direction"
       ? (enabled ? PumpDirection::BufferToCombi : PumpDirection::CombiToBuffer) : manualDirection;
-    if (nextOn && nextDirection == PumpDirection::CombiToBuffer && !chargingAllowed()) {
-      server.send(409, "text/plain; charset=utf-8", "Kombi -> Puffer gesperrt: Ölbrenner freigegeben oder Betriebsart unbekannt. Rückladung bleibt möglich."); return;
+    if (nextOn && nextDirection == PumpDirection::CombiToBuffer && !heatingModeValid) {
+      server.send(409, "text/plain; charset=utf-8", "Kombi -> Puffer gesperrt: Ölbrennerfreigabe unbekannt."); return;
     }
     manualPumpOn = nextOn;
     manualDirection = nextDirection;
@@ -2236,6 +2254,10 @@ void setup() {
   if (!runtimeReady) FirmwareLog.println("Pumpenlaufzeiten nicht verfügbar: Flash-Daten unlesbar oder Speicher nicht erreichbar; Daten werden nicht überschrieben.");
   trackPumpRuntime(true);
   storageReady = preferences.begin(SIMULATION_MODE ? "heating-test" : "heating", false);
+  if (storageReady) {
+    const String savedLabel = preferences.getString("oil-label", "Ölbrenner");
+    if (savedLabel.length() && savedLabel.length() <= 40) oilBurnerLabel = savedLabel;
+  }
   if (!storageReady) FirmwareLog.println("NVS nicht verfügbar: Speichern nicht möglich.");
   heatingModeValid = storageReady;
   if (storageReady && preferences.isKey("oil1")) {
@@ -2244,7 +2266,7 @@ void setup() {
     oilBurnerEnabled = savedMode == 1;
   }
   FirmwareLog.printf("Betriebsart: %s | Ölbrennerfreigabe: %s | Relais 4 GPIO %u.\n",
-    heatingModeValid ? (oilBurnerEnabled ? "Winter" : "Sommer") : "unbekannt; Einlagerung gesperrt",
+    heatingModeValid ? (oilBurnerEnabled ? "Freigabe AN" : "Freigabe AUS") : "unbekannt; Einlagerung gesperrt",
     oilBurnerEnabled ? "AN" : "AUS", unsigned(OIL_BURNER_PIN));
   loadSolarSettings();
   float autoSaved[5];
@@ -2353,6 +2375,7 @@ void setup() {
   server.on("/api/solar", HTTP_POST, saveSolarSettings);
   server.on("/api/solar/control", HTTP_POST, controlSolarPump);
   server.on("/api/heating", HTTP_POST, saveHeatingMode);
+  server.on("/api/heating/label", HTTP_POST, saveOilBurnerLabel);
   server.on("/api/test-mode", HTTP_POST, setTestMode);
   server.on("/api/reboot", HTTP_POST, rebootController);
   server.on("/api/update/prepare", HTTP_POST, prepareOta);

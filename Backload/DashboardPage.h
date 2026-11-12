@@ -78,6 +78,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
   <div id="settings-subnav" class="settings-subnav" role="group" aria-label="Einstellungsbereiche">
     <a href="#appearance-section">Darstellung</a>
     <a href="#security-section">Zugangspasswort</a>
+    <a href="#burner-name-section">Ölbrennerbezeichnung</a>
     <a href="#history-server-section">History-Server</a>
     <a href="#hostname-section">Hostname</a>
     <a href="#wifi-section">WLAN einrichten</a>
@@ -93,11 +94,11 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <header class="dashboard-header"><div class="dashboard-title"><h1>Solarsystemsteuerung</h1><p id="firmware-version" class="muted"><span id="firmware-version-text">Version: …</span> <a id="firmware-update-badge" class="firmware-update-badge" href="/einstellungen#update-section" aria-label="Firmware-Update verfügbar" title="Firmware-Update verfügbar" hidden>Update</a></p></div><div class="header-status"><p class="connection-status" role="status"><span id="connection-dot" class="connection-dot" aria-hidden="true"></span><span id="connection">Verbindung wird aufgebaut …</span></p><p id="device-clock" class="muted">ESP32-Zeit wird geladen …</p><p class="wifi-signal-status muted"><svg id="wifi-signal-bars" class="wifi-signal-bars" viewBox="0 0 25 18" role="img" aria-label="WLAN-Signalstärke nicht verfügbar"><rect x="0" y="15" width="3" height="3" rx=".5"/><rect x="5" y="12" width="3" height="6" rx=".5"/><rect x="10" y="9" width="3" height="9" rx=".5"/><rect x="15" y="6" width="3" height="12" rx=".5"/><rect x="20" y="3" width="3" height="15" rx=".5"/></svg><span id="wifi-signal">WLAN-Signal wird geladen …</span></p></div></header>
 <p id="test-message" class="message" role="status"></p>
 <section aria-labelledby="heating-heading">
-<div class="heading"><h2 id="heating-heading"><svg class="section-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C9 6 5 10 5 15a7 7 0 0 0 14 0c0-5-4-9-7-13Z"/></svg>Sommer / Winter · Ölbrenner</h2><span id="heating-badge" class="badge" role="status">Status wird geladen …</span></div>
-<p>Sommer: Kombi oben, Öl gesperrt. Winter: Kombi Mitte, Öl freigegeben.</p>
-<button id="heating-switch" class="relay-switch" type="button" role="switch" aria-checked="false" aria-describedby="heating-detail" disabled><span class="switch-track" aria-hidden="true"></span><span id="heating-switch-label">Winterbetrieb · Ölbrenner freigeben</span></button>
-<p id="heating-detail" class="muted">Betriebsart wird geladen …</p>
-<p class="muted">Öl freigegeben: Kombi → Puffer gesperrt, auch bei manueller Steuerung. Puffer → Kombi bleibt möglich.</p>
+<div class="heading"><h2 id="heating-heading"><svg class="section-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 2C9 6 5 10 5 15a7 7 0 0 0 14 0c0-5-4-9-7-13Z"/></svg><span id="heating-name">Ölbrenner</span> Ein/Aus</h2><span id="heating-badge" class="badge" role="status">Status wird geladen …</span></div>
+<p>Der Schalter steuert die Freigabe an Relais 4; eine Rückmeldung des Brenners liegt nicht vor.</p>
+<button id="heating-switch" class="relay-switch" type="button" role="switch" aria-checked="false" aria-describedby="heating-detail" disabled><span class="switch-track" aria-hidden="true"></span><span id="heating-switch-label">Ölbrenner Ein/Aus</span></button>
+<p id="heating-detail" class="muted">Freigabe wird geladen …</p>
+<p class="muted">Bei Freigabe ist Kombi → Puffer in der Automatik gesperrt. Im Handbetrieb ist diese Richtung nach einer Warnung möglich.</p>
 <p id="heating-message" class="message" role="status"></p>
 </section>
 <section aria-labelledby="pump-heading">
@@ -164,10 +165,10 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 </section>
 <section aria-labelledby="auto-heading">
 <h2 id="auto-heading"><svg class="section-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M10 2h4l.6 2.2 1.8.8 2-1 2.8 2.8-1 2 .8 1.8 2.2.6v4l-2.2.6-.8 1.8 1 2-2.8 2.8-2-1-1.8.8L14 23h-4l-.6-2.2-1.8-.8-2 1-2.8-2.8 1-2-.8-1.8L1 14v-4l2.2-.6.8-1.8-1-2L5.8 2.8l2 1 1.8-.8L10 2Z" transform="translate(0 -1) scale(.96)"/></svg>Automatische Regelung</h2>
-<p class="muted">Kombi oben im Sommer, Kombi Mitte im Winter; verglichen wird jeweils mit Puffer oben.</p>
+<p class="muted">Kombi → Puffer: Kombi oben. Puffer → Kombi: Kombi Mitte. Vergleich jeweils mit Puffer oben.</p>
 <form id="auto-form">
 <div><label for="auto-start">Startdifferenz zwischen den Speichern (5–10 K)</label><div class="stepper"><button type="button" data-field="start" data-direction="-1" aria-label="Startdifferenz senken">−</button><input id="auto-start" type="number" name="start" min="5" max="10" step="1" inputmode="numeric" required><button type="button" data-field="start" data-direction="1" aria-label="Startdifferenz erhöhen">+</button></div></div>
-<div><label for="auto-min-combi">Mindesttemperatur Kombispeicher (0–80 °C)</label><div class="stepper"><button type="button" data-field="minimumCombi" data-direction="-1" aria-label="Mindesttemperatur Kombispeicher senken">−</button><input id="auto-min-combi" type="number" name="minimumCombi" min="0" max="80" step="1" inputmode="numeric" required><button type="button" data-field="minimumCombi" data-direction="1" aria-label="Mindesttemperatur Kombispeicher erhöhen">+</button></div></div>
+<div><label for="auto-min-combi">Mindesttemperatur Kombispeicher Mitte (0–80 °C)</label><div class="stepper"><button type="button" data-field="minimumCombi" data-direction="-1" aria-label="Mindesttemperatur Kombispeicher senken">−</button><input id="auto-min-combi" type="number" name="minimumCombi" min="0" max="80" step="1" inputmode="numeric" required><button type="button" data-field="minimumCombi" data-direction="1" aria-label="Mindesttemperatur Kombispeicher erhöhen">+</button></div></div>
 <div><label for="auto-min-buffer">Mindesttemperatur Pufferspeicher (0–80 °C)</label><div class="stepper"><button type="button" data-field="minimumBuffer" data-direction="-1" aria-label="Mindesttemperatur Pufferspeicher senken">−</button><input id="auto-min-buffer" type="number" name="minimumBuffer" min="0" max="80" step="1" inputmode="numeric" required><button type="button" data-field="minimumBuffer" data-direction="1" aria-label="Mindesttemperatur Pufferspeicher erhöhen">+</button></div></div>
 <button type="submit">Regelung speichern</button>
 </form>
@@ -211,24 +212,24 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
   <div class="org-mode">
     <div class="org-section-title"><svg class="org-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="3.5"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5m11 11L19 19M19 5l-1.5 1.5m-11 11L5 19"/></svg><h2>Betriebsart</h2></div>
     <div class="org-modes">
-      <div id="org-mode-summer" class="org-season"><div class="org-season-title"><strong>Sommer</strong><span id="org-mode-summer-state" class="org-mode-state"></span></div><span>Kombispeicher oben · Öl gesperrt</span></div>
-      <div id="org-mode-winter" class="org-season"><div class="org-season-title"><strong>Winter</strong><span id="org-mode-winter-state" class="org-mode-state"></span></div><span>Kombispeicher Mitte · Öl freigegeben</span></div>
+      <div id="org-mode-summer" class="org-season"><div class="org-season-title"><strong>Ölbrenner aus</strong><span id="org-mode-summer-state" class="org-mode-state"></span></div><span>Einlagerung möglich</span></div>
+      <div id="org-mode-winter" class="org-season"><div class="org-season-title"><strong>Ölbrenner ein</strong><span id="org-mode-winter-state" class="org-mode-state"></span></div><span>Einlagerung in Automatik gesperrt</span></div>
     </div>
-    <p class="org-mode-note">Puffer oben ist in beiden Betriebsarten der Vergleichsfühler.</p>
+    <p class="org-mode-note">Einlagerung: Kombi oben. Rückladung und Mindesttemperatur: Kombi Mitte. Vergleich: Puffer oben.</p>
   </div>
   <div class="org-branches">
     <article class="org-branch org-charge">
       <div class="org-branch-head"><svg class="org-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 7h16m-4-4 4 4-4 4M21 17H5"/></svg><div><h2>Kombi → Puffer</h2><span>Einlagern</span></div></div>
-      <h3>Start · alle Bedingungen</h3><ul><li>Kombi ≥ <strong id="org-target">— °C</strong></li><li>Kombi − Puffer ≥ <strong class="org-start">— K</strong></li><li>Ölfreigabe aus</li></ul>
+      <h3>Start · alle Bedingungen</h3><ul><li>Kombi oben ≥ <strong id="org-target">— °C</strong></li><li>Kombi oben − Puffer ≥ <strong class="org-start">— K</strong></li><li>Ölfreigabe aus</li></ul>
       <p class="org-stop"><strong>Stopp:</strong> Differenz ≤ <strong class="org-stop-value">— K</strong> oder Ölfreigabe an.</p>
     </article>
     <article class="org-branch org-return">
       <div class="org-branch-head"><svg class="org-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M21 7H5m4-4L5 7l4 4M3 17h16"/></svg><div><h2>Puffer → Kombi</h2><span>Rückladen</span></div></div>
-      <h3>Start</h3><ul><li>Puffer − Kombi ≥ <strong class="org-start">— K</strong></li><li>In Sommer und Winter möglich</li></ul>
+      <h3>Start</h3><ul><li>Puffer − Kombi Mitte ≥ <strong class="org-start">— K</strong></li><li>Unabhängig von der Ölfreigabe möglich</li></ul>
       <p class="org-stop"><strong>Stopp:</strong> Differenz ≤ <strong class="org-stop-value">— K</strong>.</p>
     </article>
   </div>
-  <div class="org-interlock"><svg class="org-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6v5c0 5 3 8 8 10 5-2 8-5 8-10V6z"/><path d="M12 8v4m0 4h.01"/></svg><div><strong>Backloadpumpe &amp; Richtungswechsel</strong><p>Automatik nur ab Mindesttemperatur: Kombi <strong id="org-min-combi">— °C</strong> und Puffer <strong id="org-min-buffer">— °C</strong>. Im Handbetrieb gelten diese Grenzen nicht.</p><p>Bei Fehler eines Regelungsfühlers stoppt die Automatik. Vor einem Richtungswechsel pausiert die Backloadpumpe 2 Sekunden.</p></div></div>
+  <div class="org-interlock"><svg class="org-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 4 6v5c0 5 3 8 8 10 5-2 8-5 8-10V6z"/><path d="M12 8v4m0 4h.01"/></svg><div><strong>Backloadpumpe &amp; Richtungswechsel</strong><p>Automatik nur ab Mindesttemperatur: Kombi Mitte <strong id="org-min-combi">— °C</strong> und Puffer oben <strong id="org-min-buffer">— °C</strong>. Im Handbetrieb gelten diese Grenzen nicht.</p><p>Bei Fehler von Kombi Mitte oder Puffer stoppt die Automatik; bei Fehler von Kombi oben ist die Einlagerung gesperrt. Vor einem Richtungswechsel pausiert die Backloadpumpe 2 Sekunden.</p></div></div>
 </div>
 <div class="org-solar" aria-labelledby="org-solar-heading">
   <div class="heading"><div class="org-section-title"><svg class="org-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="7" r="3"/><path d="M12 1v2M4 7h3m10 0h3M6 2l1.5 1.5M18 2l-1.5 1.5M4 13h16l2 8H2zM5 17h14m-7-4v8"/></svg><h2 id="org-solar-heading">Solarregelung</h2></div><span id="org-solar-state" class="badge">Status wird geladen …</span></div>
@@ -254,8 +255,8 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
   <div class="org-hardware-head"><div class="org-section-title"><svg class="org-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="5" width="14" height="14" rx="2"/><rect x="9" y="9" width="6" height="6"/><path d="M9 2v3m6-3v3M9 19v3m6-3v3M2 9h3m-3 6h3m14-6h3m-3 6h3"/></svg><h2>ESP32-S3 &amp; Anschlüsse</h2></div><p class="muted">Die verwendeten GPIOs und ihre Funktionen. Die Nummern stammen aus der laufenden Firmware.</p></div>
   <div class="org-pin-layout">
     <div class="org-pin-group org-sensors"><h3>Temperaturfühler</h3><p class="org-pin-intro">MAX31865 · Chip-Select</p><dl class="org-pin-list">
-      <div><dt>Kombispeicher oben <small>Sommerfühler</small></dt><dd>GPIO <span id="org-cs-0">—</span></dd></div>
-      <div><dt>Kombispeicher Mitte <small>Winterfühler</small></dt><dd>GPIO <span id="org-cs-1">—</span></dd></div>
+      <div><dt>Kombispeicher oben <small>Einlagerung</small></dt><dd>GPIO <span id="org-cs-0">—</span></dd></div>
+      <div><dt>Kombispeicher Mitte <small>Rückladung und Mindesttemperatur</small></dt><dd>GPIO <span id="org-cs-1">—</span></dd></div>
       <div><dt>Pufferspeicher oben <small>Vergleichsfühler</small></dt><dd>GPIO <span id="org-cs-2">—</span></dd></div>
       <div><dt>Kombispeicher unten <small>Solarregelung</small></dt><dd>GPIO <span id="org-cs-3">—</span></dd></div>
       <div><dt>Solarpanel <small>Solarregelung</small></dt><dd>GPIO <span id="org-cs-4">—</span></dd></div>
@@ -351,6 +352,11 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <p class="muted">Die Adresse ergänzt einen Link zum Temperaturarchiv im Menü. Leer lassen, um den Link auszublenden.</p>
 <form id="history-server-form"><label for="history-server-url">Adresse<input id="history-server-url" name="url" type="url" maxlength="255" placeholder="http://192.168.1.10:8088" autocomplete="url" autocapitalize="none" spellcheck="false" disabled></label><button type="submit" disabled>Adresse speichern</button></form>
 <p id="history-server-message" class="message" role="status">Adresse wird geladen …</p>
+</section>
+<section id="burner-name-section" aria-labelledby="burner-name-heading">
+<h2 id="burner-name-heading">Bezeichnung der Ölbrennerfreigabe</h2>
+<form id="burner-name-form"><label for="burner-name-input">Bezeichnung<input id="burner-name-input" name="label" maxlength="40" required></label><button type="submit">Bezeichnung speichern</button></form>
+<p class="muted">Ändert die Beschriftung des Schalters. Die Funktion von Relais 4 bleibt gleich.</p><p id="burner-name-message" class="message" role="status"></p>
 </section>
 <section id="hostname-section" aria-labelledby="hostname-heading">
 <h2 id="hostname-heading">Hostname</h2>
@@ -641,16 +647,16 @@ function updatePumpControls(){
   manualSwitch.disabled=pumpBusy||pumpState===null;
   pumpSwitch.disabled=directionSwitch.disabled=pumpBusy||pumpState===null||!pumpState.manual;
   if(pumpState===null)return;
-  const blocked=!heatingState||!heatingState.configValid||heatingState.winter;
+  const blocked=!heatingState||!heatingState.configValid;
   if(blocked&&pumpState.manual){
     // Ausschalten bleibt immer möglich; der gesperrte Start wird nicht angeboten.
     if(!pumpState.requestedOn&&pumpState.requestedDirection===0)pumpSwitch.disabled=true;
     if(pumpState.requestedOn&&pumpState.requestedDirection===1)directionSwitch.disabled=true;
   }
-  const reason=heatingState&&heatingState.configValid&&heatingState.winter?'Ölbrenner freigegeben':'Betriebsart unbekannt';
+  const reason='Ölbrennerfreigabe unbekannt';
   document.getElementById('pump-help').textContent=!pumpState.manual?'Zuerst die manuelle Steuerung einschalten.':
     blocked&&pumpState.requestedDirection===0&&!pumpState.requestedOn?reason+': Kombi → Puffer gesperrt. Zum Starten Richtung EIN wählen (Puffer → Kombi).':
-    'Pumpenauftrag: '+(pumpState.requestedOn?'EIN':'AUS')+'. Der tatsächliche Zustand steht oben.';
+    'Pumpenauftrag: '+(pumpState.requestedOn?'EIN':'AUS')+'. Der tatsächliche Zustand steht oben.'+(heatingState&&heatingState.winter&&pumpState.requestedDirection===0?' Achtung: Ölbrenner freigegeben; Kombi → Puffer ist im Handbetrieb möglich.':'');
   document.getElementById('direction-help').textContent=blocked?'Richtung EIN: Puffer → Kombi. Kombi → Puffer ist gesperrt ('+reason+').':'Aus: Kombi → Puffer. Ein: Puffer → Kombi.';
 }
 function updatePump(state){
@@ -669,7 +675,7 @@ function updatePump(state){
   const diagram=document.querySelector('.pump-flow');
   diagram.setAttribute('data-direction',state.direction===0?'ccw':'cw');
   diagram.classList.toggle('stopped',!state.on);
-  document.getElementById('pump-mode-detail').textContent=state.manual?'Manuelle Steuerung aktiv · Ölbrennersperre gilt.':state.automaticConfigured?'Automatik aktiv · Bei Fehler eines Regelungsfühlers bleibt die Backloadpumpe aus.':'Automatik gesperrt · Backloadpumpe aus.';
+  document.getElementById('pump-mode-detail').textContent=state.manual?'Manuelle Steuerung aktiv · Ölbrennersperre und Mindesttemperaturen sind überbrückbar.':state.automaticConfigured?'Automatik aktiv · Sensoren und Mindesttemperaturen werden überwacht.':'Automatik gesperrt · Backloadpumpe aus.';
   document.getElementById('pump-progress').textContent=state.phase==='stopping'?'Backloadpumpe aus · Richtungswechsel nach 2 Sekunden.':state.phase==='settling'?'Richtung umgeschaltet · Relais schaltet.':'';
   updatePumpControls();
 }
@@ -724,6 +730,10 @@ function updateSolarDiagram(state,simulation,controllers){
 async function changePump(action){
   if(pumpBusy||pumpState===null||(action!=='manual'&&!pumpState.manual))return;
   const value=action==='manual'?!pumpState.manual:action==='power'?!pumpState.requestedOn:pumpState.requestedDirection===0;
+  const nextOn=action==='power'?value:pumpState.requestedOn;
+  const nextDirection=action==='direction'?(value?1:0):pumpState.requestedDirection;
+  if(action!=='manual'&&nextOn&&nextDirection===0&&heatingState&&heatingState.configValid&&heatingState.winter&&
+     !confirm('Ölbrenner ist freigegeben. Im Handbetrieb trotzdem von Kombi nach Puffer pumpen?'))return;
   pumpBusy=true;pumpRevision++;updatePumpControls();
   pumpMessage.className='message';pumpMessage.textContent='Befehl wird übertragen …';
   try{
@@ -749,16 +759,20 @@ manualSwitch.addEventListener('click',()=>changePump('manual'));
 pumpSwitch.addEventListener('click',()=>changePump('power'));
 directionSwitch.addEventListener('click',()=>changePump('direction'));
 function updateHeating(state){
-  if(!state||typeof state.winter!=='boolean'||typeof state.configValid!=='boolean'||typeof state.relayOn!=='boolean')throw new Error('Ungültige Sommer-/Winterumschaltung');
+  if(!state||typeof state.winter!=='boolean'||typeof state.configValid!=='boolean'||typeof state.relayOn!=='boolean')throw new Error('Ungültige Ölbrennerfreigabe');
   heatingState=state;
+  const burnerName=typeof state.label==='string'&&state.label?state.label:'Ölbrenner';
+  document.getElementById('heating-name').textContent=burnerName;
+  const burnerInput=document.getElementById('burner-name-input');
+  if(document.activeElement!==burnerInput&&!burnerInput.dataset.dirty)burnerInput.value=burnerName;
   heatingSwitch.disabled=heatingBusy;
   heatingSwitch.setAttribute('aria-checked',String(state.configValid&&state.winter));
   heatingSwitch.setAttribute('data-state',!state.configValid?'unknown':state.winter?'on':'off');
-  document.getElementById('heating-switch-label').textContent=state.configValid?(state.winter?'Winterbetrieb':'Sommerbetrieb'):'Sommerbetrieb bestätigen';
+  document.getElementById('heating-switch-label').textContent=state.configValid?burnerName+' Ein/Aus':'Freigabe AUS bestätigen';
   const badge=document.getElementById('heating-badge');
-  badge.textContent=state.configValid?(state.winter?'Winter · Kombi Mitte · Öl freigegeben':'Sommer · Kombi oben · Öl gesperrt'):'Betriebsart unbekannt';
+  badge.textContent=state.configValid?(state.winter?'Freigegeben':'Gesperrt'):'Freigabe unbekannt';
   badge.className='badge'+(!state.configValid?' waiting':state.winter?' heat-active':' summer-active');
-  document.getElementById('heating-detail').textContent=!state.configValid?'Betriebsart ungültig. Sommerbetrieb bestätigen; Ölbrenner und Automatik bleiben aus.':
+  document.getElementById('heating-detail').textContent=!state.configValid?'Freigabe ungültig. AUS bestätigen; Ölbrenner und Automatik bleiben aus.':
     simulationEnabled?'':
     'Relais 4: '+(state.relayOn?'AN · Ölbrenner freigegeben.':state.winter?'AUS · Freigabe während Update oder Neustart pausiert.':'AUS · Ölbrenner gesperrt.');
   updateBurnerDiagram(state);
@@ -788,12 +802,14 @@ function updateBurnerDiagram(state){
 async function changeHeating(){
   if(heatingBusy||!heatingState)return;
   const next=heatingState.configValid?!heatingState.winter:false;
+  if(next&&pumpState&&pumpState.manual&&pumpState.requestedOn&&pumpState.requestedDirection===0&&
+     !confirm('Die Pumpe fördert im Handbetrieb von Kombi nach Puffer. Ölbrenner trotzdem freigeben?'))return;
   heatingBusy=true;heatingRevision++;autoRevision++;pumpRevision++;heatingSwitch.disabled=true;
   heatingMessage.className='message';heatingMessage.textContent='Betriebsart wird gespeichert und geschaltet …';
   try{
     const state=await request('/api/heating',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'HeatingUI'},body:new URLSearchParams({winter:next?'1':'0'})});
     updateHeating(state);
-    heatingMessage.textContent=state.winter?'Winterbetrieb gespeichert. Kombi → Puffer gesperrt.':'Sommerbetrieb gespeichert. Ölbrenner gesperrt.';
+    heatingMessage.textContent=state.winter?'Ölbrenner freigegeben. Kombi → Puffer ist in der Automatik gesperrt.':'Ölbrenner gesperrt.';
   }catch(error){unknownHeating();heatingMessage.className='message error';heatingMessage.textContent='Umschalten nicht bestätigt: '+error.message+' Aktuellen Status prüfen.';}
   finally{heatingBusy=false;heatingSwitch.disabled=heatingState===null;}
 }
@@ -816,32 +832,31 @@ function updateAutomatic(state){
   autoForm.elements.minimumCombi.value=settingNumber(state.minimumCombi);
   autoForm.elements.minimumBuffer.value=settingNumber(state.minimumBuffer);
 }
-function automaticSensorId(state){
-  return state.controlSensorId === 1 ? 1 : 0;
-}
 function automaticRuleText(state,controllers,pump){
   if(!state||!state.configValid||!Array.isArray(controllers))return null;
-  const id=automaticSensorId(state),combi=controllers.find(c=>c.id===id),buffer=controllers.find(c=>c.id===2),settings=controllers.find(c=>c.id===0);
-  if(!combi||!buffer||!settings||!Number.isFinite(state.differenceStart)||
+  const top=controllers.find(c=>c.id===0),middle=controllers.find(c=>c.id===1),buffer=controllers.find(c=>c.id===2);
+  if(!top||!middle||!buffer||!Number.isFinite(state.differenceStart)||
      state.differenceStart<5||state.differenceStart>10||!Number.isFinite(state.minimumCombi)||state.minimumCombi<0||state.minimumCombi>80||
      !Number.isFinite(state.minimumBuffer)||state.minimumBuffer<0||state.minimumBuffer>80)return null;
   const temp=value=>setpointNumber.format(value)+' °C',delta=value=>setpointNumber.format(value)+' K';
-  const targetValid=settings.configValid&&Number.isFinite(settings.target)&&settings.target>=68&&settings.target<=72;
-  const valuesValid=combi.valid&&buffer.valid&&Number.isFinite(combi.temperature)&&Number.isFinite(buffer.temperature);
+  const targetValid=top.configValid&&Number.isFinite(top.target)&&top.target>=68&&top.target<=72;
+  const valuesValid=middle.valid&&buffer.valid&&Number.isFinite(middle.temperature)&&Number.isFinite(buffer.temperature);
   const below=[];
-  if(valuesValid&&combi.temperature<state.minimumCombi)below.push('Kombi '+temp(combi.temperature)+' < '+temp(state.minimumCombi));
+  if(valuesValid&&middle.temperature<state.minimumCombi)below.push('Kombi Mitte '+temp(middle.temperature)+' < '+temp(state.minimumCombi));
   if(valuesValid&&buffer.temperature<state.minimumBuffer)below.push('Puffer '+temp(buffer.temperature)+' < '+temp(state.minimumBuffer));
+  const min='Kombi Mitte ≥ '+temp(state.minimumCombi)+' UND Puffer ≥ '+temp(state.minimumBuffer);
+  const minStop='Kombi Mitte < '+temp(state.minimumCombi)+' ODER Puffer < '+temp(state.minimumBuffer);
   return {
-    sensor:'Fühler: '+combi.name+' und Pufferspeicher oben. Starttemperatur: '+(targetValid?temp(settings.target):'ungültig')+'.',
+    sensor:'Einlagerung: Kombi oben und Puffer. Rückladung und Mindesttemperatur: Kombi Mitte und Puffer. Starttemperatur: '+(targetValid?temp(top.target):'ungültig')+'.',
     minimumState:pump&&pump.manual?'neutral':!valuesValid?'warning':below.length?'warning':'ok',
     minimumStatus:pump&&pump.manual?'Handbetrieb: Mindesttemperaturen nicht aktiv.':!valuesValid?'Mindesttemperaturen: keine gültigen Fühlerwerte.':below.length?'Automatik gesperrt: '+below.join(' · ')+'.':'Mindesttemperaturen erreicht.',
-    status:pump&&pump.manual?'Manuelle Steuerung aktiv · Ölbrennersperre gilt.':
-      !combi.valid||!buffer.valid?'Sensorfehler · Automatik hält die Backloadpumpe aus.':'Gespeicherte Einstellungen.',
-    chargeStart:!state.allowCharging?'Einlagerung durch Sommer-/Winterumschaltung gesperrt.':!targetValid?'Einlagerung gesperrt: Starttemperatur muss 68–72 °C betragen.':
-      'Ölbrennerfreigabe AUS UND Kombi ≥ '+temp(settings.target)+' UND Kombi ≥ '+temp(state.minimumCombi)+' UND Puffer ≥ '+temp(state.minimumBuffer)+' UND Kombi − Puffer ≥ '+delta(state.differenceStart)+'.',
-    chargeStop:'Kombi < '+temp(state.minimumCombi)+' ODER Puffer < '+temp(state.minimumBuffer)+' ODER Kombi − Puffer ≤ 3 K ODER Ölbrenner freigegeben / Betriebsart unbekannt.',
-    returnStart:'Kombi ≥ '+temp(state.minimumCombi)+' UND Puffer ≥ '+temp(state.minimumBuffer)+' UND Puffer − Kombi ≥ '+delta(state.differenceStart)+'. Ohne Ölsperre.',
-    returnStop:'Kombi < '+temp(state.minimumCombi)+' ODER Puffer < '+temp(state.minimumBuffer)+' ODER Puffer − Kombi ≤ 3 K.'
+    status:pump&&pump.manual?'Manuelle Steuerung aktiv · Ölbrennersperre überbrückbar.':
+      !middle.valid||!buffer.valid?'Sensorfehler · Automatik hält die Backloadpumpe aus.':!top.valid?'Sensorfehler oben · Einlagerung gesperrt.':'Gespeicherte Einstellungen.',
+    chargeStart:!state.allowCharging?'Einlagerung durch Ölbrennerfreigabe gesperrt.':!targetValid?'Einlagerung gesperrt: Starttemperatur muss 68–72 °C betragen.':
+      'Ölbrennerfreigabe AUS UND Kombi oben ≥ '+temp(top.target)+' UND '+min+' UND Kombi oben − Puffer ≥ '+delta(state.differenceStart)+'.',
+    chargeStop:minStop+' ODER Kombi oben − Puffer ≤ 3 K ODER Ölbrenner freigegeben / Freigabe unbekannt.',
+    returnStart:min+' UND Puffer − Kombi Mitte ≥ '+delta(state.differenceStart)+'. Ohne Ölsperre.',
+    returnStop:minStop+' ODER Puffer − Kombi Mitte ≤ 3 K.'
   };
 }
 function updateAutomaticRules(state,controllers,pump){
@@ -1130,6 +1145,20 @@ passwordForm.addEventListener('submit',event=>{
   const value=password.value;password.value='';confirmation.value='';saveAccessPassword(value);
 });
 document.getElementById('password-remove').addEventListener('click',()=>{if(confirm('Passwortschutz wirklich entfernen?'))saveAccessPassword('');});
+const burnerNameForm=document.getElementById('burner-name-form'),burnerNameInput=document.getElementById('burner-name-input');
+burnerNameInput.addEventListener('input',()=>{burnerNameInput.dataset.dirty='1';});
+burnerNameForm.addEventListener('submit',async event=>{
+  event.preventDefault();
+  const message=document.getElementById('burner-name-message'),name=burnerNameInput.value.trim();
+  if(!name||new TextEncoder().encode(name).length>40){message.className='message error';message.textContent='Bitte eine Bezeichnung mit höchstens 40 Bytes eingeben.';return;}
+  const button=burnerNameForm.querySelector('button');button.disabled=true;
+  message.className='message';message.textContent='Bezeichnung wird gespeichert …';
+  try{
+    const state=await request('/api/heating/label',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'HeatingUI'},body:new URLSearchParams({label:name})});
+    delete burnerNameInput.dataset.dirty;updateHeating(state);message.textContent='Bezeichnung gespeichert.';
+  }catch(error){message.className='message error';message.textContent='Nicht gespeichert: '+error.message;}
+  finally{button.disabled=false;}
+});
 const hostnameForm=document.getElementById('hostname-form'),hostnameInput=document.getElementById('hostname-input');
 const hostnameMessage=document.getElementById('hostname-message'),hostnameReset=document.getElementById('hostname-reset');
 let hostnameDirty=false,hostnameBusy=false;
@@ -1971,7 +2000,7 @@ function updateOrganigram(data){
   const automatic=data&&data.automatic,heating=data&&data.heating,hardware=data&&data.hardware;
   const valid=!!(automatic&&automatic.configValid&&heating&&heating.configValid);
   const summary=!data?'Status nicht verfügbar':!valid?'Automatik gesperrt':
-    (data.simulation?'Testmodus · ':'')+(heating.winter?'Winter · Kombi Mitte':'Sommer · Kombi oben');
+    (data.simulation?'Testmodus · ':'')+(heating.winter?'Ölbrenner freigegeben':'Ölbrenner gesperrt');
   if(status.textContent!==summary)status.textContent=summary;
   status.className='badge'+(!data||!valid?' waiting':'');
   const modeKnown=!!(heating&&heating.configValid&&typeof heating.winter==='boolean');
@@ -2066,7 +2095,7 @@ async function refresh(){
       configError.hidden=c.configValid;
       configError.textContent=c.configValid?'':'Konfigurationsfehler: Grenzen oder Standardwerte im Sketch prüfen.';
       p.form.querySelectorAll('input,button').forEach(e=>e.disabled=!c.configValid||(e.tagName==='BUTTON'&&saving));
-      p.section.querySelector('.rule').textContent=data.pump.manual?'Manuelle Steuerung: Starttemperatur ohne Wirkung. Ölbrennersperre gilt.':'Starttemperatur für den gewählten Kombifühler.';
+      p.section.querySelector('.rule').textContent=data.pump.manual?'Manuelle Steuerung: Starttemperatur ohne Wirkung.':'Starttemperatur für Kombispeicher oben bei Einlagerung.';
       p.form.elements.target.dataset.savedValue=c.target;
       p.form.elements.hysteresis.dataset.savedValue=c.hysteresis;
       if(!p.isDirty()&&!p.form.contains(document.activeElement)&&!saving){p.form.elements.target.value=settingNumber(c.target);p.form.elements.hysteresis.value=inputNumber(c.hysteresis);}
