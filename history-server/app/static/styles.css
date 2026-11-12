@@ -80,6 +80,8 @@ input[type=date] { min-height: 44px; min-width: 166px; max-width: 100%; padding:
 .runtime-table tbody tr:last-child th, .runtime-table tbody tr:last-child td { border-bottom: 0; }
 footer { border-top: 1px solid var(--border); margin-top: 32px; padding-top: 18px; font-size: .75rem; color: var(--muted); }
 footer p + p { margin-top: 4px; }
+footer a { color: var(--muted); }
+footer a:hover { color: var(--ink); }
 .notice { margin-top: 12px; font-size: .875rem; }
 .error { color: #8b351f; }
 .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; clip-path: inset(50%); overflow: hidden; white-space: nowrap; }
