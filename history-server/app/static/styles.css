@@ -111,7 +111,13 @@ footer p + p { margin-top: 4px; }
 .page-nav a:hover { background: #e3eceb; color: var(--teal); }
 .collector, .history, .runtime-history, .update-section { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; padding: 24px; margin-top: 20px; }
 .history .chart-area { background: var(--background); }
-.update-section .button { margin-top: 18px; }
+.update-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+.update-section details { margin-top: 16px; }
+.update-section summary { cursor: pointer; color: var(--teal); font-weight: 600; }
+#update-changes { margin: 12px 0 0; padding-left: 22px; }
+#update-changes li + li { margin-top: 14px; }
+#update-changes time, #update-changes p { display: block; color: var(--muted); font-size: .875rem; }
+#update-changes p { margin-top: 4px; white-space: pre-wrap; overflow-wrap: anywhere; }
 @media (max-width: 650px) {
   .page-nav { margin-bottom: 24px; gap: 0; }
   .nav-brand { width: 100%; margin-bottom: 8px; }

@@ -16,7 +16,7 @@ from .collector import Collector
 from .config import Settings
 from .database import Database, collector_lock
 from .history import build_history, csv_file, resolve_range, stream_csv
-from .updater import status_path, write_status
+from .updater import check_updates, status_path, write_status
 
 STATIC = Path(__file__).parent / "static"
 
@@ -102,14 +102,27 @@ def create_app(settings=None, *, start_collector=True, client=None, clock=time.t
             data = {"state": "idle", "message": "Bereit für ein Update."}
         return {"enabled": True, **data}
 
-    @app.post("/api/update", status_code=202)
-    def start_update(request: Request):
+    def require_update_request(request: Request):
         if os.getenv("HISTORY_UPDATE_ENABLED") != "1":
             raise HTTPException(403, "Update per Schaltfläche ist nicht eingerichtet.")
         origin = request.headers.get("origin", "")
         expected = f"{request.url.scheme}://{request.headers.get('host', '')}"
         if origin != expected or request.headers.get("x-requested-with") != "HistoryUI":
             raise HTTPException(403, "Bitte das Webinterface verwenden.")
+
+    @app.post("/api/update/check")
+    def check_update(request: Request):
+        require_update_request(request)
+        try:
+            return check_updates(database.path)
+        except RuntimeError as exc:
+            raise HTTPException(409, str(exc)) from exc
+        except (OSError, ValueError, subprocess.SubprocessError) as exc:
+            raise HTTPException(503, "Update-Prüfung fehlgeschlagen. Git-Verbindung und Upstream prüfen.") from exc
+
+    @app.post("/api/update", status_code=202)
+    def start_update(request: Request):
+        require_update_request(request)
         # Nur ein gestarteter Prozess pro Server; zusätzlich schützt flock vor parallelen Updates.
         process = getattr(app.state, "update_process", None)
         if process is not None and process.poll() is None:

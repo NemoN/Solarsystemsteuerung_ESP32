@@ -23,6 +23,35 @@ def write_status(path, state, message):
     os.replace(name, path)
 
 
+def check_updates(database_path, *, root=ROOT):
+    """Prüft den verfolgten Branch und liest nur Commits zum History-Server."""
+    path = status_path(database_path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with (path.parent / "history-update.lock").open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as exc:
+            raise RuntimeError("Ein Update oder eine Prüfung läuft bereits.") from exc
+        env = {**os.environ, "GIT_TERMINAL_PROMPT": "0"}
+        def git(*args):
+            return subprocess.run(["git", *args], cwd=root, env=env, check=True,
+                                  text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                  timeout=30).stdout
+        git("symbolic-ref", "--quiet", "--short", "HEAD")
+        git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
+        git("fetch", "--no-tags")
+        ahead, behind = map(int, git("rev-list", "--left-right", "--count", "HEAD...@{upstream}").split())
+        dirty = bool(git("status", "--porcelain", "--untracked-files=no").strip())
+        raw = git("log", "--max-count=30", "--format=format:%H%x00%aI%x00%s%x00%b%x00", "HEAD..@{upstream}", "--", "history-server/")
+        fields = raw.split("\0")
+        changes = []
+        for offset in range(0, len(fields) - 3, 4):
+            sha, date, subject, body = fields[offset:offset + 4]
+            changes.append({"id": sha.strip()[:12], "date": date, "title": subject[:300], "body": body.strip()[:4000]})
+        return {"available": behind > 0, "behind": behind, "ahead": ahead, "dirty": dirty,
+                "can_update": behind > 0 and ahead == 0 and not dirty, "changes": changes}
+
+
 def run(database_path):
     path = status_path(database_path)
     with (path.parent / "history-update.lock").open("a") as lock:

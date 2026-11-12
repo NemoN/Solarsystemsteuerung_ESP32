@@ -127,7 +127,11 @@ Die Funktion ist standardmäßig deaktiviert und für eine **systemd-Installatio
 
    Die Regel gewährt ausschließlich den Neustart dieses Dienstes. Anschließend `sudo systemctl daemon-reload` und `sudo systemctl restart backload-history` ausführen. Im Webinterface erscheint unter „History-Server aktualisieren“ der aktivierte Knopf.
 
+Die Schaltfläche „Auf Updates prüfen“ lädt zuerst den Stand des Upstreams und zeigt ausstehende Commits zum History-Server mit Betreff und gegebenenfalls Beschreibung an. Änderungen ausschließlich an anderen Teilen des Repositorys werden ebenfalls als Update erkannt, aber nicht als History-Server-Änderung ausgegeben. Die Prüfung installiert noch nichts.
+
 Der Knopf führt `git pull --ff-only` für den eingestellten Upstream aus, installiert `requirements.txt` in der laufenden virtuellen Umgebung und startet den Dienst neu. Bei lokalen Änderungen, abweichendem Verlauf oder Fehlern wird abgebrochen und die Ursache angezeigt. Ein Fehler bei der Paketinstallation kann auftreten, nachdem Git bereits aktualisiert wurde; dann Dienstprotokoll und Checkout prüfen und die Installation manuell abschließen. Während des Neustarts können Messungen ausfallen. Die SQLite-Datenbank bleibt erhalten; vor Updates empfiehlt sich eine Sicherung wie unten beschrieben. Die Funktion installiert auch Änderungen außerhalb von `history-server` im selben Checkout.
+
+Für Bindung an mehrere konkrete IPv4-Adressen kann systemd statt des üblichen Uvicorn-Aufrufs `python -m app.server` starten. `HISTORY_LISTEN_HOSTS=127.0.0.1,192.168.92.11` legt die Adressen fest; `HISTORY_PORT` ist optional und standardmäßig `8088`. Die interne IP muss auf dem Server vorhanden sein. Der Dienst besitzt keine Anmeldung: Wird die interne IP geöffnet, können alle erreichenden Geräte auch den Update-Knopf auslösen. Den Zugang deshalb auf vertrauenswürdige Netze beschränken.
 
 Pro Datenbank darf nur ein Sammler laufen. Deshalb weder mehrere Server noch
 mehrere Uvicorn-Worker oder den Entwicklungsmodus `--reload` verwenden.
@@ -191,7 +195,7 @@ Wiederherstellung, solange der Sammler läuft.
 
 `/api/history` liefert den Verlauf, `/api/export.csv` den CSV-Export,
 `/api/pump-runtime?kind=day` die Pumpenlaufzeiten (`day`, `month`, `year`) und
-`/api/collector-status` den Erfassungsstatus und `/api/update` den Status des optionalen Updates. `/healthz` prüft nur den Dienst,
+`/api/collector-status` den Erfassungsstatus, `/api/update` den Status des optionalen Updates und `POST /api/update/check` die optionale Update-Prüfung. `/healthz` prüft nur den Dienst,
 nicht die Verbindung zum ESP32.
 
 Tests ohne Docker:

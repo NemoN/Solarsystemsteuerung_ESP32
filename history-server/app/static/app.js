@@ -241,13 +241,15 @@ loadStatus();
 loadRuntime();
 setInterval(() => {loadStatus(); loadHistory(); loadRuntime();}, 60000);
 
-let updatePolling;
+let updatePolling, checkingUpdates = false, updateBlocked = false;
 async function loadUpdateStatus() {
   try {
     const data = await json("/api/update", AbortSignal.timeout(10000));
     $("update-status").textContent = data.message;
     $("update-status").classList.toggle("error", data.state === "error");
-    $("update-button").disabled = !data.enabled || data.state === "running";
+    const busy = data.state === "running" || data.state === "restarting";
+    $("update-button").disabled = !data.enabled || busy || checkingUpdates || updateBlocked;
+    $("check-update").disabled = !data.enabled || busy || checkingUpdates;
     if (data.state === "running" || data.state === "restarting") {
       clearTimeout(updatePolling);
       updatePolling = setTimeout(loadUpdateStatus, 3000);
@@ -259,6 +261,9 @@ async function loadUpdateStatus() {
 }
 $("update-button").addEventListener("click", async () => {
   $("update-button").disabled = true;
+  $("check-update").disabled = true;
+  $("update-changelog").hidden = true;
+  $("check-status").textContent = "";
   $("update-status").textContent = "Update wird gestartet …";
   try {
     const response = await fetch("/api/update", {method: "POST", headers: {"X-Requested-With": "HistoryUI"}});
@@ -266,7 +271,47 @@ $("update-button").addEventListener("click", async () => {
     updatePolling = setTimeout(loadUpdateStatus, 1500);
   } catch (error) {
     $("update-status").textContent = error.message;
-    $("update-button").disabled = false;
+    loadUpdateStatus();
+  }
+});
+$("check-update").addEventListener("click", async () => {
+  checkingUpdates = true;
+  $("check-update").disabled = true;
+  $("update-button").disabled = true;
+  $("update-changelog").hidden = true;
+  $("check-status").classList.remove("error");
+  $("check-status").textContent = "Update-Quelle wird geprüft …";
+  try {
+    const response = await fetch("/api/update/check", {method: "POST", headers: {"X-Requested-With": "HistoryUI"}, signal: AbortSignal.timeout(45000)});
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.detail || "Update-Prüfung fehlgeschlagen.");
+    updateBlocked = Boolean(data.ahead || data.dirty);
+    const warnings = [];
+    if (data.ahead) warnings.push("Der lokale Branch enthält eigene Commits.");
+    if (data.dirty) warnings.push("Der Checkout enthält lokale Änderungen.");
+    $("check-status").textContent = (data.available ? `${data.behind} neue ${data.behind === 1 ? "Änderung" : "Änderungen"} im Git-Branch verfügbar.` : "Der Git-Branch ist aktuell.") + (warnings.length ? ` ${warnings.join(" ")} Ein Update ist so nicht möglich.` : "");
+    if (data.available) {
+      const items = data.changes.map((change) => {
+        const li = document.createElement("li"), title = document.createElement("strong"), time = document.createElement("time");
+        title.textContent = change.title;
+        time.dateTime = change.date;
+        const date = new Date(change.date);
+        time.textContent = `${Number.isNaN(date.valueOf()) ? change.date : dateOnly.format(date)} · ${change.id}`;
+        li.append(title, time);
+        if (change.body) { const body = document.createElement("p"); body.textContent = change.body; li.append(body); }
+        return li;
+      });
+      if (!items.length) { const li = document.createElement("li"); li.textContent = "Keine Änderungen am History-Server in diesen Commits."; items.push(li); }
+      $("update-changes").replaceChildren(...items);
+      $("update-changelog").hidden = false;
+      $("update-changelog").open = true;
+    }
+  } catch (error) {
+    $("check-status").classList.add("error");
+    $("check-status").textContent = error.name === "TimeoutError" ? "Die Update-Prüfung dauert zu lange. Bitte erneut versuchen." : error.message;
+  } finally {
+    checkingUpdates = false;
+    loadUpdateStatus();
   }
 });
 loadUpdateStatus();

@@ -83,8 +83,16 @@
     <section class="update-section" aria-labelledby="update-heading">
       <div class="section-header"><h2 id="update-heading">History-Server aktualisieren</h2></div>
       <p class="hint">Aktualisiert den eingerichteten Git-Branch und startet den Archivdienst neu.</p>
-      <button id="update-button" type="button" class="button primary" disabled>Server aktualisieren</button>
+      <div class="update-actions">
+        <button id="check-update" type="button" class="button secondary" disabled>Auf Updates prüfen</button>
+        <button id="update-button" type="button" class="button primary" disabled>Server aktualisieren</button>
+      </div>
       <p id="update-status" class="notice" role="status">Update-Funktion wird geprüft …</p>
+      <p id="check-status" class="notice" role="status"></p>
+      <details id="update-changelog" hidden>
+        <summary>Änderungen am History-Server</summary>
+        <ul id="update-changes"></ul>
+      </details>
     </section>
 
     <footer>
