@@ -3,6 +3,7 @@
 #include <Preferences.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
+#include "RemoteRelayProtocol.h"
 
 struct RemoteRelayConfig {
   char address[16];
@@ -17,6 +18,8 @@ struct RemoteRelaySnapshot {
   uint8_t forgetState;
   uint8_t rebootState;
   char version[32];
+  bool diagnosticsAvailable;
+  RelayDiagnostics diagnostics;
 };
 class RemoteRelay {
 public:
@@ -40,6 +43,9 @@ private:
   uint8_t mask_ = 0, pendingId_ = 0;
   uint32_t lastContact_ = 0;
   uint32_t lastVersionCheck_ = 0, rebootSentAt_ = 0;
+  uint32_t lastDiagnosticsCheck_ = 0;
+  bool diagnosticsChecked_ = false, diagnosticsAvailable_ = false;
+  RelayDiagnostics diagnostics_ = {};
   bool versionChecked_ = false;
   char version_[32] = {};
   bool pendingValue_ = false;

@@ -46,7 +46,7 @@
 #include <time.h>
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
-const char* FIRMWARE_VERSION = "3.5.0";
+const char* FIRMWARE_VERSION = "3.6.0";
 // Der AP wird nur für Einrichtung und Wiederherstellung benötigt.
 constexpr bool AP_RECOVERY_ONLY = true;
 
@@ -172,6 +172,13 @@ WebServer server(IPAddress(127, 0, 0, 1), 8080);
 Preferences preferences;
 Preferences hostnamePreferences;
 Preferences runtimePreferences;
+Preferences relayWatchdogPreferences;
+bool relayWatchdogStorageReady = false, relayWatchdogDeniedLogged = false;
+bool relayWatchdogIdleTiming = false;
+uint32_t relayWatchdogIdleSince = 0;
+uint8_t relayWatchdogRestarts = 0;
+constexpr uint8_t RELAY_WATCHDOG_MAX_RESTARTS = 2;
+constexpr uint32_t RELAY_WATCHDOG_STABLE_MS = 30UL * 60 * 1000;
 PumpRuntime pumpRuntime;
 constexpr unsigned REMOTE_RELAY_COUNT = 4;
 RemoteRelay remoteRelays[REMOTE_RELAY_COUNT];
@@ -392,6 +399,49 @@ void servicePump() {
     lastOn = pump.on();
     lastDirection = pump.direction();
     lastPhase = pump.phase();
+  }
+}
+
+void serviceRelayUpdateWatchdog() {
+  const auto action = remoteRelayUpdate.watchdog();
+  if (action == RemoteRelayUpdate::WatchdogAction::CancelRequested)
+    FirmwareLog.println("Relais-Update: Keine Antwort seit 90 Sekunden; Abbruch angefordert.");
+  if (action == RemoteRelayUpdate::WatchdogAction::RestartRequired &&
+      !modeTransition && !otaActive && !otaVerificationPending) {
+    if (!relayWatchdogStorageReady || relayWatchdogRestarts >= RELAY_WATCHDOG_MAX_RESTARTS) {
+      if (!relayWatchdogDeniedLogged) {
+        FirmwareLog.println("Relais-Update: Automatischer Neustart wegen Neustartbegrenzung oder Speicherfehler nicht möglich.");
+        remoteRelayUpdate.watchdogRestartBlocked("Relais-Update hängt; automatischer Neustart wegen Neustartbegrenzung oder Speicherfehler gesperrt. Manueller Neustart möglich.");
+      }
+      relayWatchdogDeniedLogged = true;
+      return;
+    }
+    const uint8_t next = relayWatchdogRestarts + 1;
+    if (relayWatchdogPreferences.putUChar("restarts", next) != 1 ||
+        relayWatchdogPreferences.getUChar("restarts", 255) != next) {
+      relayWatchdogStorageReady = false;
+      FirmwareLog.println("Relais-Update: Neustartzähler konnte nicht gespeichert werden; kein automatischer Neustart.");
+      remoteRelayUpdate.watchdogRestartBlocked("Relais-Update hängt; Neustartzähler konnte nicht gespeichert werden. Manueller Neustart möglich.");
+      return;
+    }
+    relayWatchdogRestarts = next;
+    modeTransition = true;
+    manualControl = false; manualPumpOn = false; automaticControl.reset();
+    pump.command(false, pump.direction(), millis()); servicePump();
+    modeRestartAt = millis();
+    FirmwareLog.printf("Relais-Update hängt nach Abbruch weiter; Pumpen AUS, begrenzter Neustart %u/%u folgt.\n", unsigned(next), unsigned(RELAY_WATCHDOG_MAX_RESTARTS));
+    return;
+  }
+  if (relayWatchdogStorageReady && relayWatchdogRestarts) {
+    const bool stable = !modeTransition && !otaActive && !otaVerificationPending && remoteRelayUpdate.idleForWatchdogRecovery();
+    if (!stable) relayWatchdogIdleTiming = false;
+    else if (!relayWatchdogIdleTiming) { relayWatchdogIdleTiming = true; relayWatchdogIdleSince = millis(); }
+    else if (uint32_t(millis() - relayWatchdogIdleSince) >= RELAY_WATCHDOG_STABLE_MS) {
+      if (relayWatchdogPreferences.putUChar("restarts", 0) == 1 && relayWatchdogPreferences.getUChar("restarts", 255) == 0) {
+        relayWatchdogRestarts = 0; relayWatchdogDeniedLogged = relayWatchdogIdleTiming = false;
+        FirmwareLog.println("Relais-Update: Neustartbegrenzung nach 30 Minuten ohne aktives Update zurückgesetzt.");
+      } else relayWatchdogStorageReady = false;
+    }
   }
 }
 
@@ -1334,7 +1384,15 @@ String remoteRelayStatusJson(unsigned board = 0) {
     ",\"online\":" + String(state.online ? "true" : "false") +
     ",\"busy\":" + String(state.busy ? "true" : "false") +
     ",\"updating\":" + String(remoteRelayUpdate.active() ? "true" : "false") +
-    ",\"mask\":" + String(state.mask) + ",\"forget\":" + jsonString(forgetNames[state.forgetState]) + ",\"reboot\":" + jsonString(rebootNames[state.rebootState]) + ",\"address\":" + jsonString(state.config.address) + ",\"version\":" + jsonString(state.version) + ",\"labels\":[";
+    ",\"mask\":" + String(state.mask) + ",\"forget\":" + jsonString(forgetNames[state.forgetState]) + ",\"reboot\":" + jsonString(rebootNames[state.rebootState]) + ",\"address\":" + jsonString(state.config.address) + ",\"version\":" + jsonString(state.version) + ",\"diagnostics\":";
+  if (!state.diagnosticsAvailable) json += "null";
+  else {
+    const RelayDiagnostics& d = state.diagnostics;
+    json += "{\"uptime\":" + String(d.uptime) + ",\"rssi\":" + String(d.rssi) + ",\"resetReason\":" + String(d.resetReason) +
+      ",\"watchdogState\":" + String(d.watchdogState) + ",\"watchdogRestarts\":" + String(d.watchdogRestarts) +
+      ",\"otaError\":" + String(d.otaError) + ",\"storageHealthy\":" + String(d.storageHealthy ? "true" : "false") + "}";
+  }
+  json += ",\"labels\":[";
   for (int i = 0; i < 4; ++i) { if (i) json += ','; json += jsonString(state.config.labels[i]); }
   return json + "]}";
 }
@@ -1482,7 +1540,9 @@ void receiveRemoteRelayUpdateChunk() {
     server.send(400, "text/plain; charset=utf-8", "Update-Datenblock ungültig oder nicht erwartet."); return;
   }
   RemoteRelayUpdateStatus status;
-  if (!remoteRelayUpdate.status(server.arg("token"), status)) { server.send(409, "text/plain", "Update nicht verfügbar."); return; }
+  const auto read = remoteRelayUpdate.readStatus(server.arg("token"), status);
+  if (read == RemoteRelayUpdate::StatusResult::Busy) { server.send(503, "text/plain", "Update-Status vorübergehend nicht verfügbar."); return; }
+  if (read != RemoteRelayUpdate::StatusResult::Ok) { server.send(409, "text/plain", "Update nicht verfügbar."); return; }
   server.send(200, "application/json", "{\"received\":" + String(status.received) + "}");
 }
 void startRemoteRelayUpdate() {
@@ -1498,7 +1558,10 @@ void cancelRemoteRelayUpdate() {
 void remoteRelayUpdateStatus() {
   if (!remoteRelayPostAllowed()) return;
   RemoteRelayUpdateStatus status;
-  if (server.args() != 1 || !remoteRelayUpdate.status(server.arg("token"), status)) { server.send(404, "text/plain", "Update nicht gefunden."); return; }
+  if (server.args() != 1) { server.send(404, "text/plain", "Update nicht gefunden."); return; }
+  const auto read = remoteRelayUpdate.readStatus(server.arg("token"), status);
+  if (read == RemoteRelayUpdate::StatusResult::Busy) { server.send(503, "text/plain", "Update-Status vorübergehend nicht verfügbar."); return; }
+  if (read != RemoteRelayUpdate::StatusResult::Ok) { server.send(404, "text/plain", "Update nicht gefunden."); return; }
   server.sendHeader("Cache-Control", "no-store");
   server.send(200, "application/json", "{\"state\":" + jsonString(status.state) + ",\"error\":" + jsonString(status.error) +
     ",\"size\":" + String(status.size) + ",\"received\":" + String(status.received) + ",\"sent\":" + String(status.sent) + "}");
@@ -1829,9 +1892,11 @@ void savePumpControl() {
 void rebootController() {
   if (server.header("X-Requested-With") != "HeatingUI") { server.send(403, "text/plain; charset=utf-8", "Bitte das Webinterface verwenden."); return; }
   if (server.args() != 0) { server.send(400, "text/plain; charset=utf-8", "Ungültige Anfrage."); return; }
-  if (otaActive || otaVerificationPending || modeTransition || remoteRelayAnyBusy() || remoteRelayUpdate.active() || relayProvisioning.active()) {
-    server.send(409, "text/plain; charset=utf-8", "Steuerung ist beschäftigt."); return;
+  if (otaActive || otaVerificationPending || modeTransition) { server.send(409, "text/plain; charset=utf-8", "Firmware-Update, Startprüfung oder Neustart läuft."); return; }
+  if (remoteRelayUpdate.active() && remoteRelayUpdate.watchdog() != RemoteRelayUpdate::WatchdogAction::RestartRequired) {
+    server.send(409, "text/plain; charset=utf-8", "Update der Relaiskarte läuft; der Neustart ist bis zum Abschluss oder Abbruch gesperrt."); return;
   }
+  if (remoteRelayAnyBusy() || relayProvisioning.active()) { server.send(409, "text/plain; charset=utf-8", "Relaiskarte ist beschäftigt oder wird eingerichtet."); return; }
   modeTransition = true;
   manualControl = false; manualPumpOn = false; automaticControl.reset();
   pump.command(false, pump.direction(), millis());
@@ -2344,6 +2409,13 @@ void setup() {
   relayProvisioningReady = relayProvisioning.begin(remoteRelays, REMOTE_RELAY_COUNT, &relayDiscovery);
   remoteRelayUpdateReady = remoteRelayUpdate.begin();
   if (!remoteRelayUpdateReady) FirmwareLog.println("Relais-Update konnte nicht initialisiert werden.");
+  relayWatchdogStorageReady = relayWatchdogPreferences.begin("relay-watchdog", false);
+  if (relayWatchdogStorageReady) {
+    relayWatchdogRestarts = relayWatchdogPreferences.isKey("restarts") ? relayWatchdogPreferences.getUChar("restarts", 255) : 0;
+    if (relayWatchdogRestarts > RELAY_WATCHDOG_MAX_RESTARTS) relayWatchdogStorageReady = false;
+  }
+  if (!relayWatchdogStorageReady) FirmwareLog.println("Relais-Update: Neustartbegrenzung nicht verfügbar; kein automatischer Watchdog-Neustart.");
+  else if (relayWatchdogRestarts) FirmwareLog.printf("Relais-Update: %u automatische Neustarts seit letzter Ruhephase.\n", unsigned(relayWatchdogRestarts));
   if (!remoteRelayReady) FirmwareLog.println("WLAN-Relaisanbindung konnte nicht gestartet werden.");
   const char* headers[] = {"X-Requested-With"};
   server.collectHeaders(headers, 1);
@@ -2400,6 +2472,7 @@ void setup() {
 void loop() {
   servicePump();
   remoteRelayUpdate.loop();
+  serviceRelayUpdateWatchdog();
   relayProvisioning.loop();
   unsigned long now = millis();
   if (otaActive && otaFinished && now - otaLastActivity >= 2500 && now - otaStoppedAt >= 2500) { savePumpRuntime(true); ESP.restart(); }

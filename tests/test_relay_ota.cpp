@@ -29,15 +29,15 @@ int main(){
  auto again=prepare(image.size(),digest(image));ota.prepare(again);assert(again.code==200);
  auto c=part(0,image.data(),2048);ota.chunk(c);assert(c.code==200&&Update.writes==1);
  auto retry=part(0,image.data(),2048);ota.chunk(retry);assert(retry.code==200&&Update.writes==1);
- auto bad=part(2000,image.data()+2048,2048);ota.chunk(bad);assert(bad.code==400&&!ota.active()&&!Update.running);
+ auto bad=part(2000,image.data()+2048,2048);ota.chunk(bad);assert(bad.code==400&&!ota.active()&&!Update.running&&ota.lastError()==RelayOta::INVALID_DATA);
  auto p2=prepare(image.size(),std::string(64,'0'));ota.prepare(p2);assert(p2.code==200);
  auto c1=part(0,image.data(),2048),c2=part(2048,image.data()+2048,2048);ota.chunk(c1);ota.chunk(c2);
- auto fail=tokenOnly();ota.finish(fail);assert(fail.code==400&&!Update.finished&&!ota.active());
+ auto fail=tokenOnly();ota.finish(fail);assert(fail.code==400&&!Update.finished&&!ota.active()&&ota.lastError()==RelayOta::INVALID_IMAGE);
  auto p3=prepare(image.size(),digest(image));ota.prepare(p3);assert(p3.code==200);
  c1=part(0,image.data(),2048);c2=part(2048,image.data()+2048,2048);ota.chunk(c1);ota.chunk(c2);
  auto wrong=tokenOnly();wrong.values["token"]=std::string(32,'b');ota.finish(wrong);assert(wrong.code==409&&ota.active());
  auto done=tokenOnly();ota.finish(done);assert(done.code==200&&Update.finished&&ota.active()&&Update.image==image);
  mockMillis+=1499;ota.loop();assert(ESP.restarts==0);mockMillis++;ota.loop();assert(ESP.restarts==1);
- RelayOta timeout;auto p4=prepare(image.size(),digest(image));timeout.prepare(p4);assert(p4.code==200);mockMillis+=45000;timeout.loop();assert(!timeout.active()&&!Update.running);
+ RelayOta timeout;auto p4=prepare(image.size(),digest(image));timeout.prepare(p4);assert(p4.code==200);mockMillis+=45000;timeout.loop();assert(!timeout.active()&&!Update.running&&timeout.lastError()==RelayOta::TIMEOUT);
  std::puts("PASS: Relais-OTA: Prüfung, Blockwiederholung, Fehler, Prüfsumme, Neustart und Zeitlimit.");
 }

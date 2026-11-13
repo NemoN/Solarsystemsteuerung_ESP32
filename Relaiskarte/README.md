@@ -65,8 +65,8 @@ für **ESP32 Dev Module** kompilieren und hochladen.
 Bis zu vier Erweiterungen lassen sich parallel mit dem Haupt-ESP verbinden.
 
 1. Die Karte einschalten. Ihr Einrichtungs-WLAN heißt `Relaiserweiterung-XXXX`.
-2. Am Haupt-ESP unter **Einstellungen → Relaiserweiterungen** einen freien
-   Platz wählen und **Neue Erweiterungen suchen**. Die gewünschte Erweiterung
+2. Am Haupt-ESP unter **Einstellungen → Relaiserweiterungen** auf
+   **Erweiterung hinzufügen** und dann auf **Neue Erweiterungen suchen** klicken. Die gewünschte Erweiterung
    auswählen und **Erweiterung einrichten** drücken. Anschließend die Taste
    **IO0** auf der Erweiterung drei Sekunden gedrückt halten.
 3. Der Haupt-ESP öffnet kurz einen Kopplungs-AP und bleibt mit dem
@@ -129,6 +129,24 @@ benötigt Relaiskarten-Firmware 3.1.0 oder neuer. Ältere Karten müssen zuerst
 Eine unterbrochene Antwort bestätigt den Neustart nicht; den Kartenstatus und
 die Relaiszustände anschließend prüfen.
 
+## Überwachung und Diagnose
+
+Eine separate Aufgabe überwacht die Hauptschleife der Relaiskarte. Bleibt sie
+60 Sekunden ohne Fortschritt, startet die Karte neu. Dabei schalten die Relais
+kurz aus; anschließend werden ihre gespeicherten Zustände wiederhergestellt.
+Zum Schutz vor Neustartschleifen sind höchstens zwei automatische Neustarts
+erlaubt. Der Zähler wird dauerhaft gespeichert und nach 30 Minuten stabiler
+Laufzeit zurückgesetzt. Ist der Zähler voll oder kann er nicht zuverlässig
+gespeichert werden, erfolgt kein weiterer automatischer Neustart. Die
+Überwachung beginnt nach der Initialisierung; ein vollständiger Ausfall des
+Schedulers oder der Stromversorgung wird dadurch nicht unabhängig überwacht.
+
+Unter **Einstellungen → Relaiserweiterungen → Einstellungen → Diagnose** zeigt
+der Haupt-ESP Laufzeit, WLAN-Signal, Neustartgrund, Überwachungsstatus,
+Neustartzähler, letzten Updatefehler und Speicherstatus der jeweiligen Karte.
+Der letzte Updatefehler bleibt, sofern speicherbar, auch nach einem Neustart
+erhalten. Ältere Karten ohne diese Diagnose bleiben normal bedienbar.
+
 ## Firmware über den Haupt-ESP aktualisieren
 
 Die hier enthaltene Firmware mit Updatefunktion muss zunächst einmal über den
@@ -136,7 +154,8 @@ seriellen Anschluss auf die Relaiskarte geladen werden. Auch der Haupt-ESP
 benötigt die zugehörige Firmware. Die Karte muss im Heimnetz erreichbar sein.
 Das Update funktioniert auch im Testmodus des Haupt-ESP.
 
-Unter **Einstellungen → Relaiskarte aktualisieren** gibt es zwei Möglichkeiten:
+Unter **Einstellungen → Relaiserweiterungen** bei der gewünschten Karte
+**Einstellungen** öffnen. Im Bereich **Firmware** gibt es zwei Möglichkeiten:
 
 - **GitHub:** Nach Releases suchen und eine Version auswählen. Der Browser und
   der Haupt-ESP benötigen dafür Internetzugang. Angezeigt werden nur Releases
@@ -174,6 +193,17 @@ Firmware aktiv. Bei fehlgeschlagener Startprüfung ist ein Rückfall auf den
 vorherigen Slot vorgesehen.
 Wenn die Rückmeldung nach dem Neustart fehlt, zeigt die Oberfläche den Status
 als unklar: Verbindung und Relaiszustände prüfen, bevor ein neues Update startet.
+
+Der Haupt-ESP begrenzt das Warten auf kurze Antworten der Karte. Bleibt der
+Update-Task 90 Sekunden ohne Fortschritt, fordert er einen Abbruch an. Falls der
+Task weitere 30 Sekunden nicht reagiert, startet der Haupt-ESP nach sicherem
+Abschalten seiner Pumpen und der Ölfreigabe neu. Dieser Notfall-Neustart ist
+auf zwei Versuche begrenzt; nach 30 Minuten ohne aktives Update wird der Zähler
+zurückgesetzt. Bei Speicherfehler oder erreichter Grenze erfolgt kein weiterer
+automatischer Neustart. Bei unklarem Update-Ausgang Kartenfirmware und
+Relaiszustände prüfen, bevor erneut aktualisiert wird.
+Nach Ablauf der Wartezeit kann der Haupt-ESP trotz des festhängenden Updates
+auch ausdrücklich über seine Neustart-Schaltfläche neu gestartet werden.
 
 Die Verbindung verwendet denselben individuellen Schlüssel wie die Schalter.
 Sie ist unverschlüsselt und nur für das vertrauenswürdige Heimnetz vorgesehen.

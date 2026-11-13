@@ -25,7 +25,7 @@ async function request(url,opts){
  throw new Error('Unerwarteter Aufruf '+name);
 }
 const ctx=vm.createContext({remoteRelayUpdateForm:form,remoteRelayUpdateMessage:message,remoteRelayUpdateProgress:progress,remoteRelayUploadBusy:false,
- remoteUpdateBoard:{value:'3'},confirm:()=>true,request,URLSearchParams,Uint8Array,Array,Date,btoa:s=>Buffer.from(s,'binary').toString('base64'),setTimeout:fn=>fn()});
+ remoteRelayCards:[null,null,null,{configured:true,online:true}],remoteRelayState:null,simulationEnabled:false,updateRemoteRelay:()=>{},remoteUpdateBoard:{value:'3'},confirm:()=>true,request,URLSearchParams,Uint8Array,Array,Date,btoa:s=>Buffer.from(s,'binary').toString('base64'),setTimeout:fn=>fn()});
 vm.runInContext(sketch.slice(start,end),ctx);
 (async()=>{
  await submit({preventDefault(){}});

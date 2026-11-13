@@ -22,6 +22,7 @@ std::map<std::string,std::vector<unsigned char>> mockPreferences;
 struct Config { char ssid[33]; char password[64]; char key[33]; char apPassword[17]; };
 Config config = {};
 Preferences prefs;
+bool relayStorageHealthy = true;
 ''' + valid + importer + r'''
 int main() {
  assert(prefs.begin("relay-board", false));

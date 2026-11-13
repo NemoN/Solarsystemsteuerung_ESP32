@@ -6,7 +6,8 @@ const labels=Array.from({length:4},()=>({textContent:''}));
 const buttons=labels.map((label,i)=>({dataset:{relay:String(i+1)},disabled:true,attributes:{},setAttribute(k,v){this.attributes[k]=v;},querySelector(){return label;}}));
 const nodes={
  'remote-relay-status':{},'remote-relay-detail':{},
- 'relay-installed-version':{},'relay-installed-notes':{replaceChildren(){}},'remote-update-availability':{},
+ 'relay-installed-version':{},'relay-installed-notes':{replaceChildren(){}},'remote-update-availability':{},'relay-diagnostics':{},'relay-diagnostics-table':{},
+ 'relay-diag-uptime':{},'relay-diag-rssi':{},'relay-diag-reset':{},'relay-diag-watchdog':{},'relay-diag-restarts':{},'relay-diag-ota':{},'relay-diag-storage':{},
  'remote-relay-switches':{addEventListener(type,fn){calls.click=fn;}},
 };
 const form={elements:{address:{value:''},key:{value:''},label1:{value:''},label2:{value:''},label3:{value:''},label4:{value:''}},
@@ -32,13 +33,19 @@ const context=vm.createContext({document:{getElementById:id=>nodes[id],createEle
  relayPairForm,relayPairScan,relayPairCancel,relayPairScanMessage,relayPairMessage,relayPairActive:false,relayPairScanBusy:false,
  remoteRelayCards:[],relayDiscoverySignature:'',remoteExtraCards:new Map(),wifiBusy:false,wifiScanning:false,confirm:()=>true,
  remoteRelayUpdateForm:updateForm,remoteRelayUpdateMessage:{},remoteRelayUpdateProgress:{},remoteRelayUploadBusy:false,
- updateRelayReboot:()=>{},remoteRelayForm:form,remoteRelayMessage:{},remoteRelayConfigMessage:{},remoteRelayDirty:false,remoteRelayBusy:false,remoteRelayRevision:0,remoteRelayState:null,pendingRemoteAction:null,URLSearchParams,
+ updateRelayReboot:()=>{},renderRelaySettingsCards:()=>{},remoteRelayForm:form,remoteRelayMessage:{},remoteRelayConfigMessage:{},remoteRelayDirty:false,remoteRelayBusy:false,remoteRelayRevision:0,remoteRelayState:null,pendingRemoteAction:null,URLSearchParams,
  request:async(url,options)=>{posted={url,values:options.body};return {accepted:true};}});
 const start=sketch.indexOf('function updateRemoteRelay(state,simulation)');
 const end=sketch.indexOf('async function request(url,options={})',start);
 assert(start>0&&end>start);vm.runInContext(sketch.slice(start,end),context);
 const state={ready:true,configured:true,online:true,busy:false,address:'192.168.1.2',mask:4,labels:['Licht','Ventil','Pumpe','Reserve']};
-context.updateRemoteRelay(state,false);
+context.remoteRelayCards=[state];context.updateRemoteRelay(state,false);
+assert.match(nodes['relay-diagnostics'].textContent,/noch nicht verfügbar/);
+assert.equal(nodes['relay-diagnostics-table'].hidden,true);
+context.remoteRelayCards=[{...state,diagnostics:{uptime:90061,rssi:-62,resetReason:3,watchdogState:1,watchdogRestarts:2,otaError:1,storageHealthy:false}}];context.updateRemoteRelay(state,false);
+assert.equal(nodes['relay-diagnostics'].hidden,true);assert.equal(nodes['relay-diagnostics-table'].hidden,false);
+assert.equal(nodes['relay-diag-uptime'].textContent,'1 T 1 Std 1 Min');assert.equal(nodes['relay-diag-rssi'].textContent,'-62 dBm');assert.match(nodes['relay-diag-watchdog'].textContent,/Neustartbegrenzung erreicht/);assert.equal(nodes['relay-diag-restarts'].textContent,'2 / 2');assert.match(nodes['relay-diag-ota'].textContent,/Zeitüberschreitung/);assert.equal(nodes['relay-diag-storage'].textContent,'Fehler');
+context.remoteRelayCards=[state];
 assert.equal(nodes['remote-relay-status'].textContent,'Verbunden');
 assert.equal(labels[2].textContent,'Pumpe · EIN');
 assert.equal(buttons[2].attributes['aria-checked'],'true');
@@ -52,17 +59,18 @@ assert.equal(nodes['remote-update-availability'].textContent,'');
 context.updateRemoteRelay(state,false);
 assert.equal(githubButton.disabled,false);assert.equal(updateButton.disabled,false);
 assert.equal(nodes['remote-update-availability'].textContent,'');
-context.updateRemoteRelay({...state,online:false},false);
+context.remoteRelayCards=[{...state,online:false}];context.updateRemoteRelay(context.remoteRelayCards[0],false);
+assert.equal(nodes['relay-diagnostics-table'].hidden,true);assert.match(nodes['relay-diagnostics'].textContent,/nicht erreichbar/);
 assert.equal(buttons[2].disabled,true);
 assert.equal(githubButton.disabled,true);assert.equal(updateButton.disabled,true);
 assert.match(nodes['remote-update-availability'].textContent,/nicht erreichbar/);
 assert.match(labels[2].textContent,/unbekannt/);
-context.updateRemoteRelay(state,true);
+context.remoteRelayCards=[state];context.updateRemoteRelay(state,true);
 (async()=>{
  await calls.click({target:{closest:()=>buttons[0]}});
  assert.equal(posted.url,'/api/remote-relay/command');
  assert.equal(posted.values.get('id'),'1');assert.equal(posted.values.get('value'),'1');
- context.updateRemoteRelay({...state,mask:5,busy:false},false);
+ context.remoteRelayCards=[{...state,mask:5,busy:false}];context.updateRemoteRelay(context.remoteRelayCards[0],false);
  assert.equal(context.remoteRelayMessage.textContent,'Relaiszustand bestätigt.');
  context.remoteRelayCards=[state];context.updateRemoteRelay(state,true);
  await calls.forget();assert.equal(posted.url,'/api/remote-relay/forget');assert.equal(posted.values.get('board'),'0');

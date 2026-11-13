@@ -3,6 +3,7 @@
 #include <HTTPClient.h>
 #include <WiFiClientSecure.h>
 #include "GitHubRoots.h"
+#include "RelayResponse.h"
 #include <esp_heap_caps.h>
 #include <esp_system.h>
 #include <mbedtls/base64.h>
@@ -10,6 +11,8 @@
 
 namespace {
 constexpr size_t MAX_IMAGE = 0x140000;
+constexpr uint32_t WATCHDOG_STALL_MS = 90000;
+constexpr uint32_t WATCHDOG_GRACE_MS = 30000;
 constexpr char MARKER[] = "RBS16467-RELAY-FIRMWARE-OTA1";
 constexpr char GITHUB_PREFIX[] = "https://github.com/NemoN/Solarsystemsteuerung_ESP32/releases/download/";
 constexpr char GITHUB_SUFFIX[] = "/Relaiskarte.ino.bin";
@@ -55,8 +58,16 @@ int exchange(const RemoteRelayConfig& cfg, const char* path, const String* body,
   if (body) http.addHeader("Content-Type", "application/x-www-form-urlencoded");
   const int code = body ? http.POST(*body) : http.GET();
   response = "";
-  if (code == 200 && http.getSize() >= 0 && http.getSize() <= 128) response = http.getString();
-  http.end(); return code;
+  int result = code;
+  if (code == 200) {
+    const int size = http.getSize();
+    WiFiClient* stream = http.getStreamPtr();
+    char reply[129];
+    if (!stream || size <= 0 || size > 128 || !readRelayResponse(*stream, size_t(size), reply, sizeof(reply),
+        []() { return millis(); }, []() { vTaskDelay(pdMS_TO_TICKS(10)); }, 5000)) result = -1;
+    else response = reply;
+  }
+  http.end(); return result;
 }
 bool requestWithRetry(const RemoteRelayConfig& cfg, const char* path, const String& body, const String& expected, int& lastCode) {
   for (int attempt = 0; attempt < 5; ++attempt) {
@@ -72,13 +83,14 @@ bool RemoteRelayUpdate::begin() { lock_ = xSemaphoreCreateMutex(); return lock_ 
 void RemoteRelayUpdate::releaseImage() { if (image_) { heap_caps_free(image_); image_ = nullptr; } }
 bool RemoteRelayUpdate::active() {
   if (!lock_) return false;
-  xSemaphoreTake(lock_, portMAX_DELAY);
+  // Bei blockiertem Update im Zweifel sperren, ohne die Regelung anzuhalten.
+  if (xSemaphoreTake(lock_, pdMS_TO_TICKS(20)) != pdPASS) return true;
   const bool value = state_ == RECEIVING || state_ == DOWNLOADING || state_ == SENDING || state_ == VERIFYING;
   xSemaphoreGive(lock_); return value;
 }
 bool RemoteRelayUpdate::prepare(size_t size, const RemoteRelaySnapshot& relay, char token[33]) {
   if (!lock_ || size < 1024 || size > MAX_IMAGE || !relay.online || relay.busy || !relay.config.address[0] || !relay.config.key[0]) return false;
-  xSemaphoreTake(lock_, portMAX_DELAY);
+  if (xSemaphoreTake(lock_, pdMS_TO_TICKS(20)) != pdPASS) return false;
   if (state_ == RECEIVING || state_ == DOWNLOADING || state_ == SENDING || state_ == VERIFYING) { xSemaphoreGive(lock_); return false; }
   releaseImage();
   image_ = static_cast<uint8_t*>(heap_caps_malloc(size, MALLOC_CAP_SPIRAM | MALLOC_CAP_8BIT));
@@ -88,14 +100,15 @@ bool RemoteRelayUpdate::prepare(size_t size, const RemoteRelaySnapshot& relay, c
   for (size_t i = 0; i < sizeof(random); ++i) { token_[2*i] = hex[random[i] >> 4]; token_[2*i+1] = hex[random[i] & 15]; }
   token_[32] = 0; memcpy(token, token_, 33);
   config_ = relay.config; size_ = size; received_ = sent_ = lastLength_ = 0;
-  lastActivity_ = millis(); error_[0] = githubUrl_[0] = githubSha256_[0] = 0; cancelRequested_ = false; state_ = RECEIVING;
+  lastActivity_ = millis(); watchdogSince_ = 0; watchdogTriggered_ = false;
+  error_[0] = githubUrl_[0] = githubSha256_[0] = 0; cancelRequested_ = false; state_ = RECEIVING;
   xSemaphoreGive(lock_); return true;
 }
 bool RemoteRelayUpdate::prepareGithub(size_t size, const String& url, const String& sha256, const RemoteRelaySnapshot& relay, char token[33]) {
   if (!validGithubSource(url, sha256) || !prepare(size, relay, token)) return false;
-  xSemaphoreTake(lock_, portMAX_DELAY);
+  if (xSemaphoreTake(lock_, pdMS_TO_TICKS(20)) != pdPASS) return false;
   url.toCharArray(githubUrl_, sizeof(githubUrl_)); sha256.toCharArray(githubSha256_, sizeof(githubSha256_));
-  state_ = DOWNLOADING;
+  state_ = DOWNLOADING; lastActivity_ = millis();
   if (xTaskCreate(taskEntry, "relay-github", 16384, this, 1, nullptr) != pdPASS) {
     state_ = FAILED; strlcpy(error_, "Download-Task konnte nicht gestartet werden.", sizeof(error_)); releaseImage(); xSemaphoreGive(lock_); return false;
   }
@@ -105,7 +118,7 @@ bool RemoteRelayUpdate::chunk(const String& token, size_t offset, const String& 
   if (!lock_ || base64.length() > 5464 || !base64.length()) return false;
   static uint8_t decoded[4096]; size_t length = 0; uint8_t digest[32];
   if (mbedtls_base64_decode(decoded, sizeof(decoded), &length, reinterpret_cast<const uint8_t*>(base64.c_str()), base64.length()) != 0 || !length || mbedtls_sha256_ret(decoded, length, digest, 0) != 0) return false;
-  xSemaphoreTake(lock_, portMAX_DELAY);
+  if (xSemaphoreTake(lock_, pdMS_TO_TICKS(20)) != pdPASS) return false;
   bool ok = false;
   if (state_ == RECEIVING && token == token_) {
     if (lastLength_ && offset == lastOffset_ && length == lastLength_ && memcmp(digest, lastHash_, 32) == 0) ok = true;
@@ -118,9 +131,9 @@ bool RemoteRelayUpdate::chunk(const String& token, size_t offset, const String& 
 }
 bool RemoteRelayUpdate::start(const String& token) {
   if (!lock_) return false;
-  xSemaphoreTake(lock_, portMAX_DELAY);
+  if (xSemaphoreTake(lock_, pdMS_TO_TICKS(20)) != pdPASS) return false;
   if (state_ != RECEIVING || token != token_ || received_ != size_) { xSemaphoreGive(lock_); return false; }
-  state_ = SENDING;
+  state_ = SENDING; lastActivity_ = millis();
   if (xTaskCreate(taskEntry, "relay-ota", 12288, this, 1, nullptr) != pdPASS) {
     state_ = FAILED; strlcpy(error_, "Update-Task konnte nicht gestartet werden.", sizeof(error_)); releaseImage(); xSemaphoreGive(lock_); return false;
   }
@@ -128,26 +141,71 @@ bool RemoteRelayUpdate::start(const String& token) {
 }
 bool RemoteRelayUpdate::cancel(const String& token) {
   if (!lock_) return false;
-  xSemaphoreTake(lock_, portMAX_DELAY);
+  if (xSemaphoreTake(lock_, pdMS_TO_TICKS(20)) != pdPASS) return false;
   bool ok = token == token_ && (state_ == RECEIVING || state_ == DOWNLOADING || state_ == SENDING);
   if (ok && state_ == RECEIVING) { releaseImage(); state_ = CANCELED; }
   else if (ok) cancelRequested_ = true;
   xSemaphoreGive(lock_); return ok;
 }
 bool RemoteRelayUpdate::status(const String& token, RemoteRelayUpdateStatus& result) {
-  if (!lock_) return false;
-  xSemaphoreTake(lock_, portMAX_DELAY);
-  if (!token.length() || token != token_) { xSemaphoreGive(lock_); return false; }
+  return readStatus(token, result) == StatusResult::Ok;
+}
+RemoteRelayUpdate::StatusResult RemoteRelayUpdate::readStatus(const String& token, RemoteRelayUpdateStatus& result) {
+  if (!lock_) return StatusResult::NotFound;
+  if (xSemaphoreTake(lock_, pdMS_TO_TICKS(20)) != pdPASS) return StatusResult::Busy;
+  if (!token.length() || token != token_) { xSemaphoreGive(lock_); return StatusResult::NotFound; }
   static const char* names[] = {"idle", "receiving", "downloading", "sending", "verifying", "done", "failed", "unknown", "canceled"};
   strlcpy(result.state, names[state_], sizeof(result.state)); strlcpy(result.error, error_, sizeof(result.error));
   result.size = size_; result.received = received_; result.sent = sent_;
-  xSemaphoreGive(lock_); return true;
+  xSemaphoreGive(lock_); return StatusResult::Ok;
 }
 void RemoteRelayUpdate::loop() {
   if (!lock_) return;
-  xSemaphoreTake(lock_, portMAX_DELAY);
+  if (xSemaphoreTake(lock_, 0) != pdPASS) return;
   if (state_ == RECEIVING && millis() - lastActivity_ >= 45000) { releaseImage(); state_ = FAILED; strlcpy(error_, "Upload zum Haupt-ESP unterbrochen.", sizeof(error_)); }
   xSemaphoreGive(lock_);
+}
+RemoteRelayUpdate::WatchdogAction RemoteRelayUpdate::watchdog() {
+  if (!lock_) return WatchdogAction::None;
+  const uint32_t now = millis();
+  if (xSemaphoreTake(lock_, 0) != pdPASS) {
+    if (!lockBlocked_) { lockBlocked_ = true; lockBlockedSince_ = now; }
+    return uint32_t(now - lockBlockedSince_) >= WATCHDOG_STALL_MS + WATCHDOG_GRACE_MS
+      ? WatchdogAction::RestartRequired : WatchdogAction::None;
+  }
+  lockBlocked_ = false;
+  const bool monitored = state_ == DOWNLOADING || state_ == SENDING || state_ == VERIFYING;
+  WatchdogAction action = WatchdogAction::None;
+  if (monitored && !watchdogTriggered_ && uint32_t(now - lastActivity_) >= WATCHDOG_STALL_MS) {
+    watchdogTriggered_ = true; watchdogSince_ = now;
+    if (state_ != VERIFYING) cancelRequested_ = true;
+    strlcpy(error_, state_ == VERIFYING ? "Startprüfung der Relaiskarte antwortet nicht." : "Update ohne Fortschritt; Abbruch angefordert.", sizeof(error_));
+    action = WatchdogAction::CancelRequested;
+  } else if (monitored && watchdogTriggered_ && uint32_t(now - watchdogSince_) >= WATCHDOG_GRACE_MS) {
+    action = WatchdogAction::RestartRequired;
+  }
+  xSemaphoreGive(lock_); return action;
+}
+bool RemoteRelayUpdate::idleForWatchdogRecovery() {
+  if (!lock_ || xSemaphoreTake(lock_, 0) != pdPASS) return false;
+  const bool idle = state_ != RECEIVING && state_ != DOWNLOADING && state_ != SENDING && state_ != VERIFYING;
+  xSemaphoreGive(lock_); return idle;
+}
+void RemoteRelayUpdate::watchdogRestartBlocked(const char* reason) {
+  if (!lock_ || xSemaphoreTake(lock_, 0) != pdPASS) return;
+  if (state_ == DOWNLOADING || state_ == SENDING || state_ == VERIFYING)
+    strlcpy(error_, reason, sizeof(error_));
+  xSemaphoreGive(lock_);
+}
+void RemoteRelayUpdate::touch() {
+  xSemaphoreTake(lock_, portMAX_DELAY);
+  lastActivity_ = millis();
+  // Nach abgeschlossenem Flashen darf die Startprüfung weiterlaufen, wenn sie wieder antwortet.
+  if (state_ == VERIFYING && watchdogTriggered_) { watchdogTriggered_ = false; error_[0] = 0; }
+  xSemaphoreGive(lock_);
+}
+bool RemoteRelayUpdate::canceled() {
+  xSemaphoreTake(lock_, portMAX_DELAY); const bool value = cancelRequested_; xSemaphoreGive(lock_); return value;
 }
 void RemoteRelayUpdate::finishTask(State state, const char* message) {
   xSemaphoreTake(lock_, portMAX_DELAY); releaseImage(); state_ = state; strlcpy(error_, message, sizeof(error_)); xSemaphoreGive(lock_);
@@ -156,7 +214,7 @@ bool RemoteRelayUpdate::downloadGithub() {
   for (unsigned attempt = 0; attempt < 3; ++attempt) {
     xSemaphoreTake(lock_, portMAX_DELAY); const bool canceled = cancelRequested_; received_ = 0; xSemaphoreGive(lock_);
     if (canceled) { finishTask(CANCELED, "Update abgebrochen."); return false; }
-    WiFiClientSecure client; client.setCACert(GITHUB_ROOT_CERTS); client.setHandshakeTimeout(12);
+    touch(); WiFiClientSecure client; client.setCACert(GITHUB_ROOT_CERTS); client.setHandshakeTimeout(12);
     HTTPClient http; http.setConnectTimeout(12000); http.setTimeout(12000);
     http.setFollowRedirects(HTTPC_STRICT_FOLLOW_REDIRECTS); http.setRedirectLimit(4); http.setUserAgent("Backload-ESP32");
     const bool started = http.begin(client, githubUrl_);
@@ -182,7 +240,7 @@ bool RemoteRelayUpdate::downloadGithub() {
         vTaskDelay(pdMS_TO_TICKS(10)); continue;
       }
       total += size_t(count); lastData = millis();
-      xSemaphoreTake(lock_, portMAX_DELAY); received_ = total; xSemaphoreGive(lock_);
+      xSemaphoreTake(lock_, portMAX_DELAY); received_ = total; lastActivity_ = millis(); xSemaphoreGive(lock_);
       vTaskDelay(pdMS_TO_TICKS(1));
     }
     http.end();
@@ -193,7 +251,7 @@ bool RemoteRelayUpdate::downloadGithub() {
       if (mbedtls_sha256_ret(image_, size_, digest, 0) != 0) error = "SHA-256-Prüfung fehlgeschlagen.";
       else { hexDigest(digest, actual); if (strcmp(actual, githubSha256_) != 0) error = "SHA-256-Prüfsumme stimmt nicht mit GitHub überein."; }
     }
-    if (!error) { xSemaphoreTake(lock_, portMAX_DELAY); state_ = SENDING; xSemaphoreGive(lock_); return true; }
+    if (!error) { xSemaphoreTake(lock_, portMAX_DELAY); state_ = SENDING; lastActivity_ = millis(); xSemaphoreGive(lock_); return true; }
     if (!retry || attempt == 2) { finishTask(FAILED, error); return false; }
     vTaskDelay(pdMS_TO_TICKS(1000));
   }
@@ -202,6 +260,8 @@ bool RemoteRelayUpdate::downloadGithub() {
 void RemoteRelayUpdate::taskEntry(void* p) { static_cast<RemoteRelayUpdate*>(p)->task(); }
 void RemoteRelayUpdate::task() {
   if (githubUrl_[0] && !downloadGithub()) { vTaskDelete(nullptr); return; }
+  if (canceled()) { finishTask(CANCELED, "Update wegen Zeitüberschreitung abgebrochen."); vTaskDelete(nullptr); return; }
+  touch();
   uint8_t digest[32]; char digestText[65];
   if (size_ < 24 || image_[0] != 0xe9 || image_[12] != 0 || image_[13] != 0 ||
       !memmem(image_, size_, MARKER, sizeof(MARKER)-1) || mbedtls_sha256_ret(image_, size_, digest, 0) != 0) {
@@ -209,13 +269,20 @@ void RemoteRelayUpdate::task() {
   }
   hexDigest(digest, digestText);
   String before;
-  if (exchange(config_, "/api/ota/info", nullptr, before) != 200 || !before.startsWith(String(MARKER)+":") || !before.endsWith(":READY")) {
-    finishTask(FAILED, "Relaiskarte unterstützt das Update nicht oder ist nicht bereit."); vTaskDelete(nullptr); return;
+  const int infoCode = exchange(config_, "/api/ota/info", nullptr, before);
+  if (infoCode != 200 || !before.startsWith(String(MARKER)+":") || !before.endsWith(":READY")) {
+    finishTask(FAILED, infoCode <= 0 ? "Keine vollständige Antwort der Relaiskarte; Verbindung oder Zeitüberschreitung." :
+      infoCode == 403 ? "Relaiskarte lehnt den Verbindungsschlüssel ab." :
+      "Relaiskarte unterstützt das Update nicht oder ist nicht bereit."); vTaskDelete(nullptr); return;
   }
+  if (canceled()) { finishTask(CANCELED, "Update wegen Zeitüberschreitung abgebrochen."); vTaskDelete(nullptr); return; }
+  touch();
   const String prep = "token=" + String(token_) + "&size=" + String(size_) + "&sha256=" + String(digestText);
   String ready; int code = -1;
   for (int attempt = 0; attempt < 3; ++attempt) {
+    if (canceled()) { finishTask(CANCELED, "Update wegen Zeitüberschreitung abgebrochen."); vTaskDelete(nullptr); return; }
     code = exchange(config_, "/api/ota/prepare", &prep, ready);
+    touch();
     if (code == 200 && ready.startsWith("READY:")) break;
     if (code >= 400 && code < 500) break;
     vTaskDelay(pdMS_TO_TICKS(250));
@@ -249,11 +316,11 @@ void RemoteRelayUpdate::task() {
         snprintf(message, sizeof(message), "Übertragung bei %u von %u Bytes: HTTP %d.", unsigned(offset), unsigned(size_), blockCode);
       finishTask(FAILED, message); vTaskDelete(nullptr); return;
     }
-    xSemaphoreTake(lock_, portMAX_DELAY); sent_ = offset + length; xSemaphoreGive(lock_);
+    xSemaphoreTake(lock_, portMAX_DELAY); sent_ = offset + length; lastActivity_ = millis(); xSemaphoreGive(lock_);
   }
   xSemaphoreTake(lock_, portMAX_DELAY);
   if (cancelRequested_) { xSemaphoreGive(lock_); String reply; exchange(config_, "/api/ota/abort", &abortBody, reply); finishTask(CANCELED, "Update abgebrochen."); vTaskDelete(nullptr); return; }
-  state_ = VERIFYING; xSemaphoreGive(lock_);
+  state_ = VERIFYING; lastActivity_ = millis(); xSemaphoreGive(lock_);
   // Bei verlorenem Abschluss-ACK keinesfalls erneut installieren: Neustart prüfen.
   String finishReply; const int finishCode = exchange(config_, "/api/ota/finish", &abortBody, finishReply);
   if (finishCode >= 400 && finishCode < 500) { finishTask(FAILED, "Relaiskarte hat die Firmware abgelehnt."); vTaskDelete(nullptr); return; }
@@ -261,7 +328,8 @@ void RemoteRelayUpdate::task() {
   for (int i = 0; i < 30; ++i) {
     vTaskDelay(pdMS_TO_TICKS(1000));
     String info;
-    if (exchange(config_, "/api/ota/info", nullptr, info) != 200) { sawRestart = true; continue; }
+    const int infoCode = exchange(config_, "/api/ota/info", nullptr, info); touch();
+    if (infoCode != 200) { sawRestart = true; continue; }
     if (info.startsWith(String(MARKER) + ":") && info.endsWith(":PENDING")) sawRestart = true;
     if (info == String(MARKER) + ":" + target + ":READY") { finishTask(DONE, ""); vTaskDelete(nullptr); return; }
     if (sawRestart && info == before) { finishTask(FAILED, "Die Relaiskarte ist zur bisherigen Firmware zurückgekehrt."); vTaskDelete(nullptr); return; }

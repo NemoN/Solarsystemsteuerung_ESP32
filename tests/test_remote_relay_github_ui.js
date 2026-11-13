@@ -4,7 +4,7 @@ const css=fs.readFileSync(path.join(__dirname,'../Backload/DashboardStyles.h'),'
 const main=sketch.slice(sketch.indexOf('<section id="remote-relay-section"'),sketch.indexOf('<section id="remote-relay-settings"'));
 assert(main.includes('id="remote-relay-switches"'));
 assert(!main.includes('id="remote-relay-form"')&&!main.includes('id="remote-relay-update-form"'));
-assert(sketch.includes('<a href="#remote-relay-settings">')&&sketch.includes('<a href="#remote-relay-update-section">'));
+assert(sketch.includes('<a href="#remote-relay-settings">')&&!sketch.includes('<a href="#remote-relay-update-section">'));
 assert(css.includes('body.settings-page .backload #remote-relay-settings')&&css.includes('body.settings-page .backload #remote-relay-update-section'));
 const start=sketch.indexOf('async function fetchRemoteRelayReleases(');
 const end=sketch.indexOf("remoteReleaseCheck.addEventListener('click'",start);
@@ -42,6 +42,12 @@ function release(tag,extra={}){return {tag_name:tag,name:tag,published_at:'2026-
   return {state:'done',received:100,sent:100,size:100};
  },'token',progress,message);
  assert.equal(progress.value,100);assert.match(message.textContent,/Startprüfung.*bestätigt/);
+ let watchdogPolls=0;const displayed=[];
+ const watchdogMessage={set textContent(text){displayed.push(text);}};
+ await ctx.pollRemoteRelayGithubUpdate(async()=>++watchdogPolls===1
+   ?{state:'sending',error:'Update ohne Fortschritt; Abbruch angefordert.',sent:0,size:100}
+   :{state:'done',size:100,sent:100},'token',{},watchdogMessage);
+ assert(displayed.some(text=>text.includes('Abbruch angefordert')));
  await assert.rejects(()=>ctx.pollRemoteRelayGithubUpdate(async()=>({state:'failed',error:'SHA-256-Fehler'}),'token',{},{}),/SHA-256/);
  let submit,startedPayload=null,phase=0;const updateMessage={},updateProgress={};
  const ghForm={elements:{release:{value:'0'}},querySelector:()=>({}),addEventListener:(_,fn)=>{submit=fn;}};
@@ -49,8 +55,8 @@ function release(tag,extra={}){return {tag_name:tag,name:tag,published_at:'2026-
  const submitEnd=sketch.indexOf("remoteRelayUpdateForm.addEventListener('submit'",pollEnd);
  assert(submitEnd>pollEnd);
  const submitCtx=vm.createContext({remoteGithubForm:ghForm,remoteRelayUpdateForm:fileForm,remoteRelayReleases:result,
-   remoteRelayUploadBusy:false,remoteRelayState:{online:true},remoteRelayCards:[{online:false},{online:false},{online:true}],remoteUpdateBoard:{value:'2'},simulationEnabled:true,
-   remoteRelayUpdateProgress:updateProgress,remoteRelayUpdateMessage:updateMessage,URLSearchParams,Date,
+   remoteRelayUploadBusy:false,remoteRelayState:{online:true},remoteRelayCards:[{online:false},{online:false},{configured:true,online:true}],remoteUpdateBoard:{value:'2'},simulationEnabled:true,
+   remoteRelayUpdateProgress:updateProgress,remoteRelayUpdateMessage:updateMessage,URLSearchParams,Date,updateRemoteRelay:()=>{},
    confirm:()=>true,setTimeout:fn=>fn(),request:async(url,options)=>{
      const kind=url.split('/').pop();if(kind==='github'){startedPayload=options.body;return {token:'t'};}
      if(kind==='status'){phase++;return phase===1?{state:'downloading',received:30,sent:0,size:100}:{state:'done',size:100,sent:100};}

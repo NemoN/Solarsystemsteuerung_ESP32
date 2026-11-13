@@ -1,4 +1,4 @@
-Backload 3.1.0 – automatische und manuelle Pumpensteuerung
+Backload 3.6.0 – automatische und manuelle Pumpensteuerung
 
 Sensoren und Relais
 Fünf MAX31865-Sensoren mit gemeinsamer Software-SPI-Verbindung:
@@ -44,10 +44,26 @@ WLAN-Relaiskarte
 Bis zu vier Relaiserweiterungen mit je vier Schaltern stehen auf der Startseite.
 Neue Erweiterungen lassen sich in den Einstellungen über einen vorübergehenden
 Kopplungs-AP ins Heimnetz übernehmen und automatisch finden. Einrichtung,
-Beschriftungen und Firmware-Updates liegen in den Einstellungen.
+Beschriftungen, Wartung und Firmware-Updates liegen in der jeweiligen Karte
+unter Einstellungen → Relaiserweiterungen → Einstellungen.
 Nach einmaliger serieller Erstinstallation kann die Firmware der Karte dort
 auch von GitHub oder aus einer Datei aktualisiert werden. Einrichtung und
 Verhalten: Relaiskarte/README.md. Der Dachsensor-Empfang und seine Anzeige sind vorläufig deaktiviert.
+
+Ein Relais-Update sperrt geplante Neustarts des Haupt-ESP, solange es aktiv ist.
+Kurze Antworten der Karte müssen innerhalb von fünf Sekunden vollständig
+eintreffen. Meldet ein Update-Task 90 Sekunden lang keinen Fortschritt, wird
+sein Abbruch angefordert. Reagiert er weitere 30 Sekunden nicht, startet der
+Haupt-ESP als letzte Maßnahme neu: Pumpen und Ölfreigabe werden zuvor sicher
+ausgeschaltet. Höchstens zwei solche Neustarts werden dauerhaft gezählt; nach
+30 Minuten ohne aktives Update wird die Begrenzung zurückgesetzt. Bei einem
+Speicherfehler oder erreichter Grenze erfolgt kein automatischer Neustart.
+Nach Ablauf der Wartezeit bleibt ein ausdrücklich angeforderter manueller
+Neustart des Haupt-ESP möglich; die Oberfläche warnt vor dem laufenden Update.
+Nach einem Abbruch die Version und Relaiszustände prüfen, insbesondere wenn
+die Karte bereits neu gestartet wurde. Der Schutz überwacht den Update-Task;
+er ersetzt keinen unabhängigen Hardware-Watchdog für einen vollständig
+blockierten Hauptzyklus oder für die Relaiskarte.
 
 Solarregelung (Relais 3)
 Solarpanel und Kombispeicher unten bestimmen die Solarpumpe unabhängig von

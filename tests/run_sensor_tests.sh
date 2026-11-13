@@ -61,6 +61,10 @@ python3 "$project_dir/tests/test_history_server_settings.py"
 python3 "$project_dir/tests/test_burner_label.py"
 node "$project_dir/tests/test_history_server_ui.js"
 node "$project_dir/tests/test_sensor_status_ui.js"
+node "$project_dir/tests/test_relay_settings_cards.js"
+"${CXX:-c++}" -std=c++11 -Wall -Wextra -Werror "$project_dir/tests/test_relay_watchdog.cpp" -o "$test_dir/relay-watchdog-tests"
+"$test_dir/relay-watchdog-tests"
+python3 "$project_dir/tests/test_relay_watchdog_task.py"
 
 "${CXX:-c++}" -std=c++11 -Wall -Wextra -Werror -fsanitize=address,undefined \
   -I"$project_dir/Backload" "$project_dir/tests/test_recovery_ap_policy.cpp" \
@@ -109,7 +113,7 @@ python3 "$project_dir/tests/test_heating_integration.py"
 "$test_dir/relay-ota-tests"
 
 "${CXX:-c++}" -std=c++11 -Wall -Wextra -Werror -fsanitize=address,undefined \
-  -I"$project_dir/tests/relay_ota_mocks" -I"$project_dir/Backload" \
+  -DMOCK_SEMAPHORE_BUSY -I"$project_dir/tests/relay_ota_mocks" -I"$project_dir/Backload" \
   "$project_dir/Backload/RemoteRelayUpdate.cpp" "$project_dir/Relaiskarte/RelayOta.cpp" \
   "$project_dir/tests/test_remote_relay_update_integration.cpp" -o "$test_dir/relay-ota-integration-tests"
 "$test_dir/relay-ota-integration-tests"
@@ -130,6 +134,7 @@ python3 "$project_dir/tests/test_heating_integration.py"
   "$project_dir/Backload/RemoteRelay.cpp" "$project_dir/tests/test_remote_relay_reboot.cpp" -o "$test_dir/remote-reboot-tests"
 "$test_dir/remote-reboot-tests"
 python3 "$project_dir/tests/test_reboot_integration.py"
+python3 "$project_dir/tests/test_relay_update_watchdog.py"
 "$test_dir/remote-forget-tests"
 "${CXX:-c++}" -std=c++11 -Wall -Wextra -Werror -fsanitize=address,undefined \
   "$project_dir/tests/test_relay_factory_reset.cpp" -o "$test_dir/relay-factory-reset-tests"

@@ -6,20 +6,24 @@
 #include <WebServer.h>
 #include <Preferences.h>
 #include <esp_system.h>
+#include <esp_timer.h>
+#include <atomic>
 #include "RelayState.h"
 #include "RelayOta.h"
 #include "RelayPairAuth.h"
 #include "RelayPairSecure.h"
 #include "RelayFactoryReset.h"
+#include "RelayWatchdog.h"
 
 constexpr uint8_t RELAY_PINS[] = {32, 33, 25, 26};
-constexpr char RELAY_FIRMWARE_VERSION[] = "3.1.0";
+constexpr char RELAY_FIRMWARE_VERSION[] = "3.6.0";
 constexpr uint32_t RETRY_MS = 30000;
 struct Config { char ssid[33]; char password[64]; char key[33]; char apPassword[17]; };
 Config config = {};
 Preferences prefs;
 WebServer server(80);
 bool storeReady = false, apActive = false, connecting = false, wasConnected = false, reconnect = false;
+bool relayStorageHealthy = true;
 bool mdnsActive = false, pairConnecting = false;
 bool pairButtonReady = false, pairButtonHeld = false, pairWindow = false;
 uint32_t pairButtonAt = 0, pairWindowAt = 0;
@@ -32,6 +36,47 @@ bool bootVerificationPending = false;
 bool factoryResetPending = false, rebootPending = false;
 uint32_t factoryResetAt = 0, rebootAt = 0;
 uint32_t bootVerificationStarted = 0;
+Preferences watchdogPrefs;
+Preferences diagnosticPrefs;
+uint8_t lastKnownOtaError = 0;
+bool diagnosticStorageHealthy = false;
+std::atomic<uint32_t> loopHeartbeat{0};
+std::atomic<uint8_t> watchdogCount{0}, watchdogState{3}; // 0 active, 1 limited, 2 storage failure, 3 unavailable
+bool watchdogStorageReady = false;
+const esp_reset_reason_t resetReason = esp_reset_reason();
+
+bool saveWatchdogCount(uint8_t count) {
+  return watchdogPrefs.putUChar("restarts", count) == 1 && watchdogPrefs.getUChar("restarts", 255) == count;
+}
+void watchdogTask(void*) {
+  RelayWatchdog policy(millis());
+  bool storageReady = watchdogStorageReady;
+  uint8_t count = watchdogCount.load();
+  watchdogState.store(storageReady ? (count >= RelayWatchdog::MAX_RESTARTS ? 1 : 0) : 2);
+  for (;;) {
+    vTaskDelay(pdMS_TO_TICKS(1000));
+    const uint32_t now = millis(), heartbeat = loopHeartbeat.load();
+    const auto action = policy.check(now, heartbeat, count, storageReady);
+    if (action == RelayWatchdog::Action::LimitReached) watchdogState.store(1);
+    else if (action == RelayWatchdog::Action::StorageError) watchdogState.store(2);
+    else if (action == RelayWatchdog::Action::ClearCount) {
+      if (saveWatchdogCount(0)) { count = 0; watchdogCount.store(0); watchdogState.store(0); }
+      else { storageReady = false; watchdogState.store(2); }
+    } else if (action == RelayWatchdog::Action::Restart) {
+      const uint8_t next = count + 1;
+      if (!saveWatchdogCount(next)) { storageReady = false; watchdogState.store(2); continue; }
+      count = next; watchdogCount.store(count);
+      // Do not restart a loop that recovered while the counter was being saved.
+      if (uint32_t(millis() - loopHeartbeat.load()) < RelayWatchdog::STALL_MS) {
+        if (saveWatchdogCount(count - 1)) { --count; watchdogCount.store(count); }
+        else { storageReady = false; watchdogState.store(2); }
+        continue;
+      }
+      Serial.println("Relais-Watchdog: Hauptschleife blockiert; Neustart.");
+      ESP.restart();
+    }
+  }
+}
 // Neue OTA-Firmware erst nach der eigenen Startprüfung bestätigen.
 extern "C" bool verifyRollbackLater() { return true; }
 
@@ -84,7 +129,7 @@ void changeRelay() {
   const uint8_t index = id[0] - '1';
   const bool on = value == "1";
   const bool changed = relayState.set(index, on,
-    [](uint8_t next) { return prefs.putUChar("relaymask", next) == 1 && prefs.getUChar("relaymask", 255) == next; },
+    [](uint8_t next) { const bool ok = prefs.putUChar("relaymask", next) == 1 && prefs.getUChar("relaymask", 255) == next; if (!ok) relayStorageHealthy = false; return ok; },
     [](unsigned channel, bool enabled) { digitalWrite(RELAY_PINS[channel], enabled ? HIGH : LOW); });
   if (!changed) { server.send(503, "text/plain", "Relay state could not be saved"); return; }
   sendState();
@@ -108,7 +153,7 @@ bool importPairedWifi(const String& reply) {
   ssid[ssidLength] = 0; password[passwordLength] = 0;
   if (!validWifi(String(reinterpret_cast<char*>(ssid)), String(reinterpret_cast<char*>(password)))) return false;
   Config next = config; memcpy(next.ssid, ssid, ssidLength + 1); memcpy(next.password, password, passwordLength + 1);
-  if (prefs.putBytes("config", &next, sizeof(next)) != sizeof(next)) return false;
+  if (prefs.putBytes("config", &next, sizeof(next)) != sizeof(next)) { relayStorageHealthy = false; return false; }
   config = next; return true;
 }
 void claimPairing() {
@@ -198,7 +243,7 @@ void setup() {
     const String ssid = server.arg("ssid"), password = server.arg("password");
     if (!storeReady || !server.hasArg("password") || !validWifi(ssid, password)) { server.send(400, "text/plain", "WLAN-Daten oder Speicher ungültig."); return; }
     Config next = config; ssid.toCharArray(next.ssid, sizeof(next.ssid)); password.toCharArray(next.password, sizeof(next.password));
-    if (prefs.putBytes("config", &next, sizeof(next)) != sizeof(next)) { server.send(500, "text/plain", "Speichern fehlgeschlagen."); return; }
+    if (prefs.putBytes("config", &next, sizeof(next)) != sizeof(next)) { relayStorageHealthy = false; server.send(500, "text/plain", "Speichern fehlgeschlagen."); return; }
     config = next; server.send(200, "text/plain; charset=utf-8", "Gespeichert. Die IP-Adresse steht im seriellen Monitor.");
     reconnect = true; reconnectAt = millis();
   });
@@ -213,6 +258,14 @@ void setup() {
     if (!authorized()) { server.send(403, "text/plain", "Forbidden"); return; }
     if (server.args()) { server.send(400, "text/plain", "Invalid request"); return; }
     server.sendHeader("Cache-Control", "no-store"); server.send(200, "text/plain", String("RLYVER1:") + RELAY_FIRMWARE_VERSION);
+  });
+  server.on("/api/diagnostics", HTTP_GET, []() {
+    if (!authorized()) { server.send(403, "text/plain", "Forbidden"); return; }
+    if (server.args()) { server.send(400, "text/plain", "Invalid request"); return; }
+    server.sendHeader("Cache-Control", "no-store");
+    server.send(200, "text/plain", String("RLYDIAG1:") + String(static_cast<uint32_t>(esp_timer_get_time() / 1000000ULL)) + ":" + String(WiFi.RSSI()) + ":" +
+      String(static_cast<unsigned>(resetReason)) + ":" + String(watchdogState.load()) + ":" + String(watchdogCount.load()) + ":" +
+      String(lastKnownOtaError) + ":" + String(storeReady && relayStorageHealthy && diagnosticStorageHealthy ? 1 : 0));
   });
   server.on("/api/relay", HTTP_POST, changeRelay);
   server.on("/api/reboot", HTTP_POST, rebootRelayBoard);
@@ -231,9 +284,28 @@ void setup() {
   server.onNotFound([](){ server.send(404, "text/plain", "Not found"); });
   server.begin();
   if (storeReady) connectWifi();
+  watchdogStorageReady = watchdogPrefs.begin("relay-watchdog", false);
+  if (watchdogStorageReady) {
+    const uint8_t saved = watchdogPrefs.isKey("restarts") ? watchdogPrefs.getUChar("restarts", 255) : 0;
+    if (saved > RelayWatchdog::MAX_RESTARTS) watchdogStorageReady = false;
+    else watchdogCount.store(saved);
+  }
+  diagnosticStorageHealthy = diagnosticPrefs.begin("relay-diag", false);
+  if (diagnosticStorageHealthy && diagnosticPrefs.isKey("otaerror")) {
+    lastKnownOtaError = diagnosticPrefs.getUChar("otaerror", 255);
+    if (lastKnownOtaError > RelayOta::ABORTED) { lastKnownOtaError = 0; diagnosticStorageHealthy = false; }
+  }
+  loopHeartbeat.store(millis());
+  if (xTaskCreatePinnedToCore(watchdogTask, "relay-watchdog", 4096, nullptr, 1, nullptr, 0) != pdPASS) watchdogState.store(3);
 }
 void loop() {
+  loopHeartbeat.store(millis());
   const uint32_t now = millis(); server.handleClient(); relayOta.loop(); updatePairButton(now);
+  const uint8_t otaError = static_cast<uint8_t>(relayOta.lastError());
+  if (otaError && otaError != lastKnownOtaError) {
+    lastKnownOtaError = otaError;
+    if (diagnosticStorageHealthy && (diagnosticPrefs.putUChar("otaerror", otaError) != 1 || diagnosticPrefs.getUChar("otaerror", 255) != otaError)) diagnosticStorageHealthy = false;
+  }
   if (factoryResetPending) { if (now - factoryResetAt >= 500) ESP.restart(); delay(1); return; }
   if (rebootPending) { if (now - rebootAt >= 500) ESP.restart(); delay(1); return; }
   if (bootVerificationPending && now - bootVerificationStarted >= 10000) {

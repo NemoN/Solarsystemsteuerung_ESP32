@@ -10,6 +10,7 @@ constexpr char RELAY_FIRMWARE_MARKER[] = "RBS16467-RELAY-FIRMWARE-OTA1";
 
 class RelayOta {
 public:
+  enum Error : uint8_t { NONE, TIMEOUT, INVALID_DATA, WRITE_FAILED, INVALID_IMAGE, ABORTED };
   void prepare(WebServer& server);
   void chunk(WebServer& server);
   void finish(WebServer& server);
@@ -17,10 +18,12 @@ public:
   void info(WebServer& server, bool bootPending);
   void loop();
   bool active() const { return active_ || restartPending_; }
+  Error lastError() const { return lastError_; }
 private:
   void cancel();
   bool matches(WebServer& server) const;
   bool active_ = false, restartPending_ = false, hashReady_ = false, markerSeen_ = false;
+  Error lastError_ = NONE;
   uint32_t startedAt_ = 0, restartAt_ = 0;
   size_t size_ = 0, received_ = 0, lastOffset_ = 0, lastLength_ = 0, markerMatch_ = 0;
   uint32_t targetAddress_ = 0;

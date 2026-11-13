@@ -29,7 +29,12 @@ struct Server {std::string h="HeatingUI",body;unsigned n=0;int status=0;
 bool otaActive=false,otaVerificationPending=false,modeTransition=false,busy=false;
 unsigned long modeRestartAt=0;
 bool remoteRelayAnyBusy(){return busy;}
-struct Active {bool value=false;bool active(){return value;}} remoteRelayUpdate,relayProvisioning,relayOta;
+struct Active {bool value=false;bool active(){return value;}} relayProvisioning,relayOta;
+struct RemoteRelayUpdate {
+ enum class WatchdogAction {None,CancelRequested,RestartRequired};
+ bool value=false;WatchdogAction action=WatchdogAction::None;
+ bool active(){return value;} WatchdogAction watchdog(){return action;}
+} remoteRelayUpdate;
 bool manualControl=true,manualPumpOn=true,physicalPump=true,physicalSolar=true,oilRelease=true;
 struct Automatic {bool resetCalled=false;void reset(){resetCalled=true;}} automaticControl;
 struct Pump {bool on=true;int direction(){return 1;}void command(bool next,int,uint32_t){on=next;}} pump;
@@ -46,8 +51,10 @@ int main(){
  server.n=0;otaActive=true;rebootController();assert(server.status==409&&!modeTransition);otaActive=false;
  otaVerificationPending=true;rebootController();assert(server.status==409&&!modeTransition);otaVerificationPending=false;
  busy=true;rebootController();assert(server.status==409&&!modeTransition);busy=false;
- remoteRelayUpdate.value=true;rebootController();assert(server.status==409&&!modeTransition);remoteRelayUpdate.value=false;
+ remoteRelayUpdate.value=true;rebootController();assert(server.status==409&&!modeTransition&&server.body.find("Update der Relaiskarte")!=std::string::npos);remoteRelayUpdate.value=false;
  relayProvisioning.value=true;rebootController();assert(server.status==409&&!modeTransition);relayProvisioning.value=false;
+ // Nach festgestelltem Hänger bleibt ein ausdrücklicher manueller Neustart möglich.
+ remoteRelayUpdate.value=true;remoteRelayUpdate.action=RemoteRelayUpdate::WatchdogAction::RestartRequired;
  rebootController();assert(server.status==202&&modeTransition&&!manualControl&&!manualPumpOn&&automaticControl.resetCalled);
  assert(!physicalPump&&!physicalSolar&&!oilRelease&&modeRestartAt==42);
  rebootController();assert(server.status==409);

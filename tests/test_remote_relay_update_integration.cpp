@@ -24,6 +24,7 @@ RelayOta board;
 bool lostChunk=false,lostFinish=false,failedChunk=false,booted=false,rollbackBoot=false;
 unsigned transientChunkFailures=0;
 unsigned chunkCalls=0;uint32_t bootAt=0;
+bool mockSemaphoreBusy=false;
 void mockAdvance(uint32_t ms){
  mockMillis+=ms;
  if(!booted){board.loop();if(ESP.restarts){booted=true;bootAt=mockMillis;mockRunningAddress=rollbackBoot?0x10000:0x150000;}}
@@ -77,6 +78,14 @@ int main(int argc,char** argv){
  assert(uploader.prepare(bad.size(),relay(),token));assert(uploader.chunk(token,0,b64(bad.data(),bad.size())));
  assert(uploader.start(token));mockTask(mockTaskArg);
  assert(uploader.status(token,st)&&std::string(st.state)=="failed"&&!board.active()&&chunkCalls==0&&!Update.finished);
+ // Die Karte meldet einen HTTP-Body, sendet aber nicht alle Bytes: keine Endlosschleife.
+ mockRelayReportedSize=120;mockTask=nullptr;const uint32_t beforeTimeout=mockMillis;
+ assert(uploader.prepare(f.size(),relay(),token));assert(uploader.chunk(token,0,b64(f.data(),f.size())));
+ assert(uploader.start(token));mockTask(mockTaskArg);
+ assert(uploader.status(token,st)&&std::string(st.state)=="failed"&&!uploader.active());
+ assert(std::string(st.error).find("vollständige Antwort")!=std::string::npos);
+ assert(uint32_t(mockMillis-beforeTimeout)>=5000 && uint32_t(mockMillis-beforeTimeout)<6000);
+ mockRelayReportedSize=-1;
  // Nach einem Verbindungsfehler bricht der Haupt-ESP das Update der Karte ab.
  failedChunk=true;mockTask=nullptr;
  assert(uploader.prepare(f.size(),relay(),token));assert(uploader.chunk(token,0,b64(f.data(),f.size())));
@@ -129,6 +138,40 @@ int main(int argc,char** argv){
  assert(uploader.prepareGithub(f.size(),url,sha,relay(),token));mockTask(mockTaskArg);
  assert(uploader.status(token,st)&&std::string(st.state)=="failed"&&mockGithubAttempts==1&&!board.active());
  mockGithubReportedSize=-1;
+ // Ein blockierter Task wird zunächst kooperativ abgebrochen, erst später ist ein Neustart nötig.
+ assert(uploader.prepareGithub(f.size(),url,sha,relay(),token));
+ mockMillis+=89999;assert(uploader.watchdog()==RemoteRelayUpdate::WatchdogAction::None);
+ mockMillis+=1;assert(uploader.watchdog()==RemoteRelayUpdate::WatchdogAction::CancelRequested);
+ assert(uploader.status(token,st)&&std::string(st.error).find("Abbruch")!=std::string::npos);
+ mockMillis+=29999;assert(uploader.watchdog()==RemoteRelayUpdate::WatchdogAction::None);
+ mockMillis+=1;assert(uploader.watchdog()==RemoteRelayUpdate::WatchdogAction::RestartRequired);
+ assert(uploader.active()&&!uploader.idleForWatchdogRecovery());
+ mockTask(mockTaskArg);
+ assert(uploader.status(token,st)&&std::string(st.state)=="canceled");
+ assert(!uploader.active()&&uploader.idleForWatchdogRecovery());
+ // Auch der Sende-Task wird bei millis-Überlauf zeitlich überwacht.
+ mockMillis=UINT32_MAX-10000;
+ assert(uploader.prepare(f.size(),relay(),token));assert(uploader.chunk(token,0,b64(f.data(),f.size())));
+ assert(uploader.start(token));mockMillis+=90000;
+ assert(uploader.watchdog()==RemoteRelayUpdate::WatchdogAction::CancelRequested);
+ mockMillis+=30000;assert(uploader.watchdog()==RemoteRelayUpdate::WatchdogAction::RestartRequired);
+ mockTask(mockTaskArg);
+ assert(uploader.status(token,st)&&std::string(st.state)=="canceled"&&!uploader.active());
+ // Die Weboberfläche darf bei einer dauerhaft blockierten Update-Sperre
+ // weder den Regelzyklus noch den Watchdog festhalten.
+ assert(uploader.prepare(f.size(),relay(),token));
+ mockSemaphoreBusy=true;
+ assert(uploader.active());
+ assert(uploader.readStatus(token,st)==RemoteRelayUpdate::StatusResult::Busy);
+ assert(!uploader.prepare(f.size(),relay(),token));
+ assert(!uploader.chunk(token,0,b64(f.data(),f.size())));
+ assert(!uploader.start(token)&&!uploader.cancel(token));
+ assert(uploader.watchdog()==RemoteRelayUpdate::WatchdogAction::None);
+ mockMillis+=119999;assert(uploader.watchdog()==RemoteRelayUpdate::WatchdogAction::None);
+ mockMillis+=1;assert(uploader.watchdog()==RemoteRelayUpdate::WatchdogAction::RestartRequired);
+ mockSemaphoreBusy=false;
+ assert(uploader.readStatus(token,st)==RemoteRelayUpdate::StatusResult::Ok);
+ assert(uploader.cancel(token));
  std::puts("PASS: GitHub-Download, Wiederholung, Größe, Prüfsumme und erlaubte Release-URL.");
  std::puts("PASS: Haupt-ESP und Relaiskarte: OTA, verlorene Antworten, Neustart, Abbruch und falsches Image.");
 }

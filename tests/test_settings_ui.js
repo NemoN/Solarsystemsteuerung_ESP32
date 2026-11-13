@@ -49,7 +49,7 @@ assert.match(sketch, /<header id="info-intro"[^>]*><h1 id="info-heading">ESP-Inf
 const passwordFormMarkup=sketch.slice(sketch.indexOf('<form id="password-form">'),sketch.indexOf('</form>',sketch.indexOf('<form id="password-form">')));
 assert.match(passwordFormMarkup, /class="password-actions"[\s\S]*Passwort speichern[\s\S]*id="password-remove"/);
 const relayFormMarkup=sketch.slice(sketch.indexOf('<form id="remote-relay-form">'),sketch.indexOf('</form>',sketch.indexOf('<form id="remote-relay-form">')));
-assert.match(relayFormMarkup, /<details id="relay-edit-details"><summary>Relais beschriften<\/summary>[\s\S]*?<\/details>\s*<details class="relay-manual-settings"><summary>Verbindung manuell einrichten<\/summary>/);
+assert.match(relayFormMarkup, /<details id="relay-edit-details"><summary>Relais beschriften<\/summary>[\s\S]*?Änderungen speichern[\s\S]*?<\/details>\s*<details class="relay-manual-settings" id="relay-manual-details"><summary>Verbindung und Wartung<\/summary>/);
 for(const field of ['address','key','label1','label2','label3','label4'])assert(relayFormMarkup.includes('name="'+field+'"'),field+' bleibt im gemeinsamen Formular');
 assert(sketch.indexOf('id="settings-intro"') < sketch.indexOf('id="wifi-section"'));
 assert(sketch.indexOf('id="wifi-section"') < sketch.indexOf('id="update-section"'));
