@@ -18,6 +18,7 @@
 #include "RelayProvisioning.h"
 #include "RemoteRelayUpdate.h"
 #include "AutomaticControl.h"
+#include "NightQuiet.h"
 #include "SolarControl.h"
 #include "TemperatureHistory.h"
 #include "ArchiveHistory.h"
@@ -46,7 +47,7 @@
 #include <time.h>
 
 // Zentrale Firmware-Version: bei Änderungen hier aktualisieren.
-const char* FIRMWARE_VERSION = "3.6.0";
+const char* FIRMWARE_VERSION = "3.7.0";
 // Der AP wird nur für Einrichtung und Wiederherstellung benötigt.
 constexpr bool AP_RECOVERY_ONLY = true;
 
@@ -126,6 +127,8 @@ PumpDirection manualDirection = DIRECTION_RELAY_OFF_DIRECTION;
 const bool AUTOMATIC_PUMP_CONFIGURED = true;
 AutomaticControl automaticControl;
 AutomaticThresholds automaticThresholds = {8.0f};
+NightQuiet nightQuiet;
+bool nightQuietSettingsValid = true;
 SolarControl solarControl;
 SolarPanelGrace solarPanelGrace;
 bool solarGraceActive = false;
@@ -445,6 +448,19 @@ void serviceRelayUpdateWatchdog() {
   }
 }
 
+bool nightQuietClock(struct tm& localTime) {
+  const time_t now = time(nullptr);
+  return now >= 1704067200 && localtime_r(&now, &localTime) != nullptr;
+}
+
+bool nightQuietBlocked() {
+  if (!nightQuietSettingsValid) return true;
+  if (!nightQuiet.enabled) return false;
+  struct tm localTime;
+  if (!nightQuietClock(localTime)) return true;
+  return nightQuiet.active(localTime.tm_wday, localTime.tm_hour * 60 + localTime.tm_min);
+}
+
 void updateAutomaticPump() {
   if (modeTransition || otaActive || otaVerificationPending) return;
   if (manualControl) { automaticControl.reset(); return; }
@@ -452,7 +468,7 @@ void updateAutomaticPump() {
   TemperatureController& middle = controllers[1];
   TemperatureController& buffer = controllers[2];
   TemperatureController& settings = controllers[0];
-  const TransferDemand demand = automaticControl.update(AUTOMATIC_PUMP_CONFIGURED && storageReady && autoSettingsValid && heatingModeValid,
+  const TransferDemand demand = automaticControl.update(AUTOMATIC_PUMP_CONFIGURED && storageReady && autoSettingsValid && heatingModeValid && !nightQuietBlocked(),
     chargingAllowed(), top.valid, top.currentTemp, middle.valid, middle.currentTemp,
     buffer.valid, buffer.currentTemp, settings.configValid ? settings.targetTemp : NAN, automaticThresholds);
   PumpDirection direction = pump.direction();
@@ -1007,7 +1023,18 @@ String pumpStatusJson() {
     ",\"requestedDirection\":" + String(pump.requestedDirection() == PumpDirection::BufferToCombi ? 1 : 0) +
     ",\"phase\":\"" + phase + "\",\"switching\":" + String(pump.switching() ? "true" : "false") +
     ",\"remainingMs\":" + String(pump.remainingMs(millis())) +
+    ",\"nightQuietBlocked\":" + String(!manualControl && nightQuietBlocked() ? "true" : "false") +
     ",\"automaticConfigured\":" + String(AUTOMATIC_PUMP_CONFIGURED && storageReady && autoSettingsValid && heatingModeValid ? "true" : "false") + "}";
+}
+
+String nightQuietStatusJson() {
+  struct tm localTime;
+  const bool clockValid = nightQuietClock(localTime);
+  return "{\"enabled\":" + String(nightQuiet.enabled ? "true" : "false") +
+    ",\"start\":" + String(nightQuiet.start) + ",\"end\":" + String(nightQuiet.end) +
+    ",\"days\":" + String(nightQuiet.days) + ",\"configValid\":" + String(nightQuietSettingsValid ? "true" : "false") +
+    ",\"clockValid\":" + String(clockValid ? "true" : "false") +
+    ",\"blocked\":" + String(!manualControl && nightQuietBlocked() ? "true" : "false") + "}";
 }
 
 String automaticStatusJson() {
@@ -1020,7 +1047,8 @@ String automaticStatusJson() {
     ",\"differenceStart\":" + jsonNumber(automaticThresholds.differenceStart) +
     ",\"minimumCombi\":" + jsonNumber(automaticThresholds.minimumCombi) +
     ",\"minimumBuffer\":" + jsonNumber(automaticThresholds.minimumBuffer) +
-    ",\"differenceStop\":" + jsonNumber(AutomaticControl::STOP_DIFFERENCE) + "}";
+    ",\"differenceStop\":" + jsonNumber(AutomaticControl::STOP_DIFFERENCE) +
+    ",\"nightQuiet\":" + nightQuietStatusJson() + "}";
 }
 
 String solarStatusJson() {
@@ -1702,6 +1730,57 @@ void saveAutomaticSettings() {
   server.send(200, "application/json", automaticStatusJson());
 }
 
+bool parseNightQuietTime(const String& value, uint16_t& minutes) {
+  if (value.length() != 5 || value[2] != ':' || value[0] < '0' || value[0] > '9' ||
+      value[1] < '0' || value[1] > '9' || value[3] < '0' || value[3] > '9' || value[4] < '0' || value[4] > '9') return false;
+  const int hour = (value[0] - '0') * 10 + value[1] - '0';
+  const int minute = (value[3] - '0') * 10 + value[4] - '0';
+  if (hour > 23 || minute > 59) return false;
+  minutes = hour * 60 + minute;
+  return true;
+}
+
+void saveNightQuiet() {
+  if (otaActive || otaVerificationPending || modeTransition) { server.send(409, "text/plain", "Update oder Neustart läuft."); return; }
+  if (server.header("X-Requested-With") != "HeatingUI") { server.send(403, "text/plain; charset=utf-8", "Bitte das Webinterface verwenden."); return; }
+  NightQuiet next;
+  const String enabled = server.arg("enabled"), days = server.arg("days");
+  if (server.args() != 4 || !server.hasArg("enabled") || !server.hasArg("start") || !server.hasArg("end") || !server.hasArg("days") ||
+      (enabled != "0" && enabled != "1") || days.length() != 7 ||
+      !parseNightQuietTime(server.arg("start"), next.start) || !parseNightQuietTime(server.arg("end"), next.end)) {
+    server.send(400, "text/plain; charset=utf-8", "Ungültige Nachtruhe-Einstellungen."); return;
+  }
+  next.enabled = enabled == "1";
+  next.days = 0;
+  for (int i = 0; i < 7; ++i) {
+    if (days[i] != '0' && days[i] != '1') { server.send(400, "text/plain; charset=utf-8", "Ungültige Wochentage."); return; }
+    if (days[i] == '1') next.days |= 1u << i;
+  }
+  if (!next.valid()) { server.send(400, "text/plain; charset=utf-8", "Beginn und Ende müssen verschieden sein."); return; }
+  const uint8_t saved[] = {1, uint8_t(next.enabled), uint8_t(next.start >> 8), uint8_t(next.start), uint8_t(next.end >> 8), uint8_t(next.end), next.days};
+  if (!storageReady || preferences.putBytes("quiet1", saved, sizeof(saved)) != sizeof(saved)) {
+    server.send(500, "text/plain; charset=utf-8", "Speicherfehler. Nachtruhe wurde nicht übernommen."); return;
+  }
+  nightQuiet = next;
+  nightQuietSettingsValid = true;
+  updateAutomaticPump();
+  server.sendHeader("Cache-Control", "no-store");
+  server.send(200, "application/json", nightQuietStatusJson());
+}
+
+void loadNightQuiet() {
+  if (!storageReady || !preferences.isKey("quiet1")) return;
+  uint8_t saved[7];
+  nightQuietSettingsValid = false;
+  if (preferences.getBytesLength("quiet1") == sizeof(saved) && preferences.getBytes("quiet1", saved, sizeof(saved)) == sizeof(saved) && saved[0] == 1 && saved[1] <= 1) {
+    NightQuiet candidate;
+    candidate.enabled = saved[1]; candidate.start = (uint16_t(saved[2]) << 8) | saved[3];
+    candidate.end = (uint16_t(saved[4]) << 8) | saved[5]; candidate.days = saved[6];
+    if (candidate.valid()) { nightQuiet = candidate; nightQuietSettingsValid = true; }
+  }
+  if (!nightQuietSettingsValid) FirmwareLog.println("Ungültige Nachtruhe-Daten: Automatik gesperrt; Nachtruhe erneut speichern.");
+}
+
 void loadSolarSettings() {
   if (storageReady && preferences.isKey("solar1")) {
     float saved = NAN;
@@ -2334,6 +2413,7 @@ void setup() {
     heatingModeValid ? (oilBurnerEnabled ? "Freigabe AN" : "Freigabe AUS") : "unbekannt; Einlagerung gesperrt",
     oilBurnerEnabled ? "AN" : "AUS", unsigned(OIL_BURNER_PIN));
   loadSolarSettings();
+  loadNightQuiet();
   float autoSaved[5];
   if (storageReady && preferences.isKey("auto1")) {
     autoSettingsValid = false;
@@ -2444,6 +2524,7 @@ void setup() {
   server.on("/api/remote-relay/update/status", HTTP_POST, remoteRelayUpdateStatus);
   server.on("/api/remote-relay/update/abort", HTTP_POST, cancelRemoteRelayUpdate);
   server.on("/api/automatic", HTTP_POST, saveAutomaticSettings);
+  server.on("/api/night-quiet", HTTP_POST, saveNightQuiet);
   server.on("/api/solar", HTTP_POST, saveSolarSettings);
   server.on("/api/solar/control", HTTP_POST, controlSolarPump);
   server.on("/api/heating", HTTP_POST, saveHeatingMode);

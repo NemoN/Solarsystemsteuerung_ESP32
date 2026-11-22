@@ -1,0 +1,34 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const vm = require('node:vm');
+const path = require('node:path');
+const page = fs.readFileSync(path.join(__dirname, '../Backload/DashboardPage.h'), 'utf8');
+const proxy = fs.readFileSync(path.join(__dirname, '../Backload/WebSerialMonitor.cpp'), 'utf8');
+const sketch = fs.readFileSync(path.join(__dirname, '../Backload/Backload.ino'), 'utf8');
+assert.match(proxy, /on\("\/api\/night-quiet", HTTP_POST, proxyRequest\)/);
+assert.match(sketch, /on\("\/api\/night-quiet", HTTP_POST, saveNightQuiet\)/);
+const fields = Object.fromEntries(['enabled', 'start', 'end', ...Array.from({length:7}, (_, i) => 'day'+i)].map(n => [n, {}]));
+const handlers = {};
+const form = {elements:fields, contains:()=>false, addEventListener:(event, callback)=>handlers[event]=callback, querySelectorAll:()=>[]};
+const nodes = {'quiet-form':form, 'quiet-message':{}, 'quiet-status':{}};
+let requestBody;
+const context = vm.createContext({document:{getElementById:id=>nodes[id], activeElement:null}, URLSearchParams,
+  pumpRevision:0, pumpState:{manual:false}, request:async (url, opts)=>{assert.equal(url,'/api/night-quiet'); requestBody=opts.body;return state;}});
+const a=page.indexOf("const quietForm=document.getElementById('quiet-form')");
+const b=page.indexOf('function updateAutomatic(state)',a);
+assert(a>=0&&b>a);
+vm.runInContext(page.slice(a,b), context);
+const state={enabled:true,start:1320,end:480,days:65,configValid:true,clockValid:true,blocked:true};
+context.updateNightQuiet(state,{manual:false});
+assert.equal(fields.start.value,'22:00'); assert.equal(fields.end.value,'08:00');
+assert.equal(fields.day0.checked,true); assert.equal(fields.day1.checked,false); assert.equal(fields.day6.checked,true);
+assert.match(nodes['quiet-status'].textContent,/Nachtruhe aktiv/);
+context.updateNightQuiet(state,{manual:true}); assert.match(nodes['quiet-status'].textContent,/Handbetrieb/);
+context.updateNightQuiet({...state,clockValid:false},{manual:false}); assert.match(nodes['quiet-status'].textContent,/synchronisiert/);
+context.updateNightQuiet({...state,configValid:false},{manual:false}); assert.match(nodes['quiet-status'].textContent,/ungültig/);
+(async()=>{
+ await handlers.submit({preventDefault(){}});
+ assert.equal(requestBody.get('enabled'),'1'); assert.equal(requestBody.get('days'),'1000001');
+ assert.equal(requestBody.get('start'),'22:00'); assert.equal(requestBody.get('end'),'08:00');
+ console.log('PASS: Nachtruhe-Anzeige, Wochentage, Handbetrieb und Speichern über beide Server.');
+})().catch(e=>{console.error(e);process.exitCode=1;});

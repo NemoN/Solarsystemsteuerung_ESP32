@@ -30,6 +30,24 @@ Einstellungen bleiben erhalten. Bei unbekannter Ölfreigabe, ungültigen
 Einstellungen oder nicht verfügbarem Gerätespeicher bleibt die Automatik aus.
 Ein ungültiger Einlagerungssollwert verhindert nur den Einlagerungsstart.
 
+## Nachtruhe der Backloadpumpe
+
+Auf der Startseite lässt sich eine Nachtruhe für die Backloadpumpe einrichten.
+Sie ist zunächst ausgeschaltet; voreingestellt sind 22:00 bis 08:00 Uhr und
+alle Wochentage. Beginn, Ende und Tage lassen sich getrennt einstellen. Bei
+Zeiträumen über Mitternacht zählt der Tag des Beginns: Montag 22:00 bis 08:00
+endet am Dienstag um 08:00 Uhr. Beginn und Ende müssen verschieden sein.
+
+Während der Nachtruhe ist die Backloadpumpe in beiden Förderrichtungen im
+Automatikbetrieb aus. Im Handbetrieb greift die Nachtruhe nicht; die Solarpumpe
+ist unabhängig davon. Nach Ende der Nachtruhe entscheidet die Temperaturregelung
+erneut über einen Start. Die Uhr verwendet die Ortszeit mit Sommerzeitumstellung.
+Ist die Nachtruhe eingeschaltet und die Uhr noch nicht synchronisiert, bleibt
+die Backload-Automatik bis zur Synchronisierung gesperrt. Bei ungültigen
+gespeicherten Nachtruhe-Daten bleibt die Automatik ebenfalls gesperrt, bis die
+Einstellungen erneut gespeichert werden. Test- und Anlageinstellungen sind
+getrennt.
+
 ## Solarregelung
 
 Relais 3 schaltet unabhängig von der Backloadpumpe, ihrer manuellen Steuerung und

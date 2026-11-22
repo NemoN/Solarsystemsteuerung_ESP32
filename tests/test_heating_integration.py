@@ -35,6 +35,8 @@ bool oilBurnerEnabled=false, heatingModeValid=true, SIMULATION_MODE=false;
 bool modeTransition=false, otaActive=false, otaVerificationPending=false;
 bool manualControl=false, manualPumpOn=false, storageReady=true, autoSettingsValid=true;
 constexpr bool AUTOMATIC_PUMP_CONFIGURED=true;
+bool quietBlocked=false;
+bool nightQuietBlocked() { return quietBlocked; }
 PumpDirection manualDirection=PumpDirection::CombiToBuffer;
 bool runtimePumpOn=false;
 PumpDirection runtimePumpDirection=PumpDirection::CombiToBuffer;
@@ -73,6 +75,14 @@ int main() {
   controllers[1].currentTemp=55;updateAutomaticPump();assert(pump.on());
   controllers[0].valid=false;updateAutomaticPump();assert(!pump.on());
   controllers[0].valid=true;updateAutomaticPump();assert(pump.on());
+  // Nachtruhe stoppt Automatik und setzt die Temperaturhysterese zurück.
+  quietBlocked=true;updateAutomaticPump();assert(!pump.on());
+  quietBlocked=false;updateAutomaticPump();assert(pump.on());
+  // Handbetrieb bleibt unabhängig von der Nachtruhe.
+  manualControl=true;quietBlocked=true;pump.command(true,PumpDirection::CombiToBuffer,now);servicePump();
+  updateAutomaticPump();assert(pump.on());
+  manualControl=false;updateAutomaticPump();assert(!pump.on());
+  quietBlocked=false;updateAutomaticPump();assert(pump.on());
   // Ölfreigabe stoppt automatische Einlagerung, bevor das Relais einschaltet.
   writes.clear();applyHeatingMode(true);
   assert(!pump.on() && pins[PUMP_ENABLE_PIN]==HIGH && pins[OIL_BURNER_PIN]==LOW);

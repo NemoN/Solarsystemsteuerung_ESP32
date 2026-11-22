@@ -6,7 +6,8 @@ Die Weboberfläche zeigt Temperaturen und Pumpenzustände und bietet einen Testm
 ![Weboberfläche im Testmodus mit simulierten Werten](Documentation/steuerung-testmodus.png)
 
 Die Backloadpumpe überträgt Wärme zwischen den Speichern. Ihre Mindesttemperaturen
-lassen sich für Kombi und Puffer getrennt einstellen. Die Solarpumpe wird
+lassen sich für Kombi und Puffer getrennt einstellen. Eine einstellbare Nachtruhe
+sperrt die Backloadpumpe im Automatikbetrieb zu den gewählten Zeiten. Die Solarpumpe wird
 unabhängig davon geregelt und kann manuell geschaltet werden. Auf der Verlaufsseite stehen die Pumpenlaufzeiten nach
 Tag, Monat und Jahr. Ein optionaler Dienst archiviert Temperaturen und
 Pumpenlaufzeiten dauerhaft. Bis zu vier WLAN-Relaiserweiterungen lassen sich

@@ -31,6 +31,12 @@ trap 'rm -rf "$test_dir"' EXIT HUP INT TERM
 python3 "$project_dir/tests/test_automatic_settings.py"
 
 "${CXX:-c++}" -std=c++11 -Wall -Wextra -Werror -fsanitize=address,undefined \
+  -I"$project_dir/Backload" "$project_dir/tests/test_night_quiet.cpp" -o "$test_dir/night-quiet-tests"
+"$test_dir/night-quiet-tests"
+python3 "$project_dir/tests/test_night_quiet_settings.py"
+node "$project_dir/tests/test_night_quiet_ui.js"
+
+"${CXX:-c++}" -std=c++11 -Wall -Wextra -Werror -fsanitize=address,undefined \
   -I"$project_dir/Backload" \
   "$project_dir/Backload/TemperatureHistory.cpp" "$project_dir/tests/test_temperature_history.cpp" \
   -o "$test_dir/history-tests"

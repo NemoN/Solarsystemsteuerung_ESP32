@@ -37,6 +37,7 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 @media(max-width:700px){.storage-overview{grid-template-columns:minmax(0,1fr);gap:12px}.storage-overview .pump-flow{grid-row:1;grid-column:1}.burner-diagram{grid-template-columns:88px minmax(0,1fr);text-align:left;gap:2px 14px;justify-self:start}.burner-icon{width:88px;grid-row:1/span 3;grid-column:1}.burner-diagram>:not(svg){grid-column:2}}
 .pump-controls{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px;margin-top:24px}.pump-controls>div{min-width:0}.pump-controls .relay-switch{width:100%;text-align:left;min-height:58px}.pump-controls .switch-track{flex-shrink:0}.pump-controls p{margin:10px 0 0;font-size:.9rem}.relay-switch:active{background:#c9e9d9}
 #heating-detail:empty,#pump-progress:empty,#pump-message:empty{display:none}
+#quiet-form{display:block;max-width:640px}#quiet-form .quiet-check{display:flex;align-items:center;gap:10px;min-height:40px}#quiet-form input[type=checkbox]{width:20px;min-height:20px;margin:0;accent-color:#17636b}#quiet-form .quiet-times{display:grid;grid-template-columns:repeat(2,minmax(0,180px));gap:16px;margin:16px 0}#quiet-form fieldset{border:0;padding:0;margin:16px 0}#quiet-form legend{font-weight:600}#quiet-form .quiet-days{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:4px 12px;margin-top:8px}#quiet-form button{margin-top:4px}#quiet-status:empty{display:none}
 .rule-table-hint{display:none}.automatic-rules{margin-top:20px}.automatic-rules summary{cursor:pointer;font-weight:600}.rule-table-wrap{overflow-x:auto;max-width:100%}.automatic-rules table{width:100%;min-width:560px;border-collapse:collapse;font-size:.9rem;line-height:1.5}.automatic-rules th,.automatic-rules td{padding:12px;text-align:left;vertical-align:top;border-bottom:1px solid #b9c8c9}.automatic-rules th:first-child{width:140px}
 @media(max-width:760px){.pump-controls{grid-template-columns:1fr}.pump-controls .relay-switch{width:auto;min-width:240px}}
 .relay-switch[data-state="off"]{background:#d8f2e2;color:#164d30;border-color:#72b58d}.relay-switch[data-state="off"] .switch-track{background:#17643c}
@@ -184,6 +185,26 @@ button:hover{background:#104d53}button:disabled{opacity:.55;cursor:wait}:focus-v
 <tbody><tr><th scope="row">Kombi → Puffer</th><td id="auto-charge-start"></td><td id="auto-charge-stop"></td></tr>
 <tr><th scope="row">Puffer → Kombi</th><td id="auto-return-start"></td><td id="auto-return-stop"></td></tr></tbody></table></div>
 </details>
+</section>
+<section aria-labelledby="quiet-heading">
+<h2 id="quiet-heading">Nachtruhe der Backloadpumpe</h2>
+<p class="muted">Die Nachtruhe stoppt die Backloadpumpe nur im Automatikbetrieb. Bei Zeiträumen über Mitternacht gilt der Wochentag des Beginns.</p>
+<form id="quiet-form">
+<label class="quiet-check"><input type="checkbox" name="enabled"> Nachtruhe einschalten</label>
+<div class="quiet-times"><label for="quiet-start">Von<input id="quiet-start" type="time" name="start" value="22:00" required></label><label for="quiet-end">Bis<input id="quiet-end" type="time" name="end" value="08:00" required></label></div>
+<fieldset><legend>Wochentage des Beginns</legend><div class="quiet-days">
+<label class="quiet-check"><input type="checkbox" name="day0" checked> Montag</label>
+<label class="quiet-check"><input type="checkbox" name="day1" checked> Dienstag</label>
+<label class="quiet-check"><input type="checkbox" name="day2" checked> Mittwoch</label>
+<label class="quiet-check"><input type="checkbox" name="day3" checked> Donnerstag</label>
+<label class="quiet-check"><input type="checkbox" name="day4" checked> Freitag</label>
+<label class="quiet-check"><input type="checkbox" name="day5" checked> Samstag</label>
+<label class="quiet-check"><input type="checkbox" name="day6" checked> Sonntag</label>
+</div></fieldset>
+<button type="submit">Nachtruhe speichern</button>
+</form>
+<p id="quiet-status" class="muted" role="status">Nachtruhe wird geladen …</p>
+<p id="quiet-message" class="message" role="status"></p>
 </section>
 <section id="solar-section" aria-labelledby="solar-heading">
 <div class="heading"><h2 id="solar-heading"><svg class="section-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 1v3m0 16v3M1 12h3m16 0h3M4.2 4.2l2.1 2.1m11.4 11.4 2.1 2.1m0-15.6-2.1 2.1M6.3 17.7l-2.1 2.1"/></svg>Solarpumpe</h2><span id="solar-badge" class="badge" role="status">Status wird geladen …</span></div>
@@ -701,7 +722,7 @@ function updatePump(state){
   const diagram=document.querySelector('.pump-flow');
   diagram.setAttribute('data-direction',state.direction===0?'ccw':'cw');
   diagram.classList.toggle('stopped',!state.on);
-  document.getElementById('pump-mode-detail').textContent=state.manual?'Manuelle Steuerung aktiv · Ölbrennersperre und Mindesttemperaturen sind überbrückbar.':state.automaticConfigured?'Automatik aktiv · Sensoren und Mindesttemperaturen werden überwacht.':'Automatik gesperrt · Backloadpumpe aus.';
+  document.getElementById('pump-mode-detail').textContent=state.manual?'Manuelle Steuerung aktiv · Ölbrennersperre und Mindesttemperaturen sind überbrückbar.':state.nightQuietBlocked?'Automatik gesperrt · Nachtruhe oder Uhrzeit prüfen.':state.automaticConfigured?'Automatik aktiv · Sensoren und Mindesttemperaturen werden überwacht.':'Automatik gesperrt · Backloadpumpe aus.';
   document.getElementById('pump-progress').textContent=state.phase==='stopping'?'Backloadpumpe aus · Richtungswechsel nach 2 Sekunden.':state.phase==='settling'?'Richtung umgeschaltet · Relais schaltet.':'';
   updatePumpControls();
 }
@@ -845,6 +866,33 @@ autoForm.addEventListener('change',()=>{autoDirty=true;autoMessage.textContent='
 autoForm.addEventListener('click',event=>{
   const button=event.target.closest('.stepper button');
   if(button&&!button.disabled&&autoForm.elements[button.dataset.field])stepIntegerInput(autoForm.elements[button.dataset.field],Number(button.dataset.direction));
+});
+const quietForm=document.getElementById('quiet-form'),quietMessage=document.getElementById('quiet-message');
+let quietDirty=false,quietBusy=false,quietRevision=0;
+function quietTime(minutes){return String(Math.floor(minutes/60)).padStart(2,'0')+':'+String(minutes%60).padStart(2,'0');}
+function updateNightQuiet(state,pump){
+  if(!state)return;
+  const status=document.getElementById('quiet-status');
+  status.textContent=!state.configValid?'Nachtruhe-Einstellungen ungültig. Bitte erneut speichern; die Automatik ist gesperrt.':
+    !state.enabled?'Nachtruhe ausgeschaltet.':pump&&pump.manual?'Handbetrieb aktiv; Nachtruhe greift nicht.':
+    !state.clockValid?'Uhrzeit noch nicht synchronisiert; die Automatik ist bis dahin gesperrt.':
+    state.blocked?'Nachtruhe aktiv · Backloadpumpe in Automatik aus.':'Nachtruhe eingeschaltet · derzeit außerhalb des gewählten Zeitraums.';
+  if(quietDirty||quietBusy||quietForm.contains(document.activeElement))return;
+  quietForm.elements.enabled.checked=state.enabled;
+  quietForm.elements.start.value=quietTime(state.start);
+  quietForm.elements.end.value=quietTime(state.end);
+  for(let i=0;i<7;i++)quietForm.elements['day'+i].checked=!!(state.days&(1<<i));
+}
+quietForm.addEventListener('input',()=>{quietDirty=true;quietMessage.className='message';quietMessage.textContent='Noch nicht gespeichert.';});
+quietForm.addEventListener('change',()=>{quietDirty=true;quietMessage.className='message';quietMessage.textContent='Noch nicht gespeichert.';});
+quietForm.addEventListener('submit',async event=>{
+  event.preventDefault();if(quietBusy)return;
+  if(quietForm.elements.start.value===quietForm.elements.end.value){quietMessage.className='message error';quietMessage.textContent='Beginn und Ende müssen verschieden sein.';return;}
+  const values=new URLSearchParams({enabled:quietForm.elements.enabled.checked?'1':'0',start:quietForm.elements.start.value,end:quietForm.elements.end.value,days:Array.from({length:7},(_,i)=>quietForm.elements['day'+i].checked?'1':'0').join('')});
+  quietBusy=true;quietRevision++;pumpRevision++;quietForm.querySelectorAll('input,button').forEach(e=>e.disabled=true);quietMessage.className='message';quietMessage.textContent='Wird gespeichert …';
+  try{const state=await request('/api/night-quiet',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded','X-Requested-With':'HeatingUI'},body:values});quietDirty=false;quietMessage.textContent='Nachtruhe gespeichert.';quietBusy=false;updateNightQuiet(state,pumpState);}
+  catch(error){quietMessage.className='message error';quietMessage.textContent='Speichern nicht bestätigt: '+error.message;}
+  finally{quietBusy=false;quietForm.querySelectorAll('input,button').forEach(e=>e.disabled=false);}
 });
 function updateAutomatic(state){
   if(!state)return;
@@ -2192,6 +2240,7 @@ function updateFirmwareVersion(version,update){
 async function refresh(){
   const revision=pumpRevision;
   const autoRequestRevision=autoRevision;
+  const quietRequestRevision=quietRevision;
   const simRequestRevision=simRevision;
   const solarRequestRevision=solarRevision;
   const heatingRequestRevision=heatingRevision;
@@ -2214,6 +2263,7 @@ async function refresh(){
     updateRelayDiscovery(data.relayDiscovery);updateRelayProvisioning(data.relayProvisioning);
     if(!heatingBusy&&heatingRequestRevision===heatingRevision)updateHeating(data.heating);
     if(autoRequestRevision===autoRevision){updateAutomatic(data.automatic);updateAutomaticRules(data.automatic,data.controllers,data.pump);}
+    if(quietRequestRevision===quietRevision&&!quietBusy)updateNightQuiet(data.automatic&&data.automatic.nightQuiet,data.pump);
     if(!pumpBusy&&revision===pumpRevision)updatePump(data.pump);
     if(!solarControlBusy&&solarRequestRevision===solarRevision){updateSolar(data.solar,data.simulation);updateSolarDiagram(data.solar,data.simulation,data.controllers);}
     if(document.body.classList.contains('organigram-page')&&!heatingBusy&&heatingRequestRevision===heatingRevision&&autoRequestRevision===autoRevision)updateOrganigram(data);
