@@ -4,6 +4,7 @@ const path = require('node:path');
 const vm = require('node:vm');
 
 const script = fs.readFileSync(path.join(__dirname, '../app/static/app.js'), 'utf8');
+assert.doesNotMatch(script, /["'`]\/api\//, 'Archive API calls must be relative to the archive page');
 const start = script.indexOf('let updatePolling,');
 assert(start >= 0);
 const nodes = {};

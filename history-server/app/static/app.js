@@ -182,7 +182,7 @@ async function loadHistory() {
 
 async function loadStatus() {
   try {
-    const data = await json("/api/collector-status", AbortSignal.timeout(10000));
+    const data = await json("api/collector-status", AbortSignal.timeout(10000));
     const controllerUrl = window.location.pathname === "/historie/" ? "/" : data.esp_url;
     if (controllerUrl) {
       $("esp-link").href = controllerUrl;
