@@ -154,9 +154,9 @@ async function loadHistory() {
     const end = new Date();
     query = new URLSearchParams({from: new Date(end - selectedDays * 86400000).toISOString(), to: end.toISOString()});
   }
-  $("csv-link").href = `/api/export.csv?${query}`;
+  $("csv-link").href = `api/export.csv?${query}`;
   try {
-    const data = await json(`/api/history?${query}`, controller.signal);
+    const data = await json(`api/history?${query}`, controller.signal);
     if (current !== revision) return;
     lastData = data;
     draw(data);
@@ -183,8 +183,9 @@ async function loadHistory() {
 async function loadStatus() {
   try {
     const data = await json("/api/collector-status", AbortSignal.timeout(10000));
-    if (data.esp_url) {
-      $("esp-link").href = data.esp_url;
+    const controllerUrl = window.location.pathname === "/historie/" ? "/" : data.esp_url;
+    if (controllerUrl) {
+      $("esp-link").href = controllerUrl;
       $("esp-link").hidden = false;
     }
     $("last-capture").textContent = data.last_capture ? fullDate.format(new Date(data.last_capture)) : "Noch keine Messung";
@@ -213,7 +214,7 @@ function runtimePeriodLabel(kind, value) {
 async function loadRuntime() {
   const current = ++runtimeRevision, kind = runtimeKind;
   try {
-    const data = await json(`/api/pump-runtime?kind=${kind}`, AbortSignal.timeout(10000));
+    const data = await json(`api/pump-runtime?kind=${kind}`, AbortSignal.timeout(10000));
     if (current !== runtimeRevision) return;
     const rows = data.periods.map((period) => {
       const tr = document.createElement("tr");
@@ -279,7 +280,7 @@ setInterval(() => {loadStatus(); loadHistory(); loadRuntime();}, 60000);
 let updatePolling, checkingUpdates = false, updateAvailable = false, observedUpdate = false, checkedUpdates = false;
 async function loadUpdateStatus() {
   try {
-    const data = await json("/api/update", AbortSignal.timeout(10000));
+    const data = await json("api/update", AbortSignal.timeout(10000));
     const busy = data.state === "running" || data.state === "restarting";
     if (busy) observedUpdate = true;
     const waitingForCheck = !observedUpdate && (data.state === "complete" || data.state === "idle");
@@ -308,7 +309,7 @@ $("update-button").addEventListener("click", async () => {
   $("check-status").textContent = "";
   $("update-status").textContent = "Update wird gestartet …";
   try {
-    const response = await fetch("/api/update", {method: "POST", headers: {"X-Requested-With": "HistoryUI"}});
+    const response = await fetch("api/update", {method: "POST", headers: {"X-Requested-With": "HistoryUI"}});
     if (!response.ok) { const body = await response.json(); throw new Error(body.detail || "Update konnte nicht gestartet werden."); }
     observedUpdate = true;
     updatePolling = setTimeout(loadUpdateStatus, 1500);
@@ -329,7 +330,7 @@ $("check-update").addEventListener("click", async () => {
   $("check-status").classList.remove("error");
   $("check-status").textContent = "Update-Quelle wird geprüft …";
   try {
-    const response = await fetch("/api/update/check", {method: "POST", headers: {"X-Requested-With": "HistoryUI"}, signal: AbortSignal.timeout(45000)});
+    const response = await fetch("api/update/check", {method: "POST", headers: {"X-Requested-With": "HistoryUI"}, signal: AbortSignal.timeout(45000)});
     const data = await response.json();
     if (!response.ok) throw new Error(data.detail || "Update-Prüfung fehlgeschlagen.");
     updateAvailable = data.can_update === true;

@@ -17,9 +17,14 @@ for (const id of ['update-status', 'update-button', 'check-update', 'update-chan
 }
 let status = {enabled: true, state: 'complete', message: 'Update installiert und Dienst neu gestartet.'};
 let check = {available: false, can_update: false, ahead: 0, dirty: false, changes: []};
+function archiveEndpoint(url) {
+  const resolved = new URL(url, 'https://testserver/historie/');
+  assert.match(resolved.pathname, /^\/historie\/api\/update(?:\/check)?$/);
+  return resolved;
+}
 const context = vm.createContext({
-  $: id => nodes[id], json: async () => status,
-  fetch: async url => ({ok: true, json: async () => url.endsWith('/check') ? check : {}}), AbortSignal,
+  $: id => nodes[id], json: async url => { archiveEndpoint(url); return status; },
+  fetch: async url => ({ok: true, json: async () => archiveEndpoint(url).pathname.endsWith('/check') ? check : {}}), AbortSignal,
   document: {createElement: () => ({append() {}})},
   setTimeout: () => 1, clearTimeout() {},
 });
